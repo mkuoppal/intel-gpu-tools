@@ -18,25 +18,33 @@ if [ ! -f i915_ring_stop ] ; then
 	exit 77
 fi
 
-if cat i915_error_state | grep -v "no error state collected" > /dev/null ; then
-	echo "gpu hang dectected"
+for estate_fname in $i915_dfs_path/i915_error_state $i915_sfs_path/error_state ; do
+    echo checking ${estate_fname}
+
+    if cat $estate_fname | grep -v "no error state collected" > /dev/null ; then
+	echo "gpu hang detected"
 	exit 1
-fi
+    fi
 
-# stop rings
-echo 0xf > i915_ring_stop
-echo "rings stopped"
+    echo 0xf > i915_ring_stop
+    echo "rings stopped"
 
-(cd $oldpath; $SOURCE_DIR/gem_exec_big) > /dev/null
+    (cd $oldpath; $SOURCE_DIR/gem_exec_big) > /dev/null
 
-if cat i915_error_state | grep -v "no error state collected" > /dev/null ; then
-	echo "gpu hang correctly dectected"
-else
-	echo "gpu hang not dectected"
+    if cat $estate_fname | grep -v "no error state collected" > /dev/null ; then
+	echo "gpu hang correctly detected"
+    else
+	echo "gpu hang not detected"
 	exit 2
-fi
+    fi
 
 # clear error state
-echo > i915_error_state
+    echo > $estate_fname
+
+    if cat $estate_fname | grep -v "no error state collected" > /dev/null ; then
+	echo "gpu hang still present"
+	exit 3
+    fi
+done
 
 exit 0
