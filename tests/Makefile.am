@@ -165,6 +165,7 @@ HANG = \
 	gem_bad_blit \
 	gem_bad_address \
 	gem_non_secure_batch \
+	gem_exec_loop \
 	$(NULL)
 
 EXTRA_PROGRAMS = $(TESTS_progs) $(TESTS_progs_M) $(HANG)
