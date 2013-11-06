@@ -15,6 +15,7 @@ NOUVEAU_TESTS_M = \
 
 TESTS_progs_M = \
 	drv_suspend \
+	drv_workarounds \
 	gem_basic \
 	gem_caching \
 	gem_concurrent_blit \

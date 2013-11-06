@@ -232,6 +232,10 @@
 				 (devid) == PCI_CHIP_IVYBRIDGE_S || \
 				 (devid) == PCI_CHIP_IVYBRIDGE_S_GT2)
 
+#define IS_IVB_GT1(devid)	((devid) == PCI_CHIP_IVYBRIDGE_GT1 || \
+				 (devid) == PCI_CHIP_IVYBRIDGE_M_GT1 || \
+				 (devid) == PCI_CHIP_IVYBRIDGE_S)
+
 #define IS_VALLEYVIEW(devid)	((devid) == PCI_CHIP_VALLEYVIEW_PO || \
 				 (devid) == PCI_CHIP_VALLEYVIEW_1 || \
 				 (devid) == PCI_CHIP_VALLEYVIEW_2 || \
