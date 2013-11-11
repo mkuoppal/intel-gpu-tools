@@ -858,6 +858,37 @@ uint32_t gem_context_create(int fd)
 	return create.ctx_id;
 }
 
+
+/**
+ * gem_context_create2:
+ * @fd: open i915 drm file descriptor
+ * @flags: flags to describe what properties should the context have
+ *
+ * This is a wraps the CONTEXT_CREATE2 ioctl, which is used to allocate a new
+ * hardware context. Not that similarly to gem_set_caching() this wrapper calls
+ * igt_require() internally to correctly skip on kernels and platforms where hw
+ * context support is not available.
+ *
+ * Returns: The id of the allocated hw context.
+ */
+uint32_t gem_context_create2(int fd, uint32_t flags)
+{
+	struct local_drm_i915_gem_context_create2 create;
+
+	memset(&create, 0, sizeof(create));
+	create.flags = flags;
+
+	if (igt_ioctl(fd, LOCAL_DRM_IOCTL_I915_GEM_CONTEXT_CREATE2, &create)) {
+		int err = -errno;
+		igt_skip_on(err == -ENODEV || errno == -EINVAL);
+		igt_assert_eq(err, 0);
+	}
+	igt_assert(create.ctx_id != 0);
+	errno = 0;
+
+	return create.ctx_id;
+}
+
 int __gem_context_destroy(int fd, uint32_t ctx_id)
 {
 	struct drm_i915_gem_context_destroy destroy;

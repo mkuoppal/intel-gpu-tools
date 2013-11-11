@@ -82,6 +82,9 @@ TESTS_progs_M = \
 	gem_stolen \
 	gem_storedw_batches_loop \
 	gem_streaming_writes \
+	gem_svm_sanity \
+	gem_svm_fault \
+	gem_svm_storedw_loop_render \
 	gem_tiled_blits \
 	gem_tiled_partial_pwrite_pread \
 	gem_userptr_blits \

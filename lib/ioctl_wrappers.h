@@ -110,6 +110,7 @@ void *__gem_mmap__wc(int fd, uint32_t handle, uint64_t offset, uint64_t size, un
 int gem_madvise(int fd, uint32_t handle, int state);
 
 uint32_t gem_context_create(int fd);
+uint32_t gem_context_create2(int fd, uint32_t flags);
 void gem_context_destroy(int fd, uint32_t ctx_id);
 int __gem_context_destroy(int fd, uint32_t ctx_id);
 struct local_i915_gem_context_param {
@@ -142,6 +143,66 @@ struct local_i915_gem_userptr {
 };
 void gem_userptr(int fd, void *ptr, int size, int read_only, uint32_t flags, uint32_t *handle);
 int __gem_userptr(int fd, void *ptr, int size, int read_only, uint32_t flags, uint32_t *handle);
+
+
+#define LOCAL_DRM_I915_GEM_CONTEXT_CREATE2	0x37
+#define LOCAL_DRM_IOCTL_I915_GEM_CONTEXT_CREATE2 \
+	DRM_IOWR (DRM_COMMAND_BASE + LOCAL_DRM_I915_GEM_CONTEXT_CREATE2, struct local_drm_i915_gem_context_create2)
+
+/*
+ * SVM handling
+ *
+ * A context can opt in to SVM support (thereby using its CPU page tables
+ * when accessing data from the GPU) by using the %I915_ENABLE_SVM flag
+ * and passing an existing context id.  This is a one way transition; SVM
+ * contexts can not be downgraded into PPGTT contexts once converted.
+ */
+#define I915_GEM_CONTEXT_FULL_PPGTT		(1<<0)
+#define I915_GEM_CONTEXT_ENABLE_SVM		(1<<1)
+struct local_drm_i915_gem_context_create2 {
+	/*  output: id of new context*/
+	__u32 ctx_id;
+	__u32 flags;
+};
+
+#define LOCAL_DRM_I915_EXEC_MM		0x38
+#define LOCAL_DRM_IOCTL_I915_EXEC_MM \
+	DRM_IOWR (DRM_COMMAND_BASE + LOCAL_DRM_I915_EXEC_MM, struct local_drm_i915_exec_mm)
+
+/**
+ * local_drm_i915_exec_mm - shared address space execbuf
+ * @batch_ptr: address of batch buffer (in context's CPU address space)
+ * @ctx_id: context to use for execution
+ * @ring_id: ring to which this context will be submitted
+ * @flags: see flags
+ * @fence: returned fence handle
+ * @fence: returned fence handle
+ * @fence_dep_count: number of fences this execution depends on
+ * @fence_deps: array of fence IDs (u32) this execution depends on
+ *
+ * This simlified execbuf just executes an MI_BATCH_BUFFER_START at
+ * @batch_ptr using @ctx_id as the context.  The context will indicate
+ * which address space the @batch_ptr will use.
+ *
+ * Note @batch_ptr must be dword aligned.
+ *
+ * By default, the kernel will simply execute the address given on the GPU.
+ * If the %I915_EXEC_MM_FENCE flag is passed in the @flags field however,
+ * the kernel will return a Android native sync object for the caller to
+ * use to synchronize execution (see the android-native-sync(7) man page).
+ */
+
+struct local_drm_i915_exec_mm {
+	__u64 batch_ptr;
+	__u32 ctx_id;
+	__u32 ring_id; /* see execbuffer2 flags */
+	__u32 flags;
+	__u32 pad;
+#define I915_EXEC_MM_FENCE (1<<0)
+	__u32 fence;
+	__u32 fence_dep_count;
+	__u64 fence_deps;
+};
 
 void gem_sw_finish(int fd, uint32_t handle);
 
