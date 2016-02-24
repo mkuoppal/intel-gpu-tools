@@ -711,12 +711,31 @@ static void create_shared_fb(enum pixel_format format)
 		  PLANE_PRI, &s->big);
 }
 
+static void destroy_fbs(enum pixel_format format)
+{
+	struct screen_fbs *s = &fbs[format];
+
+	if (!s->initialized)
+		return;
+
+	if (scnd_mode_params.connector_id) {
+		igt_remove_fb(drm.fd, &s->scnd_pri);
+		igt_remove_fb(drm.fd, &s->scnd_cur);
+		igt_remove_fb(drm.fd, &s->scnd_spr);
+	}
+	igt_remove_fb(drm.fd, &s->prim_pri);
+	igt_remove_fb(drm.fd, &s->prim_cur);
+	igt_remove_fb(drm.fd, &s->prim_spr);
+	igt_remove_fb(drm.fd, &s->offscreen);
+	igt_remove_fb(drm.fd, &s->big);
+}
+
 static void create_fbs(enum pixel_format format)
 {
 	struct screen_fbs *s = &fbs[format];
 
 	if (s->initialized)
-		return;
+		destroy_fbs(format);
 
 	s->initialized = true;
 
@@ -745,25 +764,6 @@ static void create_fbs(enum pixel_format format)
 		  LOCAL_DRM_FORMAT_MOD_NONE, PLANE_CUR, &s->scnd_cur);
 	create_fb(format, scnd_mode_params.sprite.w, scnd_mode_params.sprite.h,
 		  LOCAL_I915_FORMAT_MOD_X_TILED, PLANE_SPR, &s->scnd_spr);
-}
-
-static void destroy_fbs(enum pixel_format format)
-{
-	struct screen_fbs *s = &fbs[format];
-
-	if (!s->initialized)
-		return;
-
-	if (scnd_mode_params.connector_id) {
-		igt_remove_fb(drm.fd, &s->scnd_pri);
-		igt_remove_fb(drm.fd, &s->scnd_cur);
-		igt_remove_fb(drm.fd, &s->scnd_spr);
-	}
-	igt_remove_fb(drm.fd, &s->prim_pri);
-	igt_remove_fb(drm.fd, &s->prim_cur);
-	igt_remove_fb(drm.fd, &s->prim_spr);
-	igt_remove_fb(drm.fd, &s->offscreen);
-	igt_remove_fb(drm.fd, &s->big);
 }
 
 static bool set_mode_for_params(struct modeset_params *params)
