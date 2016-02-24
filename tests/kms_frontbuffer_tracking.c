@@ -1128,7 +1128,7 @@ static void fill_fb_region(struct fb_region *region, enum color ecolor)
 {
 	uint32_t color = pick_color(region->fb, ecolor);
 
-	igt_draw_rect_fb(drm.fd, NULL, NULL, region->fb, IGT_DRAW_MMAP_CPU,
+	igt_draw_rect_fb(drm.fd, drm.bufmgr, NULL, region->fb, IGT_DRAW_BLT,
 			 region->x, region->y, region->w, region->h,
 			 color);
 }
@@ -3563,7 +3563,7 @@ int main(int argc, char *argv[])
 		if (t.pipes != PIPE_SINGLE ||
 		    t.screen != SCREEN_PRIM ||
 		    t.plane != PLANE_PRI ||
-		    t.method != IGT_DRAW_MMAP_CPU)
+		    t.method != IGT_DRAW_BLT)
 			continue;
 		igt_subtest_f("%s-%s-scaledprimary",
 			      feature_str(t.feature),
@@ -3576,7 +3576,7 @@ int main(int argc, char *argv[])
 		    t.screen != SCREEN_PRIM ||
 		    t.plane != PLANE_PRI ||
 		    t.fbs != FBS_INDIVIDUAL ||
-		    t.method != IGT_DRAW_MMAP_CPU)
+		    t.method != IGT_DRAW_BLT)
 			continue;
 
 		igt_subtest_f("%s-modesetfrombusy", feature_str(t.feature))
