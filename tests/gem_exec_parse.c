@@ -408,6 +408,39 @@ static void stray_lri(int fd, uint32_t handle)
 	igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
 }
 
+static void test_allocations(int fd)
+{
+	uint32_t bbe = MI_BATCH_BUFFER_END;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_exec_object2 obj[17];
+	int i, j;
+
+	intel_require_memory(2, 1ull<<(12 + ARRAY_SIZE(obj)), CHECK_RAM);
+
+	memset(obj, 0, sizeof(obj));
+	for (i = 0; i < ARRAY_SIZE(obj); i++) {
+		obj[i].handle = gem_create(fd, 1ull<<(12 + i));
+		gem_write(fd, obj[i].handle, (1ull<<(12+i)) - 8 - sizeof(bbe),
+			  &bbe, sizeof(bbe));
+	}
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffer_count = 1;
+	for (j = 0; j < 16384; j++) {
+		igt_progress("allocations ", j, 16384);
+		i = rand() % ARRAY_SIZE(obj);
+		execbuf.buffers_ptr = (uintptr_t)&obj[i];
+		execbuf.batch_start_offset = (rand() % (1ull<<i)) << 12;
+		execbuf.batch_len = (1ull<<(12+i)) - 8 - execbuf.batch_start_offset;
+		gem_execbuf(fd, &execbuf);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(obj); i++) {
+		gem_sync(fd, obj[i].handle);
+		gem_close(fd, obj[i].handle);
+	}
+}
+
 uint32_t handle;
 int fd;
 
@@ -501,6 +534,10 @@ igt_main
 			intel_register_write(OACONTROL, 0);
 			intel_register_access_fini();
 		}
+	}
+
+	igt_subtest("basic-allocation") {
+		test_allocations(fd);
 	}
 
 	igt_subtest("registers") {
