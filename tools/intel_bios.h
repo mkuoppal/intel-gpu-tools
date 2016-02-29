@@ -104,12 +104,19 @@ struct bdb_general_features {
 	unsigned char ssc_freq:1;
 	unsigned char enable_lfp_on_override:1;
 	unsigned char disable_ssc_ddt:1;
-	unsigned char rsvd8:3;	/* finish byte */
+	unsigned char underscan_vga_timings:1;
+	unsigned char dynamic_cdclk:1; /* 183 */
+	unsigned char vbios_hotplug_support:1;
 
 	/* bits 3 */
 	unsigned char disable_smooth_vision:1;
 	unsigned char single_dvi:1;
-	unsigned char rsvd9:6;	/* finish byte */
+	unsigned char rotate_180:1; /* 181 */
+	unsigned char fdi_rx_polarity:1;
+	unsigned char vbios_extended_mode:1; /* 160 */
+	unsigned char copy_ilfp_dtd_to_sdvo_lvds_dtd:1; /* 160 */
+	unsigned char panel_best_fit_timing:1; /* 160 */
+	unsigned char ignore_strap_state:1; /* 160 */
 
 	/* bits 4 */
 	unsigned char legacy_monitor_detect;
@@ -117,7 +124,11 @@ struct bdb_general_features {
 	/* bits 5 */
 	unsigned char int_crt_support:1;
 	unsigned char int_tv_support:1;
-	unsigned char rsvd11:6;	/* finish byte */
+	unsigned char int_efp_support:1;
+	unsigned char dp_ssc_enable:1;
+	unsigned char dp_ssc_freq:1;
+	unsigned char dp_ssc_dongle_supported:1;
+	unsigned char rsvd11:2;	/* finish byte */
 } __attribute__ ((packed));
 
 #define GPIO_PIN_NONE		0x00	/* "N/A" */

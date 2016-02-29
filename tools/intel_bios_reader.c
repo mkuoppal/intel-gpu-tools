@@ -151,6 +151,7 @@ static void dump_general_features(struct context *context,
 	printf("\tMessage: %s\n", YESNO(features->msg_enable));
 	printf("\tClear screen: %d\n", features->clear_screen);
 	printf("\tDVO color flip required: %s\n", YESNO(features->color_flip));
+
 	printf("\tExternal VBT: %s\n", YESNO(features->download_ext_vbt));
 	printf("\tEnable SSC: %s\n", YESNO(features->enable_ssc));
 	if (features->enable_ssc) {
@@ -171,13 +172,45 @@ static void dump_general_features(struct context *context,
 	       YESNO(features->enable_lfp_on_override));
 	printf("\tDisable SSC on clone: %s\n",
 	       YESNO(features->disable_ssc_ddt));
+	printf("\tUnderscan support for VGA timings: %s\n",
+	       YESNO(features->underscan_vga_timings));
+	if (context->bdb->version >= 183)
+		printf("\tDynamic CD clock: %s\n", YESNO(features->dynamic_cdclk));
+	printf("\tHotplug support in VBIOS: %s\n",
+	       YESNO(features->vbios_hotplug_support));
+
 	printf("\tDisable smooth vision: %s\n",
 	       YESNO(features->disable_smooth_vision));
 	printf("\tSingle DVI for CRT/DVI: %s\n", YESNO(features->single_dvi));
+	if (context->bdb->version >= 181)
+		printf("\tEnable 180 degree rotation: %s\n", YESNO(features->rotate_180));
+	printf("\tInverted FDI Rx polarity: %s\n", YESNO(features->fdi_rx_polarity));
+	if (context->bdb->version >= 160) {
+		printf("\tExtended VBIOS mode: %s\n", YESNO(features->vbios_extended_mode));
+		printf("\tCopy iLFP DTD to SDVO LVDS DTD: %s\n", YESNO(features->copy_ilfp_dtd_to_sdvo_lvds_dtd));
+		printf("\tBest fit panel timing algorithm: %s\n", YESNO(features->panel_best_fit_timing));
+		printf("\tIgnore strap state: %s\n", YESNO(features->ignore_strap_state));
+	}
+
 	printf("\tLegacy monitor detect: %s\n",
 	       YESNO(features->legacy_monitor_detect));
+
 	printf("\tIntegrated CRT: %s\n", YESNO(features->int_crt_support));
 	printf("\tIntegrated TV: %s\n", YESNO(features->int_tv_support));
+	printf("\tIntegrated EFP: %s\n", YESNO(features->int_efp_support));
+	printf("\tDP SSC enable: %s\n", YESNO(features->dp_ssc_enable));
+	if (features->dp_ssc_enable) {
+		if (IS_VALLEYVIEW(context->devid) || IS_CHERRYVIEW(context->devid) ||
+		    IS_BROXTON(context->devid))
+			printf("\tSSC frequency: 100 MHz\n");
+		else if (HAS_PCH_SPLIT(context->devid))
+			printf("\tSSC frequency: %s\n", features->dp_ssc_freq ?
+			       "100 MHz" : "120 MHz");
+		else
+			printf("\tSSC frequency: %s\n", features->dp_ssc_freq ?
+			       "100 MHz" : "96 MHz");
+	}
+	printf("\tDP SSC dongle supported: %s\n", YESNO(features->dp_ssc_dongle_supported));
 }
 
 static void dump_backlight_info(struct context *context,
@@ -360,8 +393,6 @@ static const char *efp_conn(uint8_t type)
 
 	return "unknown";
 }
-
-
 
 static void dump_child_device(struct context *context,
 			      struct child_device_config *child)
