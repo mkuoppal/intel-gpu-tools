@@ -421,15 +421,72 @@ static void dump_child_device(struct context *context,
 		printf("\t\tDevice type: 0x%04x (%s)\n", efp->device_type,
 		       child_device_type(efp->device_type));
 		dump_child_device_type_bits(efp->device_type);
-		printf("\t\tPort: 0x%02x (%s)\n", efp->port,
-		       efp_port(efp->port));
+		printf("\t\tI2C speed: 0x%02x\n", efp->i2c_speed);
+		printf("\t\tDP onboard redriver: 0x%02x\n", efp->dp_onboard_redriver);
+		printf("\t\tDP ondock redriver: 0x%02x\n", efp->dp_ondock_redriver);
+		printf("\t\tHDMI max data rate: 0x%02x\n", efp->hdmi_max_data_rate);
+		printf("\t\tHDMI level shifter value: 0x%02x\n", efp->hdmi_level_shifter_value);
+		printf("\t\tOffset to DTD buffer for edidless EFP: 0x%02x\n", efp->dtd_buf_ptr);
+		printf("\t\tDual pipe ganged eDP: %s\n", YESNO(efp->ganged_edp));
+		printf("\t\tCompression method CPS: %s\n", YESNO(efp->compression_method));
+		printf("\t\tCompression enable: %s\n", YESNO(efp->compression_enable));
+		printf("\t\tEdidless EFP: %s\n", YESNO(efp->edidless_efp));
+		printf("\t\tCompression structure index: 0x%02x)\n", efp->compression_structure_index);
+		printf("\t\tSlave DDI port: 0x%02x (%s)\n", efp->slave_port, efp_port(efp->slave_port));
+		printf("\t\tAIM offset: %d\n", child->addin_offset);
+		printf("\t\tPort: 0x%02x (%s)\n", efp->port, efp_port(efp->port));
+		printf("\t\tAIM I2C pin: 0x%02x\n", efp->i2c_pin);
+		printf("\t\tAIM Slave address: 0x%02x\n", efp->slave_addr);
 		printf("\t\tDDC pin: 0x%02x\n", efp->ddc_pin);
-		printf("\t\tDock port: 0x%02x (%s)\n", efp->docked_port,
-		       efp_port(efp->docked_port));
-		printf("\t\tHDMI compatible? %s\n", efp->hdmi_compat ? "Yes" : "No");
-		printf("\t\tInfo: %s\n", efp_conn(efp->conn_info));
+		printf("\t\tEDID buffer ptr: 0x%02x\n", efp->edid_ptr);
+		printf("\t\tDVO config: 0x%02x\n", efp->dvo_config);
+		printf("\t\tHPD sense invert: %s\n", YESNO(efp->hpd_invert));
+		printf("\t\tIboost enable: %s\n", YESNO(efp->iboost_enable));
+		printf("\t\tOnboard LSPCON: %s\n", YESNO(efp->onboard_lspcon));
+		printf("\t\tLane reversal: %s\n", YESNO(efp->lane_reversal));
+		printf("\t\tEFP routed through dock: %s\n", YESNO(efp->efp_docked_port));
+		printf("\t\tHDMI compatible? %s\n", YESNO(efp->hdmi_compat));
+		printf("\t\tDP compatible? %s\n", YESNO(efp->dp_compat));
+		printf("\t\tTMDS compatible? %s\n", YESNO(efp->tmds_compat));
 		printf("\t\tAux channel: 0x%02x\n", efp->aux_chan);
 		printf("\t\tDongle detect: 0x%02x\n", efp->dongle_detect);
+		printf("\t\tIntegrated encoder instead of SDVO: %s\n", YESNO(efp->integrated_encoder));
+		printf("\t\tHotplu connect status: 0x%02x\n", efp->hpd_status);
+		printf("\t\tSDVO stall signal available: %s\n", YESNO(efp->sdvo_stall));
+		printf("\t\tPipe capabilities: 0x%02x\n", efp->pipe_cap);
+		printf("\t\tDVO wiring: 0x%02x\n", efp->dvo_wiring);
+		printf("\t\tMIPI bridge type:");
+		switch (efp->mipi_bridge_type) {
+		case 1:
+			printf("ASUS\n");
+			break;
+		case 2:
+			printf("Toshiba\n");
+			break;
+		case 3:
+			printf("Renesas\n");
+			break;
+		default:
+			printf("(unknown value %d)\n", efp->mipi_bridge_type);
+			break;
+		}
+		printf("\t\tDevice class extendsion: 0x%02x\n", efp->device_class_ext);
+		printf("\t\tDVO function: 0x%02x\n", efp->dvo_function);
+	}
+
+	if (context->bdb->version >= 195) {
+		struct efp_child_device_config *efp =
+			(struct efp_child_device_config *)child;
+		printf("\t\tDP USB type C support: %s\n", YESNO(efp->dp_usb_type_c));
+		printf("\t\t2X DP GPIO index: 0x%02x\n", efp->dp_usb_type_c_2x_gpio_index);
+		printf("\t\t2X DP GPIO pin number: 0x%02x\n", efp->dp_usb_type_c_2x_gpio_pin);
+	}
+
+	if (context->bdb->version >= 196) {
+		struct efp_child_device_config *efp =
+			(struct efp_child_device_config *)child;
+		printf("\t\tIBoost level for HDMI: 0x%02x\n", efp->iboost_hdmi);
+		printf("\t\tIBoost level for DP/eDP: 0x%02x\n", efp->iboost_dp);
 	}
 }
 

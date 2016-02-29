@@ -272,18 +272,55 @@ struct child_device_config {
 struct efp_child_device_config {
 	uint16_t handle;
 	uint16_t device_type;
-	uint8_t skip1[12];
+	uint16_t device_class;
+	uint8_t i2c_speed;
+	uint8_t dp_onboard_redriver; /* 158 */
+	uint8_t dp_ondock_redriver; /* 158 */
+	uint8_t hdmi_level_shifter_value:4; /* 169 */
+	uint8_t hdmi_max_data_rate:4; /* 204 */
+	uint16_t dtd_buf_ptr; /* 161 */
+	uint8_t edidless_efp:1; /* 161 */
+	uint8_t compression_enable:1; /* 198 */
+	uint8_t compression_method:1; /* 198 */
+	uint8_t ganged_edp:1; /* 202 */
+	uint8_t skip0:4;
+	uint8_t compression_structure_index:4; /* 198 */
+	uint8_t skip1:4;
+	uint8_t slave_port; /*  202 */
+	uint8_t skip2;
 	uint8_t port;
-	uint8_t skip2[2];
+	uint8_t i2c_pin; /* for add-in card */
+	uint8_t slave_addr; /* for add-in card */
 	uint8_t ddc_pin;
-	uint8_t skip3[3];
-	uint8_t docked_port;
+	uint16_t edid_ptr;
+	uint8_t dvo_config;
+	uint8_t efp_docked_port:1; /* 158 */
+	uint8_t lane_reversal:1; /* 184 */
+	uint8_t onboard_lspcon:1; /* 192 */
+	uint8_t iboost_enable:1; /* 196 */
+	uint8_t hpd_invert:1; /* BXT 196 */
+	uint8_t slip3:3;
 	uint8_t hdmi_compat:1;
-	uint8_t conn_info:3;
-	uint8_t skip4:4;
+	uint8_t dp_compat:1;
+	uint8_t tmds_compat:1;
+	uint8_t skip4:5;
 	uint8_t aux_chan;
 	uint8_t dongle_detect;
-	uint8_t skip5[6];
+	uint8_t pipe_cap:2;
+	uint8_t sdvo_stall:1; /* 158 */
+	uint8_t hpd_status:2;
+	uint8_t integrated_encoder:1;
+	uint8_t skip5:2;
+	uint8_t dvo_wiring;
+	uint8_t mipi_bridge_type; /* 171 */
+	uint16_t device_class_ext;
+	uint8_t dvo_function;
+	uint8_t dp_usb_type_c:1; /* 195 */
+	uint8_t skip6:7;
+	uint8_t dp_usb_type_c_2x_gpio_index; /* 195 */
+	uint16_t dp_usb_type_c_2x_gpio_pin; /* 195 */
+	uint8_t iboost_dp:4; /* 196 */
+	uint8_t iboost_hdmi:4; /* 196 */
 } __attribute__ ((packed));
 
 struct bdb_general_definitions {
