@@ -62,6 +62,7 @@
 #include "ioctl_wrappers.h"
 #include "igt_kms.h"
 #include "igt_pm.h"
+#include "igt_stats.h"
 
 /**
  * SECTION:igt_aux
@@ -1194,4 +1195,98 @@ void igt_set_module_param_int(const char *name, int val)
 		     "Need to increase PARAM_VALUE_MAX_SZ\n");
 
 	igt_set_module_param(name, str);
+}
+
+static struct igt_siglatency {
+	timer_t timer;
+	struct timespec target;
+	struct sigaction oldact;
+	struct igt_mean mean;
+
+	int sig;
+} igt_siglatency;
+
+static uint32_t
+__hars_petruska_f54_1_random (void)
+{
+	static uint32_t state = 0x12345678;
+
+#define rol(x,k) ((x << k) | (x >> (32-k)))
+	return state = (state ^ rol (state, 5) ^ rol (state, 24)) + 0x37798849;
+#undef rol
+}
+
+static long delay(void)
+{
+	return __hars_petruska_f54_1_random() % (NSEC_PER_SEC / 1000);
+}
+
+static double elapsed(const struct timespec *now, const struct timespec *last)
+{
+	double nsecs;
+
+	nsecs = now->tv_nsec - last ->tv_nsec;
+	nsecs += 1e9*(now->tv_sec - last->tv_sec);
+
+	return nsecs;
+}
+
+static void siglatency(int sig, siginfo_t *info, void *arg)
+{
+	struct itimerspec its;
+
+	clock_gettime(CLOCK_MONOTONIC, &its.it_value);
+	if (info)
+		igt_mean_add(&igt_siglatency.mean,
+			     elapsed(&its.it_value, &igt_siglatency.target));
+	igt_siglatency.target = its.it_value;
+
+	its.it_value.tv_nsec += 100 * 1000;
+	its.it_value.tv_nsec += delay();
+	if (its.it_value.tv_nsec >= NSEC_PER_SEC) {
+		its.it_value.tv_nsec -= NSEC_PER_SEC;
+		its.it_value.tv_sec += 1;
+	}
+	its.it_interval.tv_sec = its.it_interval.tv_nsec = 0;
+	timer_settime(igt_siglatency.timer, TIMER_ABSTIME, &its, NULL);
+}
+
+void igt_start_siglatency(int sig)
+{
+	struct sigevent sev;
+	struct sigaction act;
+
+	if (sig <= 0)
+		sig = SIGRTMIN;
+
+	if (igt_siglatency.sig)
+		(void)igt_stop_siglatency(NULL);
+	igt_assert(igt_siglatency.sig == 0);
+	igt_siglatency.sig = sig;
+
+	memset(&sev, 0, sizeof(sev));
+	sev.sigev_notify = SIGEV_SIGNAL | SIGEV_THREAD_ID;
+	sev.sigev_notify_thread_id = gettid();
+	sev.sigev_signo = sig;
+	timer_create(CLOCK_MONOTONIC, &sev, &igt_siglatency.timer);
+
+	memset(&act, 0, sizeof(act));
+	act.sa_sigaction = siglatency;
+	sigaction(sig, &act, &igt_siglatency.oldact);
+
+	siglatency(sig, NULL, NULL);
+}
+
+double igt_stop_siglatency(struct igt_mean *result)
+{
+	double mean = igt_mean_get(&igt_siglatency.mean);
+
+	if (result)
+		*result = igt_siglatency.mean;
+
+	sigaction(igt_siglatency.sig, &igt_siglatency.oldact, NULL);
+	timer_delete(igt_siglatency.timer);
+	memset(&igt_siglatency, 0, sizeof(igt_siglatency));
+
+	return mean;
 }
