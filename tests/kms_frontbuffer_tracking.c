@@ -2077,6 +2077,7 @@ static void multidraw_subtest(const struct test_mode *t)
 	struct modeset_params *params = pick_params(t);
 	struct fb_region *target;
 	enum igt_draw_method m1, m2, used_method;
+	bool wc_used = false;
 
 	switch (t->plane) {
 	case PLANE_PRI:
@@ -2106,6 +2107,17 @@ static void multidraw_subtest(const struct test_mode *t)
 					igt_draw_get_method_name(used_method));
 
 				draw_rect(pattern, target, used_method, r);
+
+				if (used_method == IGT_DRAW_MMAP_WC)
+					wc_used = true;
+
+				if (used_method == IGT_DRAW_MMAP_GTT &&
+				    wc_used) {
+					struct rect rect =
+						pattern->get_rect(target, r);
+					fb_dirty_ioctl(target, &rect);
+				}
+
 				update_wanted_crc(t,
 						  &pattern->crcs[t->format][r]);
 
