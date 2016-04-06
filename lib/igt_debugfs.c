@@ -737,7 +737,7 @@ static int get_object_count(void)
 	FILE *file;
 	int ret, scanned;
 
-	igt_drop_caches_set(DROP_RETIRE | DROP_ACTIVE);
+	igt_drop_caches_set(DROP_RETIRE | DROP_ACTIVE | DROP_FREED);
 
 	file = igt_debugfs_fopen("i915_gem_objects", "r");
 

@@ -180,7 +180,7 @@ void gem_quiescent_gpu(int fd)
 	gem_sync(fd, obj.handle);
 	gem_close(fd, obj.handle);
 
-	igt_drop_caches_set(DROP_RETIRE);
+	igt_drop_caches_set(DROP_RETIRE | DROP_FREED);
 }
 
 /**

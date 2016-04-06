@@ -157,6 +157,12 @@ void igt_pipe_crc_collect_crc(igt_pipe_crc_t *pipe_crc, igt_crc_t *out_crc);
  */
 #define DROP_ACTIVE 0x8
 /**
+ * DROP_FREED:
+ *
+ * Also drop freed objects.
+ */
+#define DROP_FREED 0x10
+/**
  * DROP_ALL:
  *
  * All of the above DROP_ flags combined.
@@ -164,7 +170,8 @@ void igt_pipe_crc_collect_crc(igt_pipe_crc_t *pipe_crc, igt_crc_t *out_crc);
 #define DROP_ALL (DROP_UNBOUND | \
 		  DROP_BOUND | \
 		  DROP_RETIRE | \
-		  DROP_ACTIVE)
+		  DROP_ACTIVE | \
+		  DROP_FREED)
 
 void igt_drop_caches_set(uint64_t val);
 
