@@ -269,6 +269,56 @@ test_basic(int fd)
 	igt_assert_eq(destroy_prop(fd, prop_id), 0);
 }
 
+static void prop_tests(int fd)
+{
+	struct drm_mode_obj_get_properties get_props = {};
+	struct drm_mode_obj_set_property set_prop = {};
+	uint64_t prop, prop_val, blob_id;
+
+	igt_fixture
+		blob_id = create_prop(fd);
+
+	get_props.props_ptr = (uintptr_t) &prop;
+	get_props.prop_values_ptr = (uintptr_t) &prop_val;
+	get_props.count_props = 1;
+	get_props.obj_id = blob_id;
+
+	igt_subtest("invalid-get-prop-any") {
+		get_props.obj_type = 0; /* DRM_MODE_OBJECT_ANY */
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES,
+				    &get_props) == -1 && errno == EINVAL);
+	}
+
+	igt_subtest("invalid-get-prop") {
+		get_props.obj_type = DRM_MODE_OBJECT_BLOB;
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES,
+				    &get_props) == -1 && errno == EINVAL);
+	}
+
+	set_prop.value = 0;
+	set_prop.prop_id = 1;
+	set_prop.obj_id = blob_id;
+
+	igt_subtest("invalid-set-prop-any") {
+		set_prop.obj_type = 0; /* DRM_MODE_OBJECT_ANY */
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_SETPROPERTY,
+				    &set_prop) == -1 && errno == EINVAL);
+	}
+
+	igt_subtest("invalid-set-prop") {
+		set_prop.obj_type = DRM_MODE_OBJECT_BLOB;
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_SETPROPERTY,
+				    &set_prop) == -1 && errno == EINVAL);
+	}
+
+	igt_fixture
+		destroy_prop(fd, blob_id);
+}
+
 igt_main
 {
 	int fd;
@@ -295,6 +345,8 @@ igt_main
 
 	igt_subtest("blob-multiple")
 		test_multiple(fd);
+
+	prop_tests(fd);
 
 	igt_fixture
 		close(fd);
