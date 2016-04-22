@@ -180,6 +180,55 @@ void igt_calc_fb_size(int fd, int width, int height, int bpp, uint64_t tiling,
 	*size_ret = size;
 }
 
+/* helpers to create nice-looking framebuffers */
+static int create_bo_for_fb(int fd, int width, int height, uint32_t format,
+			    uint64_t tiling, unsigned size, unsigned stride,
+			    unsigned *size_ret, unsigned *stride_ret,
+			    bool *is_dumb)
+{
+	int bpp = igt_drm_format_to_bpp(format);
+	int bo;
+
+	if (tiling || size || stride) {
+		unsigned calculated_size, calculated_stride;
+
+		igt_calc_fb_size(fd, width, height, bpp, tiling,
+				 &calculated_size, &calculated_stride);
+		if (stride == 0)
+			stride = calculated_stride;
+		if (size == 0)
+			size = calculated_size;
+
+		if (is_dumb)
+			*is_dumb = false;
+
+		if (is_i915_device(fd)) {
+
+			bo = gem_create(fd, size);
+			gem_set_tiling(fd, bo, tiling, stride);
+
+			if (size_ret)
+				*size_ret = size;
+
+			if (stride_ret)
+				*stride_ret = stride;
+
+			return bo;
+		} else {
+			bool driver_has_gem_api = false;
+
+			igt_require(driver_has_gem_api);
+			return -EINVAL;
+		}
+	} else {
+		if (is_dumb)
+			*is_dumb = true;
+
+		return kmstest_dumb_create(fd, width, height, bpp, stride_ret,
+					   size_ret);
+	}
+}
+
 /**
  * igt_create_bo_with_dimensions:
  * @fd: open drm file descriptor
@@ -203,64 +252,8 @@ int igt_create_bo_with_dimensions(int fd, int width, int height,
 				  unsigned stride, unsigned *size_ret,
 				  unsigned *stride_ret, bool *is_dumb)
 {
-	int bpp = igt_drm_format_to_bpp(format);
-	int bo;
-
-	if (modifier || stride) {
-		unsigned size, calculated_stride;
-
-		igt_calc_fb_size(fd, width, height, bpp, modifier, &size,
-				 &calculated_stride);
-		if (stride == 0)
-			stride = calculated_stride;
-
-		if (is_dumb)
-			*is_dumb = false;
-
-		if (is_i915_device(fd)) {
-
-			bo = gem_create(fd, size);
-			gem_set_tiling(fd, bo, modifier, stride);
-
-			if (size_ret)
-				*size_ret = size;
-
-			if (stride_ret)
-				*stride_ret = stride;
-
-			return bo;
-		} else {
-			bool driver_has_tiling_support = false;
-
-			igt_require(driver_has_tiling_support);
-			return -EINVAL;
-		}
-	} else {
-		if (is_dumb)
-			*is_dumb = true;
-
-		return kmstest_dumb_create(fd, width, height, bpp, stride_ret,
-					   size_ret);
-	}
-}
-
-/* helpers to create nice-looking framebuffers */
-static int create_bo_for_fb(int fd, int width, int height, uint32_t format,
-			    uint64_t tiling, unsigned bo_size,
-			    unsigned bo_stride, uint32_t *gem_handle_ret,
-			    unsigned *size_ret, unsigned *stride_ret,
-			    bool *is_dumb)
-{
-	uint32_t gem_handle;
-	int ret = 0;
-
-	gem_handle = igt_create_bo_with_dimensions(fd, width, height, format,
-						   tiling, bo_stride, size_ret,
-						   stride_ret, is_dumb);
-
-	*gem_handle_ret = gem_handle;
-
-	return ret;
+	return create_bo_for_fb(fd, width, height, format, modifier, 0, stride,
+			     size_ret, stride_ret, is_dumb);
 }
 
 /**
@@ -600,9 +593,10 @@ igt_create_fb_with_bo_size(int fd, int width, int height,
 
 	igt_debug("%s(width=%d, height=%d, format=0x%x, tiling=0x%"PRIx64", size=%d)\n",
 		  __func__, width, height, format, tiling, bo_size);
-	do_or_die(create_bo_for_fb(fd, width, height, format, tiling, bo_size,
-				   bo_stride, &fb->gem_handle, &fb->size,
-				   &fb->stride, &fb->is_dumb));
+	fb->gem_handle = create_bo_for_fb(fd, width, height, format, tiling,
+					  bo_size, bo_stride, &fb->size,
+					  &fb->stride, &fb->is_dumb);
+	igt_assert(fb->gem_handle > 0);
 
 	igt_debug("%s(handle=%d, pitch=%d)\n",
 		  __func__, fb->gem_handle, fb->stride);
@@ -1006,7 +1000,6 @@ static void create_cairo_surface__blit(int fd, struct igt_fb *fb)
 	struct fb_blit_upload *blit;
 	cairo_format_t cairo_format;
 	unsigned int obj_tiling = fb_mod_to_obj_tiling(fb->tiling);
-	int ret;
 
 	blit = malloc(sizeof(*blit));
 	igt_assert(blit);
@@ -1016,14 +1009,14 @@ static void create_cairo_surface__blit(int fd, struct igt_fb *fb)
 	 * cairo). This linear bo will be then blitted to its final
 	 * destination, tiling it at the same time.
 	 */
-	ret = create_bo_for_fb(fd, fb->width, fb->height, fb->drm_format,
-				LOCAL_DRM_FORMAT_MOD_NONE, 0, 0,
-				&blit->linear.handle,
-				&blit->linear.size,
-				&blit->linear.stride,
-				&blit->linear.is_dumb);
+	blit->linear.handle = create_bo_for_fb(fd, fb->width, fb->height,
+					       fb->drm_format,
+					       LOCAL_DRM_FORMAT_MOD_NONE, 0,
+					       0, &blit->linear.size,
+					       &blit->linear.stride,
+					       &blit->linear.is_dumb);
 
-	igt_assert(ret == 0);
+	igt_assert(blit->linear.handle > 0);
 
 	blit->fd = fd;
 	blit->fb = fb;
