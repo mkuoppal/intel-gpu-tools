@@ -475,6 +475,70 @@ static void addfb25_ytile(int fd)
 	}
 }
 
+static void prop_tests(int fd)
+{
+	struct drm_mode_fb_cmd2 f = {};
+	struct drm_mode_obj_get_properties get_props = {};
+	struct drm_mode_obj_set_property set_prop = {};
+	uint64_t prop, prop_val;
+
+	f.width = 1024;
+	f.height = 1024;
+	f.pixel_format = DRM_FORMAT_XRGB8888;
+	f.pitches[0] = 1024*4;
+
+	igt_fixture {
+		gem_bo = igt_create_bo_with_dimensions(fd, 1024, 1024,
+			DRM_FORMAT_XRGB8888, 0, 0, NULL, NULL, NULL);
+		igt_assert(gem_bo);
+
+		f.handles[0] = gem_bo;
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_ADDFB2, &f) == 0);
+	}
+
+	get_props.props_ptr = (uintptr_t) &prop;
+	get_props.prop_values_ptr = (uintptr_t) &prop_val;
+	get_props.count_props = 1;
+	get_props.obj_id = f.fb_id;
+
+	igt_subtest("invalid-get-prop-any") {
+		get_props.obj_type = 0; /* DRM_MODE_OBJECT_ANY */
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES,
+				    &get_props) == -1 && errno == EINVAL);
+	}
+
+	igt_subtest("invalid-get-prop") {
+		get_props.obj_type = DRM_MODE_OBJECT_FB;
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_GETPROPERTIES,
+				    &get_props) == -1 && errno == EINVAL);
+	}
+
+	set_prop.value = 0;
+	set_prop.prop_id = 1;
+	set_prop.obj_id = f.fb_id;
+
+	igt_subtest("invalid-set-prop-any") {
+		set_prop.obj_type = 0; /* DRM_MODE_OBJECT_ANY */
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_SETPROPERTY,
+				    &set_prop) == -1 && errno == EINVAL);
+	}
+
+	igt_subtest("invalid-set-prop") {
+		set_prop.obj_type = DRM_MODE_OBJECT_FB;
+
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_OBJ_SETPROPERTY,
+				    &set_prop) == -1 && errno == EINVAL);
+	}
+
+	igt_fixture
+		igt_assert(drmIoctl(fd, DRM_IOCTL_MODE_RMFB, &f.fb_id) == 0);
+
+}
+
 int fd;
 
 igt_main
@@ -493,6 +557,8 @@ igt_main
 	addfb25_ytile(fd);
 
 	tiling_tests(fd);
+
+	prop_tests(fd);
 
 	igt_fixture
 		close(fd);
