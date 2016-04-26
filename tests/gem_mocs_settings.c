@@ -72,7 +72,7 @@ static const struct mocs_entry dirty_skylake_mocs_table[] = {
 static const struct mocs_entry broxton_mocs_table[] = {
 	{ 0x00000009, 0x0010 },
 	{ 0x00000038, 0x0030 },
-	{ 0x0000003b, 0x0030 },
+	{ 0x00000039, 0x0030 },
 };
 
 static const struct mocs_entry dirty_broxton_mocs_table[] = {
