@@ -41,7 +41,7 @@
 #include "intel_chipset.h"
 #include "drmtest.h"
 
-static uint32_t devid = -1;
+static uint32_t devid;
 
 /* no bother to include "edid.h" */
 #define _H_ACTIVE(x) (x[2] + ((x[4] & 0xF0) << 4))
@@ -149,8 +149,10 @@ static void dump_general_features(const struct bdb_header *bdb,
 	printf("\tExternal VBT: %s\n", YESNO(features->download_ext_vbt));
 	printf("\tEnable SSC: %s\n", YESNO(features->enable_ssc));
 	if (features->enable_ssc) {
-		if (IS_VALLEYVIEW(devid) || IS_CHERRYVIEW(devid) ||
-		    IS_BROXTON(devid))
+		if (!devid)
+			printf("\tSSC frequency: <unknown platform>\n");
+		else if (IS_VALLEYVIEW(devid) || IS_CHERRYVIEW(devid) ||
+			 IS_BROXTON(devid))
 			printf("\tSSC frequency: 100 MHz\n");
 		else if (HAS_PCH_SPLIT(devid))
 			printf("\tSSC frequency: %s\n", features->ssc_freq ?
@@ -1375,6 +1377,7 @@ enum opt {
 	OPT_UNKNOWN = '?',
 	OPT_END = -1,
 	OPT_FILE,
+	OPT_DEVID,
 };
 
 int main(int argc, char **argv)
@@ -1392,10 +1395,11 @@ int main(int argc, char **argv)
 	struct bdb_block *block;
 	struct bdb_header *bdb;
 	char signature[17];
-	char *devid_string;
+	char *endp;
 
 	static struct option options[] = {
 		{ "file",	required_argument,	NULL,	OPT_FILE },
+		{ "devid",	required_argument,	NULL,	OPT_DEVID },
 		{ 0 }
 	};
 
@@ -1405,6 +1409,13 @@ int main(int argc, char **argv)
 		switch (opt) {
 		case OPT_FILE:
 			filename = optarg;
+			break;
+		case OPT_DEVID:
+			devid = strtoul(optarg, &endp, 16);
+			if (!devid || *endp) {
+				fprintf(stderr, "invalid devid '%s'\n", optarg);
+				return EXIT_FAILURE;
+			}
 			break;
 		case OPT_END:
 			break;
@@ -1425,9 +1436,6 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 	}
-
-	if ((devid_string = getenv("DEVICE")))
-	    devid = strtoul(devid_string, NULL, 0);
 
 	fd = open(filename, O_RDONLY);
 	if (fd == -1) {
@@ -1506,10 +1514,15 @@ int main(int argc, char **argv)
 	}
 	printf("\n");
 
-	if (devid == -1)
-	    devid = get_device_id(VBIOS, size);
-	if (devid == -1)
-	    printf("Warning: could not find PCI device ID!\n");
+	if (!devid) {
+		const char *devid_string = getenv("DEVICE");
+		if (devid_string)
+			devid = strtoul(devid_string, NULL, 16);
+	}
+	if (!devid)
+		devid = get_device_id(VBIOS, size);
+	if (!devid)
+		fprintf(stderr, "Warning: could not find PCI device ID!\n");
 
 	dump_section(bdb, BDB_GENERAL_FEATURES, size);
 	dump_section(bdb, BDB_GENERAL_DEFINITIONS, size);
