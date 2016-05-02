@@ -63,6 +63,11 @@ struct bdb_block {
 	const void *data;
 };
 
+struct context {
+	const struct bdb_header *bdb;
+	int size;
+};
+
 const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
 static int panel_type;
 
@@ -76,9 +81,10 @@ static uint32_t _get_blocksize(const uint8_t *block_base)
 		return *((const uint16_t *)(block_base + 1));
 }
 
-static struct bdb_block *find_section(const struct bdb_header *bdb,
-				      int section_id, int length)
+static struct bdb_block *find_section(struct context *context, int section_id)
 {
+	const struct bdb_header *bdb = context->bdb;
+	int length = context->size;
 	struct bdb_block *block;
 	const uint8_t *base = (const uint8_t *)bdb;
 	int index = 0;
@@ -120,7 +126,7 @@ static struct bdb_block *find_section(const struct bdb_header *bdb,
 	return NULL;
 }
 
-static void dump_general_features(const struct bdb_header *bdb,
+static void dump_general_features(struct context *context,
 				  const struct bdb_block *block)
 {
 	const struct bdb_general_features *features = block->data;
@@ -172,7 +178,7 @@ static void dump_general_features(const struct bdb_header *bdb,
 	printf("\tIntegrated TV: %s\n", YESNO(features->int_tv_support));
 }
 
-static void dump_backlight_info(const struct bdb_header *bdb,
+static void dump_backlight_info(struct context *context,
 				const struct bdb_block *block)
 {
 	const struct bdb_lvds_backlight *backlight = block->data;
@@ -355,7 +361,7 @@ static const char *efp_conn(uint8_t type)
 
 
 
-static void dump_child_device(const struct bdb_header *bdb,
+static void dump_child_device(struct context *context,
 			      struct child_device_config *child)
 {
 	char child_id[11];
@@ -363,7 +369,7 @@ static void dump_child_device(const struct bdb_header *bdb,
 	if (!child->device_type)
 		return;
 
-	if (bdb->version < 152) {
+	if (context->bdb->version < 152) {
 		strncpy(child_id, (char *)child->device_id, 10);
 		child_id[10] = 0;
 
@@ -394,7 +400,7 @@ static void dump_child_device(const struct bdb_header *bdb,
 	}
 }
 
-static void dump_general_definitions(const struct bdb_header *bdb,
+static void dump_general_definitions(struct context *context,
 				     const struct bdb_block *block)
 {
 	const struct bdb_general_definitions *defs = block->data;
@@ -413,10 +419,10 @@ static void dump_general_definitions(const struct bdb_header *bdb,
 	child_device_num = (block->size - sizeof(*defs)) /
 		defs->child_dev_size;
 	for (i = 0; i < child_device_num; i++)
-		dump_child_device(bdb,(void*)&defs->devices[i * defs->child_dev_size]);
+		dump_child_device(context, (void*)&defs->devices[i * defs->child_dev_size]);
 }
 
-static void dump_child_devices(const struct bdb_header *bdb,
+static void dump_child_devices(struct context *context,
 			       const struct bdb_block *block)
 {
 	const struct bdb_child_devices *child_devs = block->data;
@@ -440,7 +446,7 @@ static void dump_child_devices(const struct bdb_header *bdb,
 	}
 }
 
-static void dump_lvds_options(const struct bdb_header *bdb,
+static void dump_lvds_options(struct context *context,
 			      const struct bdb_block *block)
 {
 	const struct bdb_lvds_options *options = block->data;
@@ -457,7 +463,7 @@ static void dump_lvds_options(const struct bdb_header *bdb,
 	printf("\tPFIT mode: %d\n", options->pfit_mode);
 }
 
-static void dump_lvds_ptr_data(const struct bdb_header *bdb,
+static void dump_lvds_ptr_data(struct context *context,
 			       const struct bdb_block *block)
 {
 	const struct bdb_lvds_lfp_data_ptrs *ptrs = block->data;
@@ -468,7 +474,7 @@ static void dump_lvds_ptr_data(const struct bdb_header *bdb,
 	lvds_lfp_data_ptrs = ptrs;
 }
 
-static void dump_lvds_data(const struct bdb_header *bdb,
+static void dump_lvds_data(struct context *context,
 			   const struct bdb_block *block)
 {
 	const struct bdb_lvds_lfp_data *lvds_data = block->data;
@@ -541,7 +547,7 @@ static void dump_lvds_data(const struct bdb_header *bdb,
 	}
 }
 
-static void dump_driver_feature(const struct bdb_header *bdb,
+static void dump_driver_feature(struct context *context,
 				const struct bdb_block *block)
 {
 	const struct bdb_driver_feature *feature = block->data;
@@ -608,7 +614,7 @@ static void dump_driver_feature(const struct bdb_header *bdb,
 	       feature->legacy_crt_max_refresh);
 }
 
-static void dump_edp(const struct bdb_header *bdb,
+static void dump_edp(struct context *context,
 		     const struct bdb_block *block)
 {
 	const struct bdb_edp *edp = block->data;
@@ -738,7 +744,7 @@ print_detail_timing_data(const struct lvds_dvo_timing2 *dvo_timing)
 	printf("\tclock: %d\n", dvo_timing->clock * 10);
 }
 
-static void dump_sdvo_panel_dtds(const struct bdb_header *bdb,
+static void dump_sdvo_panel_dtds(struct context *context,
 				 const struct bdb_block *block)
 {
 	const struct lvds_dvo_timing2 *dvo_timing = block->data;
@@ -751,7 +757,7 @@ static void dump_sdvo_panel_dtds(const struct bdb_header *bdb,
 	}
 }
 
-static void dump_sdvo_lvds_options(const struct bdb_header *bdb,
+static void dump_sdvo_lvds_options(struct context *context,
 				   const struct bdb_block *block)
 {
 	const struct bdb_sdvo_lvds_options *options = block->data;
@@ -773,7 +779,7 @@ static void dump_sdvo_lvds_options(const struct bdb_header *bdb,
 	printf("\tmisc[3]: %x\n", options->panel_misc_bits_4);
 }
 
-static void dump_mipi_config(const struct bdb_header *bdb,
+static void dump_mipi_config(struct context *context,
 			     const struct bdb_block *block)
 {
 	const struct bdb_mipi_config *start = block->data;
@@ -1160,7 +1166,7 @@ static int goto_next_sequence_v3(const uint8_t *data, int index, int total)
 	return 0;
 }
 
-static void dump_mipi_sequence(const struct bdb_header *bdb,
+static void dump_mipi_sequence(struct context *context,
 			       const struct bdb_block *block)
 {
 	const struct bdb_mipi_sequence *sequence = block->data;
@@ -1241,7 +1247,7 @@ get_device_id(unsigned char *bios, int size)
 struct dumper {
 	uint8_t id;
 	const char *name;
-	void (*dump)(const struct bdb_header *bdb,
+	void (*dump)(struct context *context,
 		     const struct bdb_block *block);
 };
 
@@ -1334,7 +1340,7 @@ static void hex_dump(const struct bdb_block *block)
 	printf("\n\n");
 }
 
-static void dump_section(const struct bdb_header *bdb, int section_id, int size)
+static void dump_section(struct context *context, int section_id)
 {
 	struct dumper *dumper = NULL;
 	const struct bdb_block *block;
@@ -1345,7 +1351,7 @@ static void dump_section(const struct bdb_header *bdb, int section_id, int size)
 		return;
 	done[section_id] = 1;
 
-	block = find_section(bdb, section_id, size);
+	block = find_section(context, section_id);
 	if (!block)
 		return;
 
@@ -1363,7 +1369,7 @@ static void dump_section(const struct bdb_header *bdb, int section_id, int size)
 
 	hex_dump(block);
 	if (dumper && dumper->dump)
-		dumper->dump(bdb, block);
+		dumper->dump(context, block);
 	printf("\n");
 }
 
@@ -1388,6 +1394,7 @@ int main(int argc, char **argv)
 	int size;
 	struct bdb_block *block;
 	struct bdb_header *bdb;
+	struct context context = {};
 	char signature[17];
 	char *endp;
 
@@ -1497,10 +1504,12 @@ int main(int argc, char **argv)
 	printf("BDB sig: %s\n", signature);
 	printf("BDB vers: %d\n", bdb->version);
 
-	printf("Available sections: ");
+	context.bdb = bdb;
+	context.size = size;
 
+	printf("Available sections: ");
 	for (i = 0; i < 256; i++) {
-		block = find_section(bdb, i, size);
+		block = find_section(&context, i);
 		if (!block)
 			continue;
 		printf("%d ", i);
@@ -1518,24 +1527,24 @@ int main(int argc, char **argv)
 	if (!devid)
 		fprintf(stderr, "Warning: could not find PCI device ID!\n");
 
-	dump_section(bdb, BDB_GENERAL_FEATURES, size);
-	dump_section(bdb, BDB_GENERAL_DEFINITIONS, size);
-	dump_section(bdb, BDB_CHILD_DEVICE_TABLE, size);
-	dump_section(bdb, BDB_LVDS_OPTIONS, size);
-	dump_section(bdb, BDB_LVDS_LFP_DATA_PTRS, size);
-	dump_section(bdb, BDB_LVDS_LFP_DATA, size);
-	dump_section(bdb, BDB_LVDS_BACKLIGHT, size);
+	dump_section(&context, BDB_GENERAL_FEATURES);
+	dump_section(&context, BDB_GENERAL_DEFINITIONS);
+	dump_section(&context, BDB_CHILD_DEVICE_TABLE);
+	dump_section(&context, BDB_LVDS_OPTIONS);
+	dump_section(&context, BDB_LVDS_LFP_DATA_PTRS);
+	dump_section(&context, BDB_LVDS_LFP_DATA);
+	dump_section(&context, BDB_LVDS_BACKLIGHT);
 
-	dump_section(bdb, BDB_SDVO_LVDS_OPTIONS, size);
-	dump_section(bdb, BDB_SDVO_PANEL_DTDS, size);
+	dump_section(&context, BDB_SDVO_LVDS_OPTIONS);
+	dump_section(&context, BDB_SDVO_PANEL_DTDS);
 
-	dump_section(bdb, BDB_DRIVER_FEATURES, size);
-	dump_section(bdb, BDB_EDP, size);
-	dump_section(bdb, BDB_MIPI_CONFIG, size);
-	dump_section(bdb, BDB_MIPI_SEQUENCE, size);
+	dump_section(&context, BDB_DRIVER_FEATURES);
+	dump_section(&context, BDB_EDP);
+	dump_section(&context, BDB_MIPI_CONFIG);
+	dump_section(&context, BDB_MIPI_SEQUENCE);
 
 	for (i = 0; i < 256; i++)
-		dump_section(bdb, i, size);
+		dump_section(&context, i);
 
 	return 0;
 }
