@@ -55,14 +55,6 @@ static uint32_t devid = -1;
 
 uint8_t *VBIOS;
 
-#define INTEL_BIOS_8(_addr)	(VBIOS[_addr])
-#define INTEL_BIOS_16(_addr)	(VBIOS[_addr] | \
-				 (VBIOS[_addr + 1] << 8))
-#define INTEL_BIOS_32(_addr)	(VBIOS[_addr] | \
-				 (VBIOS[_addr + 1] << 8) | \
-				 (VBIOS[_addr + 2] << 16) | \
-				 (VBIOS[_addr + 3] << 24))
-
 #define YESNO(val) ((val) ? "yes" : "no")
 
 /* This is not for mapping to memory layout. */
