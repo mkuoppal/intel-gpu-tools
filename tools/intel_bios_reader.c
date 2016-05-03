@@ -66,10 +66,10 @@ struct bdb_block {
 struct context {
 	const struct bdb_header *bdb;
 	int size;
-};
 
-const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
-static int panel_type;
+	const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
+	int panel_type;
+};
 
 /* Get BDB block size given a pointer to Block ID. */
 static uint32_t _get_blocksize(const uint8_t *block_base)
@@ -190,7 +190,7 @@ static void dump_backlight_info(struct context *context,
 		return;
 	}
 
-	blc = &backlight->panels[panel_type];
+	blc = &backlight->panels[context->panel_type];
 
 	printf("\tInverter type: %d\n", blc->inverter_type);
 	printf("\t     polarity: %d\n", blc->inverter_polarity);
@@ -451,8 +451,8 @@ static void dump_lvds_options(struct context *context,
 {
 	const struct bdb_lvds_options *options = block->data;
 
-	panel_type = options->panel_type;
-	printf("\tPanel type: %d\n", panel_type);
+	context->panel_type = options->panel_type;
+	printf("\tPanel type: %d\n", context->panel_type);
 	printf("\tLVDS EDID available: %s\n", YESNO(options->lvds_edid));
 	printf("\tPixel dither: %s\n", YESNO(options->pixel_dither));
 	printf("\tPFIT auto ratio: %s\n", YESNO(options->pfit_ratio_auto));
@@ -471,14 +471,14 @@ static void dump_lvds_ptr_data(struct context *context,
 	printf("\tNumber of entries: %d\n", ptrs->lvds_entries);
 
 	/* save for use by dump_lvds_data() */
-	lvds_lfp_data_ptrs = ptrs;
+	context->lvds_lfp_data_ptrs = ptrs;
 }
 
 static void dump_lvds_data(struct context *context,
 			   const struct bdb_block *block)
 {
 	const struct bdb_lvds_lfp_data *lvds_data = block->data;
-	const struct bdb_lvds_lfp_data_ptrs *ptrs = lvds_lfp_data_ptrs;
+	const struct bdb_lvds_lfp_data_ptrs *ptrs = context->lvds_lfp_data_ptrs;
 	int num_entries;
 	int i;
 	int hdisplay, hsyncstart, hsyncend, htotal;
@@ -509,7 +509,7 @@ static void dump_lvds_data(struct context *context,
 		    (const struct bdb_lvds_lfp_data_entry *)lfp_data_ptr;
 		char marker;
 
-		if (i == panel_type)
+		if (i == context->panel_type)
 			marker = '*';
 		else
 			marker = ' ';
@@ -622,7 +622,7 @@ static void dump_edp(struct context *context,
 	int i;
 
 	for (i = 0; i < 16; i++) {
-		printf("\tPanel %d%s\n", i, panel_type == i ? " *" : "");
+		printf("\tPanel %d%s\n", i, context->panel_type == i ? " *" : "");
 
 		printf("\t\tPower Sequence: T3 %d T7 %d T9 %d T10 %d T12 %d\n",
 		       edp->power_seqs[i].t3,
@@ -786,8 +786,8 @@ static void dump_mipi_config(struct context *context,
 	const struct mipi_config *config;
 	const struct mipi_pps_data *pps;
 
-	config = &start->config[panel_type];
-	pps = &start->pps[panel_type];
+	config = &start->config[context->panel_type];
+	pps = &start->pps[context->panel_type];
 
 	printf("\tGeneral Param\n");
 	printf("\t\t BTA disable: %s\n", config->bta ? "Disabled" : "Enabled");
@@ -1190,7 +1190,7 @@ static void dump_mipi_sequence(struct context *context,
 		return;
 	}
 
-	data = find_panel_sequence_block(sequence, panel_type,
+	data = find_panel_sequence_block(sequence, context->panel_type,
 					 block->size, &seq_size);
 	if (!data)
 		return;
