@@ -67,6 +67,7 @@ struct context {
 
 	uint32_t devid;
 	int panel_type;
+	bool dump_all_panel_types;
 	bool hexdump;
 };
 
@@ -513,6 +514,9 @@ static void dump_lvds_data(struct context *context,
 		    (const struct bdb_lvds_lfp_data_entry *)lfp_data_ptr;
 		char marker;
 
+		if (i != context->panel_type && !context->dump_all_panel_types)
+			continue;
+
 		if (i == context->panel_type)
 			marker = '*';
 		else
@@ -628,6 +632,9 @@ static void dump_edp(struct context *context,
 	int i;
 
 	for (i = 0; i < 16; i++) {
+		if (i != context->panel_type && !context->dump_all_panel_types)
+			continue;
+
 		printf("\tPanel %d%s\n", i, context->panel_type == i ? " *" : "");
 
 		printf("\t\tPower Sequence: T3 %d T7 %d T9 %d T10 %d T12 %d\n",
@@ -1402,6 +1409,7 @@ enum opt {
 	OPT_FILE,
 	OPT_DEVID,
 	OPT_PANEL_TYPE,
+	OPT_ALL_PANELS,
 	OPT_HEXDUMP,
 	OPT_BLOCK,
 };
@@ -1430,6 +1438,7 @@ int main(int argc, char **argv)
 		{ "file",	required_argument,	NULL,	OPT_FILE },
 		{ "devid",	required_argument,	NULL,	OPT_DEVID },
 		{ "panel-type",	required_argument,	NULL,	OPT_PANEL_TYPE },
+		{ "all-panels",	no_argument,		NULL,	OPT_ALL_PANELS },
 		{ "hexdump",	no_argument,		NULL,	OPT_HEXDUMP },
 		{ "block",	required_argument,	NULL,	OPT_BLOCK },
 		{ 0 }
@@ -1456,6 +1465,9 @@ int main(int argc, char **argv)
 					optarg);
 				return EXIT_FAILURE;
 			}
+			break;
+		case OPT_ALL_PANELS:
+			context.dump_all_panel_types = true;
 			break;
 		case OPT_HEXDUMP:
 			context.hexdump = true;
