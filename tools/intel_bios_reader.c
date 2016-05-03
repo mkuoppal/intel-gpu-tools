@@ -1365,7 +1365,7 @@ static void hex_dump(const struct bdb_block *block)
 	printf("\n\n");
 }
 
-static void dump_section(struct context *context, int section_id)
+static bool dump_section(struct context *context, int section_id)
 {
 	struct dumper *dumper = NULL;
 	const struct bdb_block *block;
@@ -1373,7 +1373,7 @@ static void dump_section(struct context *context, int section_id)
 
 	block = find_section(context, section_id);
 	if (!block)
-		return;
+		return false;
 
 	for (i = 0; i < ARRAY_SIZE(dumpers); i++) {
 		if (block->id == dumpers[i].id) {
@@ -1392,6 +1392,8 @@ static void dump_section(struct context *context, int section_id)
 	if (dumper && dumper->dump)
 		dumper->dump(context, block);
 	printf("\n");
+
+	return true;
 }
 
 enum opt {
@@ -1401,6 +1403,7 @@ enum opt {
 	OPT_DEVID,
 	OPT_PANEL_TYPE,
 	OPT_HEXDUMP,
+	OPT_BLOCK,
 };
 
 int main(int argc, char **argv)
@@ -1421,12 +1424,14 @@ int main(int argc, char **argv)
 	};
 	char signature[17];
 	char *endp;
+	int block_number = -1;
 
 	static struct option options[] = {
 		{ "file",	required_argument,	NULL,	OPT_FILE },
 		{ "devid",	required_argument,	NULL,	OPT_DEVID },
 		{ "panel-type",	required_argument,	NULL,	OPT_PANEL_TYPE },
 		{ "hexdump",	no_argument,		NULL,	OPT_HEXDUMP },
+		{ "block",	required_argument,	NULL,	OPT_BLOCK },
 		{ 0 }
 	};
 
@@ -1454,6 +1459,14 @@ int main(int argc, char **argv)
 			break;
 		case OPT_HEXDUMP:
 			context.hexdump = true;
+			break;
+		case OPT_BLOCK:
+			block_number = strtoul(optarg, &endp, 0);
+			if (*endp) {
+				fprintf(stderr, "invalid block number '%s'\n",
+					optarg);
+				return EXIT_FAILURE;
+			}
 			break;
 		case OPT_END:
 			break;
@@ -1573,8 +1586,17 @@ int main(int argc, char **argv)
 		context.panel_type = 0;
 	}
 
-	for (i = 0; i < 256; i++)
-		dump_section(&context, i);
+	if (block_number != -1) {
+		/* dump specific section only */
+		if (!dump_section(&context, block_number)) {
+			fprintf(stderr, "Block %d not found\n", block_number);
+			return EXIT_FAILURE;
+		}
+	} else {
+		/* dump all sections  */
+		for (i = 0; i < 256; i++)
+			dump_section(&context, i);
+	}
 
 	return 0;
 }
