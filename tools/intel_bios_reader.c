@@ -64,7 +64,6 @@ struct bdb_block {
 };
 
 const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
-static int tv_present;
 static int panel_type;
 
 /* Get BDB block size given a pointer to Block ID. */
@@ -171,8 +170,6 @@ static void dump_general_features(const struct bdb_header *bdb,
 	       YESNO(features->legacy_monitor_detect));
 	printf("\tIntegrated CRT: %s\n", YESNO(features->int_crt_support));
 	printf("\tIntegrated TV: %s\n", YESNO(features->int_tv_support));
-
-	tv_present = 1;		/* should be based on whether TV DAC exists */
 }
 
 static void dump_backlight_info(const struct bdb_header *bdb,
@@ -412,7 +409,6 @@ static void dump_general_definitions(const struct bdb_header *bdb,
 	printf("\tUse DPMS on AIM devices: %s\n", YESNO(defs->dpms_aim));
 	printf("\tBoot display type: 0x%02x%02x\n", defs->boot_display[1],
 	       defs->boot_display[0]);
-	printf("\tTV data block present: %s\n", YESNO(tv_present));
 	printf("\tChild device size: %d\n", defs->child_dev_size);
 	child_device_num = (block->size - sizeof(*defs)) /
 		defs->child_dev_size;
