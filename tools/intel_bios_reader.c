@@ -27,6 +27,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1370,13 +1371,22 @@ static void dump_section(const struct bdb_header *bdb, int section_id, int size)
 	printf("\n");
 }
 
+enum opt {
+	OPT_UNKNOWN = '?',
+	OPT_END = -1,
+	OPT_FILE,
+};
+
 int main(int argc, char **argv)
 {
 	uint8_t *VBIOS;
+	int index;
+	enum opt opt;
 	int fd;
 	struct vbt_header *vbt = NULL;
 	int vbt_off, bdb_off, i;
-	const char *filename = "bios";
+	const char *filename = NULL;
+	const char *toolname = argv[0];
 	struct stat finfo;
 	int size;
 	struct bdb_block *block;
@@ -1384,15 +1394,40 @@ int main(int argc, char **argv)
 	char signature[17];
 	char *devid_string;
 
-	if (argc != 2) {
-		printf("usage: %s <rom file>\n", argv[0]);
-		return 1;
+	static struct option options[] = {
+		{ "file",	required_argument,	NULL,	OPT_FILE },
+		{ 0 }
+	};
+
+	for (opt = 0; opt != OPT_END; ) {
+		opt = getopt_long(argc, argv, "", options, &index);
+
+		switch (opt) {
+		case OPT_FILE:
+			filename = optarg;
+			break;
+		case OPT_END:
+			break;
+		case OPT_UNKNOWN:
+			return EXIT_FAILURE;
+		}
+	}
+
+	argc -= optind;
+	argv += optind;
+
+	if (!filename) {
+		if (argc == 1) {
+			/* for backwards compatibility */
+			filename = argv[0];
+		} else {
+			printf("usage: %s --file=<rom file>\n", toolname);
+			return EXIT_FAILURE;
+		}
 	}
 
 	if ((devid_string = getenv("DEVICE")))
 	    devid = strtoul(devid_string, NULL, 0);
-
-	filename = argv[1];
 
 	fd = open(filename, O_RDONLY);
 	if (fd == -1) {
