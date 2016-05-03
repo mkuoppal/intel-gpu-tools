@@ -66,7 +66,6 @@ struct context {
 	int size;
 
 	uint32_t devid;
-	const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
 	int panel_type;
 };
 
@@ -469,16 +468,14 @@ static void dump_lvds_ptr_data(struct context *context,
 	const struct bdb_lvds_lfp_data_ptrs *ptrs = block->data;
 
 	printf("\tNumber of entries: %d\n", ptrs->lvds_entries);
-
-	/* save for use by dump_lvds_data() */
-	context->lvds_lfp_data_ptrs = ptrs;
 }
 
 static void dump_lvds_data(struct context *context,
 			   const struct bdb_block *block)
 {
 	const struct bdb_lvds_lfp_data *lvds_data = block->data;
-	const struct bdb_lvds_lfp_data_ptrs *ptrs = context->lvds_lfp_data_ptrs;
+	struct bdb_block *ptrs_block;
+	const struct bdb_lvds_lfp_data_ptrs *ptrs;
 	int num_entries;
 	int i;
 	int hdisplay, hsyncstart, hsyncend, htotal;
@@ -486,10 +483,13 @@ static void dump_lvds_data(struct context *context,
 	float clock;
 	int lfp_data_size, dvo_offset;
 
-	if (!ptrs) {
+	ptrs_block = find_section(context, BDB_LVDS_LFP_DATA_PTRS);
+	if (!ptrs_block) {
 		printf("No LVDS ptr block\n");
 		return;
 	}
+
+	ptrs = ptrs_block->data;
 
 	lfp_data_size =
 	    ptrs->ptr[1].fp_timing_offset - ptrs->ptr[0].fp_timing_offset;
@@ -545,6 +545,8 @@ static void dump_lvds_data(struct context *context,
 		       (hsyncend > htotal || vsyncend > vtotal) ?
 		       "BAD!" : "good");
 	}
+
+	free(ptrs_block);
 }
 
 static void dump_driver_feature(struct context *context,
