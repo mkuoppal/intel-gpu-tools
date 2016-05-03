@@ -53,8 +53,6 @@ static uint32_t devid = -1;
 #define _V_BLANK(x) (x[6] + ((x[7] & 0x0F) << 8))
 #define _PIXEL_CLOCK(x) (x[0] + (x[1] << 8)) * 10000
 
-uint8_t *VBIOS;
-
 #define YESNO(val) ((val) ? "yes" : "no")
 
 /* This is not for mapping to memory layout. */
@@ -1374,6 +1372,7 @@ static void dump_section(const struct bdb_header *bdb, int section_id, int size)
 
 int main(int argc, char **argv)
 {
+	uint8_t *VBIOS;
 	int fd;
 	struct vbt_header *vbt = NULL;
 	int vbt_off, bdb_off, i;
