@@ -450,8 +450,11 @@ static void dump_lvds_options(struct context *context,
 {
 	const struct bdb_lvds_options *options = block->data;
 
-	context->panel_type = options->panel_type;
-	printf("\tPanel type: %d\n", context->panel_type);
+	if (context->panel_type == options->panel_type)
+		printf("\tPanel type: %d\n", options->panel_type);
+	else
+		printf("\tPanel type: %d (override %d)\n",
+		       options->panel_type, context->panel_type);
 	printf("\tLVDS EDID available: %s\n", YESNO(options->lvds_edid));
 	printf("\tPixel dither: %s\n", YESNO(options->pixel_dither));
 	printf("\tPFIT auto ratio: %s\n", YESNO(options->pfit_ratio_auto));
@@ -1226,6 +1229,25 @@ static void dump_mipi_sequence(struct context *context,
 			dump_sequence(sequence_ptrs[i], sequence->version);
 }
 
+/* get panel type from lvds options block, or -1 if block not found */
+static int get_panel_type(struct context *context)
+{
+	struct bdb_block *block;
+	const struct bdb_lvds_options *options;
+	int panel_type;
+
+	block = find_section(context, BDB_LVDS_OPTIONS);
+	if (!block)
+		return -1;
+
+	options = block->data;
+	panel_type = options->panel_type;
+
+	free(block);
+
+	return panel_type;
+}
+
 static int
 get_device_id(unsigned char *bios, int size)
 {
@@ -1380,6 +1402,7 @@ enum opt {
 	OPT_END = -1,
 	OPT_FILE,
 	OPT_DEVID,
+	OPT_PANEL_TYPE,
 };
 
 int main(int argc, char **argv)
@@ -1394,15 +1417,17 @@ int main(int argc, char **argv)
 	const char *toolname = argv[0];
 	struct stat finfo;
 	int size;
-	struct bdb_block *block;
 	struct bdb_header *bdb;
-	struct context context = {};
+	struct context context = {
+		.panel_type = -1,
+	};
 	char signature[17];
 	char *endp;
 
 	static struct option options[] = {
 		{ "file",	required_argument,	NULL,	OPT_FILE },
 		{ "devid",	required_argument,	NULL,	OPT_DEVID },
+		{ "panel-type",	required_argument,	NULL,	OPT_PANEL_TYPE },
 		{ 0 }
 	};
 
@@ -1417,6 +1442,14 @@ int main(int argc, char **argv)
 			context.devid = strtoul(optarg, &endp, 16);
 			if (!context.devid || *endp) {
 				fprintf(stderr, "invalid devid '%s'\n", optarg);
+				return EXIT_FAILURE;
+			}
+			break;
+		case OPT_PANEL_TYPE:
+			context.panel_type = strtoul(optarg, &endp, 0);
+			if (*endp || context.panel_type > 15) {
+				fprintf(stderr, "invalid panel type '%s'\n",
+					optarg);
 				return EXIT_FAILURE;
 			}
 			break;
@@ -1511,6 +1544,8 @@ int main(int argc, char **argv)
 
 	printf("Available sections: ");
 	for (i = 0; i < 256; i++) {
+		struct bdb_block *block;
+
 		block = find_section(&context, i);
 		if (!block)
 			continue;
@@ -1528,6 +1563,13 @@ int main(int argc, char **argv)
 		context.devid = get_device_id(VBIOS, size);
 	if (!context.devid)
 		fprintf(stderr, "Warning: could not find PCI device ID!\n");
+
+	if (context.panel_type == -1)
+		context.panel_type = get_panel_type(&context);
+	if (context.panel_type == -1) {
+		fprintf(stderr, "Warning: panel type not set, using 0\n");
+		context.panel_type = 0;
+	}
 
 	dump_section(&context, BDB_GENERAL_FEATURES);
 	dump_section(&context, BDB_GENERAL_DEFINITIONS);
