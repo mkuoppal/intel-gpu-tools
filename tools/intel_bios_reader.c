@@ -1375,7 +1375,7 @@ static void hex_dump(const struct bdb_block *block)
 static bool dump_section(struct context *context, int section_id)
 {
 	struct dumper *dumper = NULL;
-	const struct bdb_block *block;
+	struct bdb_block *block;
 	int i;
 
 	block = find_section(context, section_id);
@@ -1399,6 +1399,8 @@ static bool dump_section(struct context *context, int section_id)
 	if (dumper && dumper->dump)
 		dumper->dump(context, block);
 	printf("\n");
+
+	free(block);
 
 	return true;
 }
