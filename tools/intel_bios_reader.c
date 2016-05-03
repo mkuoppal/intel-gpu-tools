@@ -67,6 +67,7 @@ struct context {
 
 	uint32_t devid;
 	int panel_type;
+	bool hexdump;
 };
 
 /* Get BDB block size given a pointer to Block ID. */
@@ -1386,7 +1387,8 @@ static void dump_section(struct context *context, int section_id)
 	else
 		printf("BDB block %d:\n", block->id);
 
-	hex_dump(block);
+	if (context->hexdump)
+		hex_dump(block);
 	if (dumper && dumper->dump)
 		dumper->dump(context, block);
 	printf("\n");
@@ -1398,6 +1400,7 @@ enum opt {
 	OPT_FILE,
 	OPT_DEVID,
 	OPT_PANEL_TYPE,
+	OPT_HEXDUMP,
 };
 
 int main(int argc, char **argv)
@@ -1423,6 +1426,7 @@ int main(int argc, char **argv)
 		{ "file",	required_argument,	NULL,	OPT_FILE },
 		{ "devid",	required_argument,	NULL,	OPT_DEVID },
 		{ "panel-type",	required_argument,	NULL,	OPT_PANEL_TYPE },
+		{ "hexdump",	no_argument,		NULL,	OPT_HEXDUMP },
 		{ 0 }
 	};
 
@@ -1447,6 +1451,9 @@ int main(int argc, char **argv)
 					optarg);
 				return EXIT_FAILURE;
 			}
+			break;
+		case OPT_HEXDUMP:
+			context.hexdump = true;
 			break;
 		case OPT_END:
 			break;
