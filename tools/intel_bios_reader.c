@@ -1368,12 +1368,7 @@ static void dump_section(struct context *context, int section_id)
 {
 	struct dumper *dumper = NULL;
 	const struct bdb_block *block;
-	static int done[256];
 	int i;
-
-	if (done[section_id])
-		return;
-	done[section_id] = 1;
 
 	block = find_section(context, section_id);
 	if (!block)
@@ -1570,22 +1565,6 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Warning: panel type not set, using 0\n");
 		context.panel_type = 0;
 	}
-
-	dump_section(&context, BDB_GENERAL_FEATURES);
-	dump_section(&context, BDB_GENERAL_DEFINITIONS);
-	dump_section(&context, BDB_CHILD_DEVICE_TABLE);
-	dump_section(&context, BDB_LVDS_OPTIONS);
-	dump_section(&context, BDB_LVDS_LFP_DATA_PTRS);
-	dump_section(&context, BDB_LVDS_LFP_DATA);
-	dump_section(&context, BDB_LVDS_BACKLIGHT);
-
-	dump_section(&context, BDB_SDVO_LVDS_OPTIONS);
-	dump_section(&context, BDB_SDVO_PANEL_DTDS);
-
-	dump_section(&context, BDB_DRIVER_FEATURES);
-	dump_section(&context, BDB_EDP);
-	dump_section(&context, BDB_MIPI_CONFIG);
-	dump_section(&context, BDB_MIPI_SEQUENCE);
 
 	for (i = 0; i < 256; i++)
 		dump_section(&context, i);
