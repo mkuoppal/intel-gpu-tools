@@ -65,7 +65,6 @@ struct bdb_block {
 
 const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
 static int tv_present;
-static int lvds_present;
 static int panel_type;
 
 /* Get BDB block size given a pointer to Block ID. */
@@ -174,7 +173,6 @@ static void dump_general_features(const struct bdb_header *bdb,
 	printf("\tIntegrated TV: %s\n", YESNO(features->int_tv_support));
 
 	tv_present = 1;		/* should be based on whether TV DAC exists */
-	lvds_present = 1;	/* should be based on IS_MOBILE() */
 }
 
 static void dump_backlight_info(const struct bdb_header *bdb,
