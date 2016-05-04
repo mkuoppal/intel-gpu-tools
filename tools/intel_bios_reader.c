@@ -1414,7 +1414,20 @@ enum opt {
 	OPT_ALL_PANELS,
 	OPT_HEXDUMP,
 	OPT_BLOCK,
+	OPT_USAGE,
 };
+
+static void usage(const char *toolname)
+{
+	fprintf(stderr, "usage: %s", toolname);
+	fprintf(stderr, " --file=<rom_file>"
+			" [--devid=<device_id>]"
+			" [--panel-type=<panel_type>]"
+			" [--all-panels]"
+			" [--hexdump]"
+			" [--block=<block_no>]"
+			" [--help]\n");
+}
 
 int main(int argc, char **argv)
 {
@@ -1443,6 +1456,7 @@ int main(int argc, char **argv)
 		{ "all-panels",	no_argument,		NULL,	OPT_ALL_PANELS },
 		{ "hexdump",	no_argument,		NULL,	OPT_HEXDUMP },
 		{ "block",	required_argument,	NULL,	OPT_BLOCK },
+		{ "help",	no_argument,		NULL,	OPT_USAGE },
 		{ 0 }
 	};
 
@@ -1484,7 +1498,9 @@ int main(int argc, char **argv)
 			break;
 		case OPT_END:
 			break;
+		case OPT_USAGE: /* fall-through */
 		case OPT_UNKNOWN:
+			usage(toolname);
 			return EXIT_FAILURE;
 		}
 	}
@@ -1497,7 +1513,7 @@ int main(int argc, char **argv)
 			/* for backwards compatibility */
 			filename = argv[0];
 		} else {
-			printf("usage: %s --file=<rom file>\n", toolname);
+			usage(toolname);
 			return EXIT_FAILURE;
 		}
 	}
