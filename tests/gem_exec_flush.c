@@ -474,17 +474,17 @@ igt_main
 
 		for (const struct batch *b = batches; b->name; b++) {
 			igt_subtest_f("%sbatch-%s-%s-uc",
-				      e->exec_id == 0 ? "basic-" : "",
+				      b == batches && e->exec_id == 0 ? "basic-" : "",
 				      b->name,
 				      e->name)
 				batch(fd, ring, ncpus, timeout, b->mode, 0);
 			igt_subtest_f("%sbatch-%s-%s-wb",
-				      e->exec_id == 0 ? "basic-" : "",
+				      b == batches && e->exec_id == 0 ? "basic-" : "",
 				      b->name,
 				      e->name)
 				batch(fd, ring, ncpus, timeout, b->mode, COHERENT);
 			igt_subtest_f("%sbatch-%s-%s-cmd",
-				      e->exec_id == 0 ? "basic-" : "",
+				      b == batches && e->exec_id == 0 ? "basic-" : "",
 				      b->name,
 				      e->name)
 				batch(fd, ring, ncpus, timeout, b->mode,
