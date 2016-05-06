@@ -226,21 +226,15 @@ static void connector_find_preferred_mode(uint32_t connector_id,
 static void
 paint_color_key(struct igt_fb *fb_info)
 {
-	int i, j;
-	uint32_t *fb_ptr;
+	cairo_t *cr = igt_get_cairo_ctx(drm_fd, fb_info);
 
-	fb_ptr = gem_mmap__gtt(drm_fd, fb_info->gem_handle, fb_info->size,
-			       PROT_READ | PROT_WRITE);
+	cairo_rectangle(cr, crtc_x, crtc_y, crtc_w, crtc_h);
+	cairo_set_source_rgb(cr, .8, .8, .8);
+	cairo_fill(cr);
 
-	for (i = crtc_y; i < crtc_y + crtc_h; i++)
-		for (j = crtc_x; j < crtc_x + crtc_w; j++) {
-			uint32_t offset;
+	igt_assert(!cairo_status(cr));
 
-			offset = (i * fb_info->stride / 4) + j;
-			fb_ptr[offset] = SPRITE_COLOR_KEY;
-		}
-
-	munmap(fb_ptr, fb_info->size);
+	cairo_destroy(cr);
 }
 
 static void paint_image(cairo_t *cr, const char *file)
