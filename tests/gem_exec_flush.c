@@ -32,8 +32,9 @@ IGT_TEST_DESCRIPTION("Basic check of flushing after batches");
 #define WRITE 2
 #define KERNEL 4
 #define SET_DOMAIN 8
-#define INTERRUPTIBLE 16
-#define CMDPARSER 32
+#define BEFORE 16
+#define INTERRUPTIBLE 32
+#define CMDPARSER 64
 
 static void run(int fd, unsigned ring, int nchild, int timeout,
 		unsigned flags)
@@ -161,6 +162,10 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 			obj[2].relocs_ptr = (uintptr_t)&reloc1[i];
 			execbuf.batch_start_offset =  64*i;
 
+			if ((flags & BEFORE) &&
+			    !((flags & COHERENT) || gem_has_llc(fd)))
+				igt_clflush_range(&map[i], sizeof(map[i]));
+
 overwrite:
 			execbuf.buffer_count = 2 + xor;
 			gem_execbuf(fd, &execbuf);
@@ -202,7 +207,8 @@ overwrite:
 				igt_interruptible(flags & INTERRUPTIBLE)
 					gem_sync(fd, obj[0].handle);
 
-				if (!(flags & COHERENT) && !gem_has_llc(fd))
+				if (!(flags & (BEFORE | COHERENT)) &&
+				    !gem_has_llc(fd))
 					igt_clflush_range(&map[i], sizeof(map[i]));
 
 				if (xor)
@@ -443,6 +449,8 @@ igt_main
 	} modes[] = {
 		{ "ro", 0 },
 		{ "rw", WRITE },
+		{ "ro-before", BEFORE },
+		{ "rw-before", BEFORE | WRITE },
 		{ "pro", KERNEL },
 		{ "prw", KERNEL | WRITE },
 		{ "set", SET_DOMAIN | WRITE },
