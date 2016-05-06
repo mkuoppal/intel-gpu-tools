@@ -29,12 +29,13 @@ IGT_TEST_DESCRIPTION("Basic check of flushing after batches");
 
 #define UNCACHED 0
 #define COHERENT 1
-#define WRITE 2
-#define KERNEL 4
-#define SET_DOMAIN 8
-#define BEFORE 16
-#define INTERRUPTIBLE 32
-#define CMDPARSER 64
+#define WC 2
+#define WRITE 4
+#define KERNEL 8
+#define SET_DOMAIN 16
+#define BEFORE 32
+#define INTERRUPTIBLE 64
+#define CMDPARSER 128
 
 static void run(int fd, unsigned ring, int nchild, int timeout,
 		unsigned flags)
@@ -56,18 +57,26 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 		obj[0].handle = gem_create(fd, 4096);
 		obj[0].flags |= EXEC_OBJECT_WRITE;
 
-		gem_set_caching(fd, obj[0].handle, !!(flags & COHERENT));
-		map = gem_mmap__cpu(fd, obj[0].handle, 0, 4096, PROT_WRITE);
+		if (flags & WC) {
+			igt_assert(flags & COHERENT);
+			map = gem_mmap__wc(fd, obj[0].handle, 0, 4096, PROT_WRITE);
+			gem_set_domain(fd, obj[0].handle,
+				       I915_GEM_DOMAIN_GTT,
+				       I915_GEM_DOMAIN_GTT);
+		} else {
+			gem_set_caching(fd, obj[0].handle, !!(flags & COHERENT));
+			map = gem_mmap__cpu(fd, obj[0].handle, 0, 4096, PROT_WRITE);
+			gem_set_domain(fd, obj[0].handle,
+				       I915_GEM_DOMAIN_CPU,
+				       I915_GEM_DOMAIN_CPU);
+		}
 
-		gem_set_domain(fd, obj[0].handle,
-				I915_GEM_DOMAIN_CPU,
-				I915_GEM_DOMAIN_CPU);
 		for (i = 0; i < 1024; i++)
 			map[i] = 0xabcdabcd;
 
 		gem_set_domain(fd, obj[0].handle,
-				I915_GEM_DOMAIN_GTT,
-				I915_GEM_DOMAIN_GTT);
+			       I915_GEM_DOMAIN_GTT,
+			       I915_GEM_DOMAIN_GTT);
 
 		memset(&execbuf, 0, sizeof(execbuf));
 		execbuf.buffers_ptr = (uintptr_t)obj;
@@ -85,9 +94,9 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 		obj[2].relocation_count = 1;
 
 		ptr = gem_mmap__wc(fd, obj[1].handle, 0, 64*1024,
-				PROT_WRITE | PROT_READ);
+				   PROT_WRITE | PROT_READ);
 		gem_set_domain(fd, obj[1].handle,
-				I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
+			       I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
 
 		memset(reloc0, 0, sizeof(reloc0));
 		for (i = 0; i < 1024; i++) {
@@ -119,9 +128,9 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 		munmap(ptr, 64*1024);
 
 		ptr = gem_mmap__wc(fd, obj[2].handle, 0, 64*1024,
-				PROT_WRITE | PROT_READ);
+				   PROT_WRITE | PROT_READ);
 		gem_set_domain(fd, obj[2].handle,
-				I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
+			       I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
 
 		memset(reloc1, 0, sizeof(reloc1));
 		for (i = 0; i < 1024; i++) {
@@ -171,10 +180,10 @@ overwrite:
 			gem_execbuf(fd, &execbuf);
 
 			if (flags & SET_DOMAIN) {
+				unsigned domain = flags & WC ? I915_GEM_DOMAIN_GTT : I915_GEM_DOMAIN_CPU;
 				igt_interruptible(flags & INTERRUPTIBLE)
 					gem_set_domain(fd, obj[0].handle,
-						       I915_GEM_DOMAIN_CPU,
-						       (flags & WRITE) ? I915_GEM_DOMAIN_CPU : 0);
+						       domain, (flags & WRITE) ? domain : 0);
 
 				if (xor)
 					igt_assert_eq_u32(map[i], i ^ 0xffffffff);
@@ -525,6 +534,18 @@ igt_main
 				      e->name)
 				run(fd, ring, ncpus, timeout,
 				    COHERENT | m->flags | INTERRUPTIBLE);
+
+			igt_subtest_f("wc-%s-%s",
+				      m->name,
+				      e->name)
+				run(fd, ring, ncpus, timeout,
+				    COHERENT | WC | m->flags);
+
+			igt_subtest_f("wc-%s-%s-interruptible",
+				      m->name,
+				      e->name)
+				run(fd, ring, ncpus, timeout,
+				    COHERENT | WC | m->flags | INTERRUPTIBLE);
 		}
 	}
 
