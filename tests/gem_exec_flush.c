@@ -42,6 +42,41 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 {
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 
+	/* The crux of this testing is whether writes by the GPU are coherent
+	 * from the CPU.
+	 *
+	 * For example, using plain clflush (the simplest and most visible
+	 * in terms of function calls / syscalls) we have two tests which
+	 * perform:
+	 *
+	 * USER (0):
+	 *	execbuf(map[i] = i);
+	 *	sync();
+	 *	clflush(&map[i]);
+	 *	assert(map[i] == i);
+	 *
+	 *	execbuf(map[i] = i ^ ~0);
+	 *	sync();
+	 *	clflush(&map[i]);
+	 *	assert(map[i] == i ^ ~0);
+	 *
+	 * BEFORE:
+	 *	clflush(&map[i]);
+	 *	execbuf(map[i] = i);
+	 *	sync();
+	 *	assert(map[i] == i);
+	 *
+	 *	clflush(&map[i]);
+	 *	execbuf(map[i] = i ^ ~0);
+	 *	sync();
+	 *	assert(map[i] == i ^ ~0);
+	 *
+	 * The assertion here is that the cacheline invalidations are precise
+	 * and we have no speculative prefetch that can see the future map[i]
+	 * access and bring it ahead of the execution, or accidental cache
+	 * pollution by the kernel.
+	 */
+
 	igt_fork(child, nchild) {
 		const uint32_t bbe = MI_BATCH_BUFFER_END;
 		struct drm_i915_gem_exec_object2 obj[3];
