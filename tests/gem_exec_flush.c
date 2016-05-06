@@ -171,11 +171,11 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 			obj[2].relocs_ptr = (uintptr_t)&reloc1[i];
 			execbuf.batch_start_offset =  64*i;
 
+overwrite:
 			if ((flags & BEFORE) &&
 			    !((flags & COHERENT) || gem_has_llc(fd)))
 				igt_clflush_range(&map[i], sizeof(map[i]));
 
-overwrite:
 			execbuf.buffer_count = 2 + xor;
 			gem_execbuf(fd, &execbuf);
 
@@ -227,7 +227,7 @@ overwrite:
 
 				if (flags & WRITE) {
 					map[i] = 0xdeadbeef;
-					if (!(flags & COHERENT))
+					if (!(flags & (COHERENT | BEFORE)))
 						igt_clflush_range(&map[i], sizeof(map[i]));
 				}
 			}
