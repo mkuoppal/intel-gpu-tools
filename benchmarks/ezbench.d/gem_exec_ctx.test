@@ -12,6 +12,10 @@ for i in nop default switch create; do
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_ctx -s -b $i -r \$1 ; }"
 
+    name="gem:exec:ctx:$i:forked"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_ctx -f -s -b $i -r \$1 ; }"
+
     name="gem:exec:ctx:$i:continuous"
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_ctx -b $i -r \$1 ; }"

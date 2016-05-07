@@ -74,22 +74,28 @@ static uint32_t __gem_context_create(int fd)
 	return create.ctx_id;
 }
 
-static int loop(unsigned ring, int reps, enum mode mode, unsigned flags)
+static int loop(unsigned ring,
+		int reps,
+		enum mode mode,
+		int ncpus,
+		unsigned flags)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 gem_exec;
+	struct drm_i915_gem_exec_object2 obj;
+	double *shared;
 	int fds[2], fd;
-	uint32_t ctx;
+
+	shared = mmap(0, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
 	fd = fds[0] = drm_open_driver(DRIVER_INTEL);
 	fds[1] = drm_open_driver(DRIVER_INTEL);
 
-	memset(&gem_exec, 0, sizeof(gem_exec));
-	gem_exec.handle = batch(fd);
-	igt_assert(gem_open(fds[1], gem_flink(fds[0], gem_exec.handle)) == gem_exec.handle);
+	memset(&obj, 0, sizeof(obj));
+	obj.handle = batch(fd);
+	igt_assert(gem_open(fds[1], gem_flink(fds[0], obj.handle)) == obj.handle);
 
 	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)&gem_exec;
+	execbuf.buffers_ptr = (uintptr_t)&obj;
 	execbuf.buffer_count = 1;
 	execbuf.flags = ring;
 	execbuf.flags |= LOCAL_I915_EXEC_HANDLE_LUT;
@@ -105,51 +111,73 @@ static int loop(unsigned ring, int reps, enum mode mode, unsigned flags)
 		if (__gem_execbuf(fd, &execbuf))
 			return 77;
 	}
-	ctx = gem_context_create(fd);
+	if (mode != DEFAULT && mode != NOP)
+		gem_context_destroy(fd, execbuf.rsvd1);
 
 	while (reps--) {
-		struct timespec start, end;
-		unsigned count = 0;
-
 		sleep(1); /* wait for the hw to go back to sleep */
 
-		clock_gettime(CLOCK_MONOTONIC, &start);
-		do {
-			uint32_t tmp;
-			switch (mode) {
-			case CREATE:
-				ctx = execbuf.rsvd1;
-				execbuf.rsvd1 = gem_context_create(fd);
-				break;
+		memset(shared, 0, 4096);
 
-			case SWITCH:
-				tmp = execbuf.rsvd1;
-				execbuf.rsvd1 = ctx;
-				ctx = tmp;
-				break;
+		igt_fork(child, ncpus) {
+			struct timespec start, end;
+			unsigned count = 0;
+			uint32_t ctx = 0;
 
-			case DEFAULT:
-				fd = fds[count & 1];
-				break;
-
-			case NOP:
-				break;
+			if (mode != DEFAULT && mode != NOP) {
+				execbuf.rsvd1 = __gem_context_create(fd);
+				ctx = gem_context_create(fd);
 			}
-			do_ioctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &execbuf);
-			count++;
-			if (mode == CREATE)
-				gem_context_destroy(fd, ctx);
 
-			if (flags & SYNC)
-				gem_sync(fd, gem_exec.handle);
+			clock_gettime(CLOCK_MONOTONIC, &start);
+			do {
+				uint32_t tmp;
+				switch (mode) {
+				case CREATE:
+					ctx = execbuf.rsvd1;
+					execbuf.rsvd1 = gem_context_create(fd);
+					break;
+
+				case SWITCH:
+					tmp = execbuf.rsvd1;
+					execbuf.rsvd1 = ctx;
+					ctx = tmp;
+					break;
+
+				case DEFAULT:
+					fd = fds[count & 1];
+					break;
+
+				case NOP:
+					break;
+				}
+				gem_execbuf(fd, &execbuf);
+				count++;
+				if (mode == CREATE)
+					gem_context_destroy(fd, ctx);
+
+				if (flags & SYNC)
+					gem_sync(fd, obj.handle);
+
+				clock_gettime(CLOCK_MONOTONIC, &end);
+			} while (elapsed(&start, &end) < 2.);
+
+			gem_sync(fd, obj.handle);
 
 			clock_gettime(CLOCK_MONOTONIC, &end);
-		} while (elapsed(&start, &end) < 2.);
+			shared[child] = 1e6*elapsed(&start, &end) / count;
 
-		gem_sync(fd, gem_exec.handle);
+			if (mode != DEFAULT && mode != NOP) {
+				if (mode != CREATE)
+					gem_context_destroy(fd, ctx);
+				gem_context_destroy(fd, execbuf.rsvd1);
+			}
+		}
+		igt_waitchildren();
 
-		clock_gettime(CLOCK_MONOTONIC, &end);
-		printf("%7.3f\n", 1e6*elapsed(&start, &end) / count);
+		for (int child = 0; child < ncpus; child++)
+			shared[ncpus] += shared[child];
+		printf("%7.3f\n", shared[ncpus] / ncpus);
 	}
 	return 0;
 }
@@ -160,9 +188,10 @@ int main(int argc, char **argv)
 	unsigned flags = 0;
 	enum mode mode = NOP;
 	int reps = 1;
+	int ncpus = 1;
 	int c;
 
-	while ((c = getopt (argc, argv, "e:r:b:s")) != -1) {
+	while ((c = getopt (argc, argv, "e:r:b:sf")) != -1) {
 		switch (c) {
 		case 'e':
 			if (strcmp(optarg, "rcs") == 0)
@@ -190,6 +219,10 @@ int main(int argc, char **argv)
 				abort();
 			break;
 
+		case 'f':
+			ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+			break;
+
 		case 'r':
 			reps = atoi(optarg);
 			if (reps < 1)
@@ -205,5 +238,5 @@ int main(int argc, char **argv)
 		}
 	}
 
-	return loop(ring, reps, mode, flags);
+	return loop(ring, reps, mode, ncpus, flags);
 }

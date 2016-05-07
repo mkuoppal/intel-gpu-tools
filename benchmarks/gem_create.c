@@ -83,9 +83,10 @@ int main(int argc, char **argv)
 	int size = 0;
 	int busy = 0;
 	int reps = 13;
+	int ncpus = 1;
 	int c, n, s;
 
-	while ((c = getopt (argc, argv, "bs:r:")) != -1) {
+	while ((c = getopt (argc, argv, "bs:r:f")) != -1) {
 		switch (c) {
 		case 's':
 			size = atoi(optarg);
@@ -95,6 +96,10 @@ int main(int argc, char **argv)
 			reps = atoi(optarg);
 			if (reps < 1)
 				reps = 1;
+			break;
+
+		case 'f':
+			ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 			break;
 
 		case 'b':
@@ -138,28 +143,41 @@ int main(int argc, char **argv)
 			igt_stats_fini(&stats);
 		}
 	} else {
+		double *shared;
+
+		shared = mmap(0, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 		for (n = 0; n < reps; n++) {
-			struct timespec start, end;
-			uint64_t count = 0;
+			memset(shared, 0, 4096);
 
-			clock_gettime(CLOCK_MONOTONIC, &start);
-			do {
-				for (c = 0; c < 1000; c++) {
-					uint32_t handle;
+			igt_fork(child, ncpus) {
+				struct timespec start, end;
+				uint64_t count = 0;
 
-					handle = gem_create(fd, size);
-					gem_set_domain(fd, handle,
-						       I915_GEM_DOMAIN_GTT,
-						       I915_GEM_DOMAIN_GTT);
-					if (busy)
-						make_busy(fd, handle);
-					gem_close(fd, handle);
-				}
-				count += c;
-				clock_gettime(CLOCK_MONOTONIC, &end);
-			} while (end.tv_sec - start.tv_sec < 2);
+				clock_gettime(CLOCK_MONOTONIC, &start);
+				do {
+					for (c = 0; c < 1000; c++) {
+						uint32_t handle;
 
-			printf("%f\n", count / elapsed(&start, &end));
+						handle = gem_create(fd, size);
+						gem_set_domain(fd, handle,
+								I915_GEM_DOMAIN_GTT,
+								I915_GEM_DOMAIN_GTT);
+						if (busy)
+							make_busy(fd, handle);
+						gem_close(fd, handle);
+					}
+					count += c;
+					clock_gettime(CLOCK_MONOTONIC, &end);
+				} while (end.tv_sec - start.tv_sec < 2);
+
+				shared[child] = count / elapsed(&start, &end);
+			}
+			igt_waitchildren();
+
+			for (int child = 0; child < ncpus; child++)
+				shared[ncpus] += shared[child];
+
+			printf("%7.3f\n", shared[ncpus] / ncpus);
 		}
 	}
 
