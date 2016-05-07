@@ -53,14 +53,12 @@ static double elapsed(const struct timespec *start,
 	return (end->tv_sec - start->tv_sec) + 1e-9*(end->tv_nsec - start->tv_nsec);
 }
 
-static void files(int core, int timeout)
+static void files(int core, int timeout, const int ncpus)
 {
 	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
-	struct timespec start, end;
 	uint32_t batch, name;
-	unsigned count = 0;
 
 	batch = gem_create(core, 4096);
 	gem_write(core, batch, 0, &bbe, sizeof(bbe));
@@ -71,34 +69,38 @@ static void files(int core, int timeout)
 	execbuf.buffers_ptr = (uintptr_t)&obj;
 	execbuf.buffer_count = 1;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	do {
-		do {
-			int fd = drm_open_driver(DRIVER_INTEL);
-			obj.handle = gem_open(fd, name);
-			execbuf.flags &= ~ENGINE_FLAGS;
-			execbuf.flags |= ppgtt_engines[count % ppgtt_nengine];
-			gem_execbuf(fd, &execbuf);
-			close(fd);
-		} while (++count & 1023);
-		clock_gettime(CLOCK_MONOTONIC, &end);
-	} while (elapsed(&start, &end) < timeout);
+	igt_fork(child, ncpus) {
+		struct timespec start, end;
+		unsigned count = 0;
 
-	gem_sync(core, batch);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	igt_info("File creation + execution: %.3f us\n",
-		 elapsed(&start, &end) / count *1e6);
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		do {
+			do {
+				int fd = drm_open_driver(DRIVER_INTEL);
+				obj.handle = gem_open(fd, name);
+				execbuf.flags &= ~ENGINE_FLAGS;
+				execbuf.flags |= ppgtt_engines[count % ppgtt_nengine];
+				gem_execbuf(fd, &execbuf);
+				close(fd);
+			} while (++count & 1023);
+			clock_gettime(CLOCK_MONOTONIC, &end);
+		} while (elapsed(&start, &end) < timeout);
+
+		gem_sync(core, batch);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		igt_info("[%d] File creation + execution: %.3f us\n",
+			 child, elapsed(&start, &end) / count *1e6);
+	}
+	igt_waitchildren();
 
 	gem_close(core, batch);
 }
 
-static void active(int fd, unsigned engine, int timeout)
+static void active(int fd, unsigned engine, int timeout, const int ncpus)
 {
 	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
-	struct timespec start, end;
-	unsigned count = 0;
 
 	gem_require_ring(fd, engine);
 
@@ -111,28 +113,35 @@ static void active(int fd, unsigned engine, int timeout)
 	execbuf.buffer_count = 1;
 	execbuf.flags = engine;
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	do {
-		do {
-			execbuf.rsvd1 = gem_context_create(fd);
-			gem_execbuf(fd, &execbuf);
-			gem_context_destroy(fd, execbuf.rsvd1);
-		} while (++count & 1023);
-		clock_gettime(CLOCK_MONOTONIC, &end);
-	} while (elapsed(&start, &end) < timeout);
+	igt_fork(child, ncpus) {
+		struct timespec start, end;
+		unsigned count = 0;
 
-	gem_sync(fd, obj.handle);
-	clock_gettime(CLOCK_MONOTONIC, &end);
-	igt_info("Context creation + execution: %.3f us\n",
-		 elapsed(&start, &end) / count *1e6);
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		do {
+			do {
+				execbuf.rsvd1 = gem_context_create(fd);
+				gem_execbuf(fd, &execbuf);
+				gem_context_destroy(fd, execbuf.rsvd1);
+			} while (++count & 1023);
+			clock_gettime(CLOCK_MONOTONIC, &end);
+		} while (elapsed(&start, &end) < timeout);
+
+		gem_sync(fd, obj.handle);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		igt_info("[%d] Context creation + execution: %.3f us\n",
+			 child, elapsed(&start, &end) / count *1e6);
+	}
+	igt_waitchildren();
 
 	gem_close(fd, obj.handle);
 }
 
 igt_main
 {
+	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	struct drm_i915_gem_context_create create;
-	int fd;
+	int fd = -1;
 
 	igt_fixture {
 		fd = drm_open_driver(DRIVER_INTEL);
@@ -171,13 +180,18 @@ igt_main
 		igt_assert_eq(__gem_context_create(fd, &create), -EINVAL);
 	}
 
-	igt_subtest("files")
-		files(fd, 20);
+	igt_subtest("basic-files")
+		files(fd, 20, 1);
+	igt_subtest("forked-files")
+		files(fd, 20, ncpus);
 
 	for (const struct intel_execution_engine *e = intel_execution_engines;
-	     e->name; e++)
+	     e->name; e++) {
 		igt_subtest_f("active-%s", e->name)
-			active(fd, e->exec_id | e->flags, 20);
+			active(fd, e->exec_id | e->flags, 20, 1);
+		igt_subtest_f("forked-active-%s", e->name)
+			active(fd, e->exec_id | e->flags, 20, ncpus);
+	}
 
 	igt_stop_hang_detector();
 

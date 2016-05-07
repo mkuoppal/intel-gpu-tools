@@ -67,17 +67,15 @@ static bool ignore_engine(int fd, unsigned engine)
 
 #define LEAK 0x1
 
-static void all(int fd, unsigned flags, int timeout)
+static void all(int fd, unsigned flags, int timeout, int ncpus)
 {
 	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
-	struct timespec start, now;
 	unsigned engines[16];
 	unsigned nengine;
 	unsigned engine;
-	unsigned long count;
-	double time;
+	int child;
 
 	nengine = 0;
 	for_each_engine(fd, engine) {
@@ -104,35 +102,51 @@ static void all(int fd, unsigned flags, int timeout)
 	gem_sync(fd, obj.handle);
 	gem_close(fd, obj.handle);
 
-	count = 0;
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	do {
-		for (int loop = 0; loop < 1024; loop++) {
-			for (int n = 0; n < nengine; n++) {
-				obj.handle =  gem_create(fd, 4096);
-				gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
-				execbuf.flags &= ~ENGINE_FLAGS;
-				execbuf.flags |= engines[n];
-				gem_execbuf(fd, &execbuf);
-				if (flags & LEAK)
-					gem_madvise(fd, obj.handle, I915_MADV_DONTNEED);
-				else
-					gem_close(fd, obj.handle);
-			}
-		}
-		count += nengine * 1024;
-		clock_gettime(CLOCK_MONOTONIC, &now);
-	} while (elapsed(&start, &now) < timeout); /* Hang detection ~120s */
-	gem_quiescent_gpu(fd);
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	igt_fork(child, ncpus) {
+		struct timespec start, now;
+		unsigned long count;
+		double time;
 
-	time = elapsed(&start, &now) / count;
-	igt_info("All (%d engines): %'lu cycles, average %.3fus per cycle\n",
-		 nengine, count, 1e6*time);
+		count = 0;
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		do {
+			for (int loop = 0; loop < 1024; loop++) {
+				for (int n = 0; n < nengine; n++) {
+					obj.handle =  gem_create(fd, 4096);
+					gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+					execbuf.flags &= ~ENGINE_FLAGS;
+					execbuf.flags |= engines[n];
+					gem_execbuf(fd, &execbuf);
+					if (flags & LEAK)
+						gem_madvise(fd, obj.handle, I915_MADV_DONTNEED);
+					else
+						gem_close(fd, obj.handle);
+				}
+			}
+			count += nengine * 1024;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+		} while (elapsed(&start, &now) < timeout); /* Hang detection ~120s */
+		obj.handle =  gem_create(fd, 4096);
+		gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+		for (int n = 0; n < nengine; n++) {
+			execbuf.flags &= ~ENGINE_FLAGS;
+			execbuf.flags |= engines[n];
+			gem_execbuf(fd, &execbuf);
+		}
+		gem_sync(fd, obj.handle);
+		gem_close(fd, obj.handle);
+		clock_gettime(CLOCK_MONOTONIC, &now);
+
+		time = elapsed(&start, &now) / count;
+		igt_info("[%d] All (%d engines): %'lu cycles, average %.3fus per cycle\n",
+			 child, nengine, count, 1e6*time);
+	}
+	igt_waitchildren();
 }
 
 igt_main
 {
+	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	int device = -1;
 
 	igt_fixture
@@ -141,10 +155,12 @@ igt_main
 	igt_fork_hang_detector(device);
 
 	igt_subtest("basic")
-		all(device, 0, 20);
+		all(device, 0, 20, 1);
+	igt_subtest("forked")
+		all(device, 0, 20, ncpus);
 
 	igt_subtest("madvise")
-		all(device, LEAK, 20);
+		all(device, LEAK, 20, 1);
 
 	igt_stop_hang_detector();
 

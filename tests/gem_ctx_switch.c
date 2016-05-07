@@ -66,14 +66,14 @@ static double elapsed(const struct timespec *start, const struct timespec *end)
 
 static void single(int fd, uint32_t handle,
 		   const struct intel_execution_engine *e,
-		   unsigned flags)
+		   unsigned flags,
+		   const int ncpus)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
 	struct drm_i915_gem_relocation_entry reloc;
-	struct timespec start, now;
 	uint32_t contexts[64];
-	unsigned int count = 0;
+	int child;
 	int n;
 
 	gem_require_ring(fd, e->exec_id | e->flags);
@@ -111,24 +111,30 @@ static void single(int fd, uint32_t handle,
 	}
 	gem_sync(fd, handle);
 
-	clock_gettime(CLOCK_MONOTONIC, &start);
-	do {
-		igt_interruptible(flags & INTERRUPTIBLE) {
-			for (int loop = 0; loop < 1024; loop++) {
-				execbuf.rsvd1 = contexts[loop % 64];
-				reloc.presumed_offset = 0;
-				gem_execbuf(fd, &execbuf);
-			}
-			count += 1024;
-		}
-		clock_gettime(CLOCK_MONOTONIC, &now);
-	} while (elapsed(&start, &now) < 20.);
-	gem_sync(fd, handle);
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	igt_fork(child, ncpus) {
+		struct timespec start, now;
+		unsigned int count = 0;
 
-	igt_info("%s: %'u cycles: %.3fus%s\n",
-		 e->name, count, elapsed(&start, &now)*1e6 / count,
-		 flags & INTERRUPTIBLE ? " (interruptible)" : "");
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		do {
+			igt_interruptible(flags & INTERRUPTIBLE) {
+				for (int loop = 0; loop < 1024; loop++) {
+					execbuf.rsvd1 = contexts[loop % 64];
+					reloc.presumed_offset = 0;
+					gem_execbuf(fd, &execbuf);
+				}
+				count += 1024;
+			}
+			clock_gettime(CLOCK_MONOTONIC, &now);
+		} while (elapsed(&start, &now) < 20.);
+		gem_sync(fd, handle);
+		clock_gettime(CLOCK_MONOTONIC, &now);
+
+		igt_info("[%d] %s: %'u cycles: %.3fus%s\n",
+			 child, e->name, count, elapsed(&start, &now)*1e6 / count,
+			 flags & INTERRUPTIBLE ? " (interruptible)" : "");
+	}
+	igt_waitchildren();
 
 	for (n = 0; n < 64; n++)
 		gem_context_destroy(fd, contexts[n]);
@@ -136,6 +142,7 @@ static void single(int fd, uint32_t handle,
 
 igt_main
 {
+	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	const struct intel_execution_engine *e;
 	uint32_t handle = 0;
 	int fd = -1;
@@ -152,9 +159,13 @@ igt_main
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%s%s", e->exec_id == 0 ? "basic-" : "", e->name)
-			single(fd, handle, e, 0);
+			single(fd, handle, e, 0, 1);
 		igt_subtest_f("%s-interruptible", e->name)
-			single(fd, handle, e, INTERRUPTIBLE);
+			single(fd, handle, e, INTERRUPTIBLE, 1);
+		igt_subtest_f("forked-%s", e->name)
+			single(fd, handle, e, 0, ncpus);
+		igt_subtest_f("forked-%s-interruptible", e->name)
+			single(fd, handle, e, INTERRUPTIBLE, ncpus);
 	}
 
 	igt_stop_hang_detector();
