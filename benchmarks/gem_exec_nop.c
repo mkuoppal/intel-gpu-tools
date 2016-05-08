@@ -68,21 +68,24 @@ static uint32_t batch(int fd)
 	return handle;
 }
 
-static int loop(unsigned ring, int reps, unsigned flags)
+static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 gem_exec;
+	struct drm_i915_gem_exec_object2 obj;
 	unsigned engines[16];
 	unsigned nengine;
+	double *shared;
 	int fd;
+
+	shared = mmap(0, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
 	fd = drm_open_driver(DRIVER_INTEL);
 
-	memset(&gem_exec, 0, sizeof(gem_exec));
-	gem_exec.handle = batch(fd);
+	memset(&obj, 0, sizeof(obj));
+	obj.handle = batch(fd);
 
 	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)&gem_exec;
+	execbuf.buffers_ptr = (uintptr_t)&obj;
 	execbuf.buffer_count = 1;
 	execbuf.flags |= LOCAL_I915_EXEC_HANDLE_LUT;
 	execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
@@ -103,31 +106,48 @@ static int loop(unsigned ring, int reps, unsigned flags)
 	} else
 		engines[nengine++] = ring;
 
-
 	while (reps--) {
-		struct timespec start, end;
-		unsigned count = 0;
+		memset(shared, 0, 4096);
 
-		gem_set_domain(fd, gem_exec.handle, I915_GEM_DOMAIN_GTT, 0);
+		gem_set_domain(fd, obj.handle, I915_GEM_DOMAIN_GTT, 0);
 		sleep(1); /* wait for the hw to go back to sleep */
 
-		clock_gettime(CLOCK_MONOTONIC, &start);
-		do {
-			for (int inner = 0; inner < 1024; inner++) {
-				execbuf.flags &= ~ENGINE_FLAGS;
-				execbuf.flags |= engines[count++ % nengine];
-				gem_execbuf(fd, &execbuf);
-				if (flags & SYNC)
-					gem_sync(fd, gem_exec.handle);
-			}
+		igt_fork(child, ncpus) {
+			struct timespec start, end;
+			unsigned count = 0;
 
+			obj.handle = batch(fd);
+
+			clock_gettime(CLOCK_MONOTONIC, &start);
+			do {
+				for (int inner = 0; inner < 1024; inner++) {
+					execbuf.flags &= ~ENGINE_FLAGS;
+					execbuf.flags |= engines[count++ % nengine];
+					gem_execbuf(fd, &execbuf);
+					if (flags & SYNC)
+						gem_sync(fd, obj.handle);
+				}
+
+				clock_gettime(CLOCK_MONOTONIC, &end);
+			} while (elapsed(&start, &end) < 2.);
+
+			gem_sync(fd, obj.handle);
 			clock_gettime(CLOCK_MONOTONIC, &end);
-		} while (elapsed(&start, &end) < 2.);
+			shared[child] = 1e6*elapsed(&start, &end) / count;
 
-		gem_sync(fd, gem_exec.handle);
-		clock_gettime(CLOCK_MONOTONIC, &end);
+			gem_close(fd, obj.handle);
+		}
+		igt_waitchildren();
 
-		printf("%7.3f\n", 1e6*elapsed(&start, &end)/count);
+		for (int child = 0; child < ncpus; child++)
+			shared[ncpus] += shared[child];
+		printf("%7.3f\n", shared[ncpus] / ncpus);
+
+		for (int n = 0; n < nengine; n++) {
+			execbuf.flags &= ~ENGINE_FLAGS;
+			execbuf.flags |= engines[n];
+			gem_execbuf(fd, &execbuf);
+		}
 	}
 	return 0;
 }
@@ -137,9 +157,10 @@ int main(int argc, char **argv)
 	unsigned ring = I915_EXEC_RENDER;
 	unsigned flags = 0;
 	int reps = 1;
+	int ncpus = 1;
 	int c;
 
-	while ((c = getopt (argc, argv, "e:r:s")) != -1) {
+	while ((c = getopt (argc, argv, "e:r:sf")) != -1) {
 		switch (c) {
 		case 'e':
 			if (strcmp(optarg, "rcs") == 0)
@@ -162,6 +183,10 @@ int main(int argc, char **argv)
 				reps = 1;
 			break;
 
+		case 'f':
+			ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+			break;
+
 		case 's':
 			flags |= SYNC;
 			break;
@@ -171,5 +196,5 @@ int main(int argc, char **argv)
 		}
 	}
 
-	return loop(ring, reps, flags);
+	return loop(ring, reps, ncpus, flags);
 }

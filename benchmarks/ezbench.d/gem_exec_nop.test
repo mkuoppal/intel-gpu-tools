@@ -6,6 +6,10 @@ for ring in rcs bcs vcs vecs all; do
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop -s -e $ring -r \$1 ; }"
 
+    name="gem:exec:nop:$ring:forked"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop -f -s -e $ring -r \$1 ; }"
+
     name="gem:exec:nop:$ring:continuous"
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop -e $ring -r \$1 ; }"
