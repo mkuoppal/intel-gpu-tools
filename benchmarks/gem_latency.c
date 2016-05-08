@@ -55,14 +55,9 @@ static volatile uint32_t *timestamp_reg;
 #define REG(x) (volatile uint32_t *)((volatile char *)igt_global_mmio + x)
 #define REG_OFFSET(x) ((volatile char *)(x) - (volatile char *)igt_global_mmio)
 
-static uint32_t read_timestamp_unlocked(void)
-{
-	return *timestamp_reg;
-}
-static uint32_t (*read_timestamp)(void) = read_timestamp_unlocked;
-
-#ifdef __USE_XOPEN2K
+#if defined(__USE_XOPEN2K) && defined(gen7_safe_mmio)
 static pthread_spinlock_t timestamp_lock;
+
 static uint32_t read_timestamp_locked(void)
 {
 	uint32_t t;
@@ -81,10 +76,23 @@ static int setup_timestamp_locked(void)
 	read_timestamp = read_timestamp_locked;
 	return 1;
 }
+
+static uint32_t read_timestamp_unlocked(void)
+{
+	return *timestamp_reg;
+}
+
+static uint32_t (*read_timestamp)(void) = read_timestamp_unlocked;
+
 #else
 static int setup_timestamp_locked(void)
 {
-	return 0;
+	return 1;
+}
+
+inline static uint32_t read_timestamp(void)
+{
+	return *timestamp_reg;
 }
 #endif
 
