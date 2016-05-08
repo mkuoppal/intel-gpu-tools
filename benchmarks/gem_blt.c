@@ -180,7 +180,7 @@ static int gem_linear_blt(int fd,
 
 #define SYNC 0x1
 
-static int run(int object, int batch, int time, int reps, unsigned flags)
+static int run(int object, int batch, int time, int reps, int ncpus, unsigned flags)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 exec[3];
@@ -188,6 +188,9 @@ static int run(int object, int batch, int time, int reps, unsigned flags)
 	uint32_t *buf, handle, src, dst;
 	int fd, len, gen, size, nreloc;
 	int ring, count;
+	double *shared;
+
+	shared = mmap(0, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 
 	size = ALIGN(batch * 64, 4096);
 	reloc = malloc(sizeof(*reloc)*size/32*2);
@@ -258,31 +261,40 @@ static int run(int object, int batch, int time, int reps, unsigned flags)
 		execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
 
 	/* Guess how many loops we need for 0.1s */
-	count = baseline((uint64_t)object * batch, 100);
+	count = baseline((uint64_t)object * batch, 100) / ncpus;
 	if (flags & SYNC) {
 		time *= count / 2;
 		count = 1;
 	}
 
 	while (reps--) {
-		double min = HUGE_VAL;
+		memset(shared, 0, 4096);
 
-		for (int s = 0; s <= time / 100; s++) {
-			struct timespec start, end;
-			double t;
+		igt_fork(child, ncpus) {
+			double min = HUGE_VAL;
 
-			clock_gettime(CLOCK_MONOTONIC, &start);
-			for (int loop = 0; loop < count; loop++)
-				gem_execbuf(fd, &execbuf);
-			gem_sync(fd, handle);
-			clock_gettime(CLOCK_MONOTONIC, &end);
+			for (int s = 0; s <= time / 100; s++) {
+				struct timespec start, end;
+				double t;
 
-			t = elapsed(&start, &end);
-			if (t < min)
-				min = t;
+				clock_gettime(CLOCK_MONOTONIC, &start);
+				for (int loop = 0; loop < count; loop++)
+					gem_execbuf(fd, &execbuf);
+				gem_sync(fd, handle);
+				clock_gettime(CLOCK_MONOTONIC, &end);
+
+				t = elapsed(&start, &end);
+				if (t < min)
+					min = t;
+			}
+
+			shared[child] = object/(1024*1024.)*batch*count/min;
 		}
+		igt_waitchildren();
 
-		printf("%7.3f\n", object/(1024*1024.)*batch*count/min);
+		for (int child = 0; child < ncpus; child++)
+			shared[ncpus] += shared[child];
+		printf("%7.3f\n", shared[ncpus] / ncpus);
 	}
 
 	close(fd);
@@ -294,11 +306,12 @@ int main(int argc, char **argv)
 	int size = 1024*1024;
 	int reps = 13;
 	int time = 2000;
+	int ncpus = 1;
 	int batch = 1;
 	unsigned flags = 0;
 	int c;
 
-	while ((c = getopt (argc, argv, "Ss:b:r:t:")) != -1) {
+	while ((c = getopt (argc, argv, "Ss:b:r:t:f")) != -1) {
 		switch (c) {
 		case 's':
 			size = atoi(optarg);
@@ -328,10 +341,14 @@ int main(int argc, char **argv)
 				batch = 1;
 			break;
 
+		case 'f':
+			ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+			break;
+
 		default:
 			break;
 		}
 	}
 
-	return run(size, batch, time, reps, flags);
+	return run(size, batch, time, reps, ncpus, flags);
 }
