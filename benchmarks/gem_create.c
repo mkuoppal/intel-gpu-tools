@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 			for (int child = 0; child < ncpus; child++)
 				shared[ncpus] += shared[child];
 
-			printf("%7.3f\n", shared[ncpus] / ncpus);
+			printf("%7.3f\n", shared[ncpus]);
 		}
 	}
 
