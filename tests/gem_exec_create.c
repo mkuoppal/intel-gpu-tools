@@ -75,7 +75,6 @@ static void all(int fd, unsigned flags, int timeout, int ncpus)
 	unsigned engines[16];
 	unsigned nengine;
 	unsigned engine;
-	int child;
 
 	nengine = 0;
 	for_each_engine(fd, engine) {

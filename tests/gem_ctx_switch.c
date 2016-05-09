@@ -73,7 +73,6 @@ static void single(int fd, uint32_t handle,
 	struct drm_i915_gem_exec_object2 obj;
 	struct drm_i915_gem_relocation_entry reloc;
 	uint32_t contexts[64];
-	int child;
 	int n;
 
 	gem_require_ring(fd, e->exec_id | e->flags);
