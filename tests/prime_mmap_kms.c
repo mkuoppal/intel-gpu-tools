@@ -206,7 +206,7 @@ static void run_test(gpu_process_t *gpu)
 				continue;
 
 			prime_fd = prime_handle_to_fd_for_mmap(gpu->drm_fd,
-			                                       gpu->fb.gem_handle);
+							       gpu->fb.gem_handle);
 			igt_skip_on(prime_fd == -1 && errno == EINVAL);
 
 			/* Note that it only shares the dma-buf fd and some
