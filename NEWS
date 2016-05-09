@@ -1,6 +1,20 @@
 Release 1.15 (XXXX-XX-XX)
 -------------------------
 
+- prime_mmap_kms: show case dma-buf new API and processes restrictions
+(Tiago Vignatti)
+
+- compute exitcode first: In the case of running multiple subtests which all
+happen to be skipped, igt_exitcode is 0, but the final exit code will be 77.
+(Chris Wilson)
+
+- Shorten basic tests (Tvrtko Ursulin)
+
+- Half the timeout for suspend to RAM and a third for suspend to disk
+(Marius Vlad)
+
+- lib: Pass format instead of bpp to create_bo_for_fb (Ville Syrjälä)
+
 - Removed from tests/test-list.txt, tests/gem_concurrent_all/blt and added 
 tests/test-list-full.txt that contains all the tests. This will speed
 up considerably piglit when starting tests. (Gabriel Feceoru)
