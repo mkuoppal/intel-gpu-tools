@@ -229,11 +229,20 @@ AC_ARG_ENABLE(debug,
 			     [Build tests without debug symbols]),
 	      [], [enable_debug=yes])
 
+AC_ARG_ENABLE(werror,
+	      AS_HELP_STRING([--enable-werror],
+			     [Fail on warnings]),
+	      [], [enable_werror=no])
+
 if test "x$enable_debug" = xyes; then
 	AS_COMPILER_FLAG([-g3], [DEBUG_CFLAGS="-g3"], [DEBUG_CFLAGS="-g"])
 	AS_COMPILER_FLAG([-Og], [DEBUG_CFLAGS+=" -Og -Wno-maybe-uninitialized"], # disable maybe-uninitialized due to false positives
 			 [DEBUG_CFLAGS+=" -O0"])
 	AC_SUBST([DEBUG_CFLAGS])
+fi
+
+if test "x$enable_werror" = xyes; then
+	AS_COMPILER_FLAG([-Werror], [WERROR_CFLAGS="-Werror"])
 fi
 
 # prevent relinking the world on every commit for developers
@@ -313,6 +322,7 @@ echo "       Overlay            : X: ${enable_overlay_xlib}, Xv: ${enable_overla
 echo "       x86-specific tools : ${build_x86}"
 echo ""
 echo " • API-Documentation      : ${enable_gtk_doc}"
+echo " • Fail on warnings:      : ${enable_werror}"
 echo ""
 
 # vim: set ft=config ts=8 sw=8 tw=0 noet :

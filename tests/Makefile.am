@@ -59,7 +59,7 @@ AM_CFLAGS = $(DRM_CFLAGS) $(CWARNFLAGS) $(DEBUG_CFLAGS)\
 	-include "$(srcdir)/../lib/check-ndebug.h" \
 	-DIGT_SRCDIR=\""$(abs_srcdir)"\" \
 	-DIGT_DATADIR=\""$(pkgdatadir)"\" \
-	$(LIBUNWIND_CFLAGS) \
+	$(LIBUNWIND_CFLAGS) $(WERROR_CFLAGS) \
 	$(NULL)
 
 LDADD = ../lib/libintel_tools.la $(GLIB_LIBS)
