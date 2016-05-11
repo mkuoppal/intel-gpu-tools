@@ -941,17 +941,17 @@ struct type_name {
 	const char *name;
 };
 
-#define type_name_fn(res) \
-const char * kmstest_##res##_str(int type) {		\
-	unsigned int i;					\
-	for (i = 0; i < ARRAY_SIZE(res##_names); i++) { \
-		if (res##_names[i].type == type)	\
-			return res##_names[i].name;	\
-	}						\
-	return "(invalid)";				\
+static const char *find_type_name(const struct type_name *names, int type)
+{
+	for (; names->name; names++) {
+		if (names->type == type)
+			return names->name;
+	}
+
+	return "(invalid)";
 }
 
-struct type_name encoder_type_names[] = {
+static const struct type_name encoder_type_names[] = {
 	{ DRM_MODE_ENCODER_NONE, "none" },
 	{ DRM_MODE_ENCODER_DAC, "DAC" },
 	{ DRM_MODE_ENCODER_TMDS, "TMDS" },
@@ -960,19 +960,27 @@ struct type_name encoder_type_names[] = {
 	{ DRM_MODE_ENCODER_VIRTUAL, "Virtual" },
 	{ DRM_MODE_ENCODER_DSI, "DSI" },
 	{ DRM_MODE_ENCODER_DPMST, "DP MST" },
+	{}
 };
 
-type_name_fn(encoder_type)
+const char *kmstest_encoder_type_str(int type)
+{
+	return find_type_name(encoder_type_names, type);
+}
 
-struct type_name connector_status_names[] = {
+static const struct type_name connector_status_names[] = {
 	{ DRM_MODE_CONNECTED, "connected" },
 	{ DRM_MODE_DISCONNECTED, "disconnected" },
 	{ DRM_MODE_UNKNOWNCONNECTION, "unknown" },
+	{}
 };
 
-type_name_fn(connector_status)
+const char *kmstest_connector_status_str(int status)
+{
+	return find_type_name(connector_status_names, status);
+}
 
-struct type_name connector_type_names[] = {
+static const struct type_name connector_type_names[] = {
 	{ DRM_MODE_CONNECTOR_Unknown, "unknown" },
 	{ DRM_MODE_CONNECTOR_VGA, "VGA" },
 	{ DRM_MODE_CONNECTOR_DVII, "DVI-I" },
@@ -990,10 +998,13 @@ struct type_name connector_type_names[] = {
 	{ DRM_MODE_CONNECTOR_eDP, "eDP" },
 	{ DRM_MODE_CONNECTOR_VIRTUAL, "Virtual" },
 	{ DRM_MODE_CONNECTOR_DSI, "DSI" },
+	{}
 };
 
-type_name_fn(connector_type)
-
+const char *kmstest_connector_type_str(int type)
+{
+	return find_type_name(connector_type_names, type);
+}
 
 /**
  * igt_lock_mem:
