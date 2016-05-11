@@ -492,7 +492,7 @@ igt_main
 	igt_subtest("noreloc")
 		test_noreloc(fd, NOSLEEP);
 	igt_subtest("noreloc-interruptible")
-		igt_interruptible(true) test_noreloc(fd, NOSLEEP);
+		igt_while_interruptible(true) test_noreloc(fd, NOSLEEP);
 	igt_subtest("noreloc-S3")
 		test_noreloc(fd, SUSPEND);
 	igt_subtest("noreloc-S4")
@@ -500,9 +500,9 @@ igt_main
 
 	for (int signal = 0; signal <= 1; signal++) {
 		igt_subtest_f("evict-active%s", signal ? "-interruptible" : "")
-			igt_interruptible(signal) test_evict_active(fd);
+			igt_while_interruptible(signal) test_evict_active(fd);
 		igt_subtest_f("evict-snoop%s", signal ? "-interruptible" : "")
-			igt_interruptible(signal) test_evict_snoop(fd);
+			igt_while_interruptible(signal) test_evict_snoop(fd);
 	}
 	igt_subtest("evict-hang")
 		test_evict_hang(fd);

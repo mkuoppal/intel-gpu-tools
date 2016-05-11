@@ -35,6 +35,15 @@
 #include <intel_bufmgr.h>
 #include <i915_drm.h>
 
+/**
+ * igt_ioctl:
+ * @fd: file descriptor
+ * @request: IOCTL request number
+ * @arg: argument pointer
+ *
+ * This is a wrapper around drmIoctl(), which can be augmented with special code
+ * blocks like #igt_while_interruptible.
+ */
 extern int (*igt_ioctl)(int fd, unsigned long request, void *arg);
 
 /* libdrm interfacing */

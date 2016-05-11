@@ -84,7 +84,7 @@
 #define gettid() syscall(__NR_gettid)
 #define sigev_notify_thread_id _sigev_un._tid
 
-static struct __igt_sigiter {
+static struct __igt_sigiter_global {
 	pid_t tid;
 	timer_t timer;
 	struct timespec offset;
@@ -159,7 +159,7 @@ sig_ioctl(int fd, unsigned long request, void *arg)
 	return ret ? -1 : 0;
 }
 
-static bool igt_sigiter_start(struct igt_sigiter *iter, bool enable)
+static bool igt_sigiter_start(struct __igt_sigiter *iter, bool enable)
 {
 	/* Note that until we can automatically clean up on failed/skipped
 	 * tests, we cannot assume the state of the igt_ioctl indirection.
@@ -218,7 +218,7 @@ static bool igt_sigiter_start(struct igt_sigiter *iter, bool enable)
 	return true;
 }
 
-static bool igt_sigiter_stop(struct igt_sigiter *iter, bool enable)
+static bool igt_sigiter_stop(struct __igt_sigiter *iter, bool enable)
 {
 	if (enable) {
 		struct sigaction act;
@@ -240,32 +240,7 @@ static bool igt_sigiter_stop(struct igt_sigiter *iter, bool enable)
 	return false;
 }
 
-/**
- * igt_sigiter_continue:
- * @iter: the control struct
- * @enable: a boolean as to whether or not we want to enable interruptions
- *
- * Provides control flow such that all drmIoctl() (strictly igt_ioctl())
- * within the loop are forcibly injected with signals (SIGRTMIN).
- *
- * This is useful to exercise ioctl error paths, at least where those can be
- * exercises by interrupting blocking waits, like stalling for the gpu.
- *
- * igt_sigiter_continue() returns false when it has detected that it
- * cannot inject any more signals in the ioctls from previous runs.
- *
- * Typical usage is
- * 	struct igt_sigiter iter = {};
- * 	while (igt_sigiter_continue(&iter, test_flags & TEST_INTERRUPTIBLE))
- * 		do_test();
- *
- * This is condensed into the igt_interruptible() macro.
- *
- * Note that since this overloads the igt_ioctl(), this method is not useful
- * for widespread signal injection, for example providing coverage of
- * pagefaults. To interrupt everything, see igt_fork_signal_helper().
- */
-bool igt_sigiter_continue(struct igt_sigiter *iter, bool enable)
+bool __igt_sigiter_continue(struct __igt_sigiter *iter, bool enable)
 {
 	if (iter->pass++ == 0)
 		return igt_sigiter_start(iter, enable);
@@ -329,6 +304,10 @@ static void sig_handler(int i)
  *
  * In tests with subtests this function can be called outside of failure
  * catching code blocks like #igt_fixture or #igt_subtest.
+ *
+ * Note that this just spews signals at the current process unconditionally and
+ * hence incurs quite a bit of overhead. For a more focused approach, with less
+ * overhead, look at the #igt_while_interruptible code block macro.
  */
 void igt_fork_signal_helper(void)
 {

@@ -116,7 +116,7 @@ static void single(int fd, uint32_t handle,
 
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		do {
-			igt_interruptible(flags & INTERRUPTIBLE) {
+			igt_while_interruptible(flags & INTERRUPTIBLE) {
 				for (int loop = 0; loop < 1024; loop++) {
 					execbuf.rsvd1 = contexts[loop % 64];
 					reloc.presumed_offset = 0;

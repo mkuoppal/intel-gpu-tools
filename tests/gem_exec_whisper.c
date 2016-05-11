@@ -225,7 +225,7 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 		gem_write(fd, batches[n].handle, 0, batch, sizeof(batch));
 	}
 
-	igt_interruptible(flags & INTERRUPTIBLE) {
+	igt_while_interruptible(flags & INTERRUPTIBLE) {
 		for (pass = 0; pass < 1024; pass++) {
 			uint64_t offset;
 

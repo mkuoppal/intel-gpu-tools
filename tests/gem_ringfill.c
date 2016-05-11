@@ -75,7 +75,7 @@ static void fill_ring(int fd,
 	 * doing this, we aren't likely to with this test.
 	 */
 	igt_debug("Executing execbuf %d times\n", 128*1024/(8*4));
-	igt_interruptible(flags & INTERRUPTIBLE) {
+	igt_while_interruptible(flags & INTERRUPTIBLE) {
 		for (int i = 0; i < 128*1024 / (8 * 4); i++)
 			gem_execbuf(fd, execbuf);
 	}

@@ -1294,7 +1294,7 @@ static void run_interruptible(struct buffers *buffers,
 			      do_hang do_hang_func)
 {
 	pass = 0;
-	igt_interruptible(true)
+	igt_while_interruptible(true)
 		do_test_func(buffers, do_copy_func, do_hang_func);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
@@ -1340,7 +1340,7 @@ static void __run_forked(struct buffers *buffers,
 		buffers_reset(buffers, true);
 		buffers_create(buffers);
 
-		igt_interruptible(interrupt) {
+		igt_while_interruptible(interrupt) {
 			for (pass = 0; pass < loops; pass++)
 				do_test_func(buffers,
 					     do_copy_func,

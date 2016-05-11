@@ -216,7 +216,7 @@ overwrite:
 
 			if (flags & SET_DOMAIN) {
 				unsigned domain = flags & WC ? I915_GEM_DOMAIN_GTT : I915_GEM_DOMAIN_CPU;
-				igt_interruptible(flags & INTERRUPTIBLE)
+				igt_while_interruptible(flags & INTERRUPTIBLE)
 					gem_set_domain(fd, obj[0].handle,
 						       domain, (flags & WRITE) ? domain : 0);
 
@@ -230,7 +230,7 @@ overwrite:
 			} else if (flags & KERNEL) {
 				uint32_t val;
 
-				igt_interruptible(flags & INTERRUPTIBLE)
+				igt_while_interruptible(flags & INTERRUPTIBLE)
 					gem_read(fd, obj[0].handle,
 						 i*sizeof(uint32_t),
 						 &val, sizeof(val));
@@ -242,13 +242,13 @@ overwrite:
 
 				if (flags & WRITE) {
 					val = 0xdeadbeef;
-					igt_interruptible(flags & INTERRUPTIBLE)
+					igt_while_interruptible(flags & INTERRUPTIBLE)
 						gem_write(fd, obj[0].handle,
 							  i*sizeof(uint32_t),
 							  &val, sizeof(val));
 				}
 			} else {
-				igt_interruptible(flags & INTERRUPTIBLE)
+				igt_while_interruptible(flags & INTERRUPTIBLE)
 					gem_sync(fd, obj[0].handle);
 
 				if (!(flags & (BEFORE | COHERENT)) &&

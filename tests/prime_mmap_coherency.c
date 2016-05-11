@@ -277,7 +277,7 @@ static void test_ioctl_errors(void)
 		}
 
 		igt_fork(child, num_children)
-			igt_interruptible(true) blit_and_cmp();
+			igt_while_interruptible(true) blit_and_cmp();
 		igt_waitchildren();
 	}
 }

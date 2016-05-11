@@ -43,13 +43,34 @@ void igt_stop_signal_helper(void);
 void igt_fork_hang_detector(int fd);
 void igt_stop_hang_detector(void);
 
-struct igt_sigiter {
+struct __igt_sigiter {
 	unsigned pass;
 };
 
-bool igt_sigiter_continue(struct igt_sigiter *iter, bool interrupt);
-#define igt_interruptible(E) \
-	for (struct igt_sigiter iter__={}; igt_sigiter_continue(&iter__, (E)); )
+bool __igt_sigiter_continue(struct __igt_sigiter *iter, bool interrupt);
+
+/**
+ * igt_while_interruptible:
+ * @enable: enable igt_ioctl interrupting or not
+ *
+ * Provides control flow such that all drmIoctl() (strictly igt_ioctl())
+ * within the loop are forcibly injected with signals (SIGRTMIN).
+ *
+ * This is useful to exercise ioctl error paths, at least where those can be
+ * exercises by interrupting blocking waits, like stalling for the gpu.
+ *
+ * The code block attached to this macro is run in a loop with doubling the
+ * interrupt timeout on each ioctl for every run, until no ioctl gets
+ * interrupted any more. The starting timeout is taken to be the signal delivery
+ * latency, measured at runtime. This way the any ioctls called from this code
+ * block should be exhaustively tested for all signal interruption paths.
+ *
+ * Note that since this overloads the igt_ioctl(), this method is not useful
+ * for widespread signal injection, for example providing coverage of
+ * pagefaults. To interrupt everything, see igt_fork_signal_helper().
+ */
+#define igt_while_interruptible(enable) \
+	for (struct __igt_sigiter iter__={}; __igt_sigiter_continue(&iter__, (enable)); )
 
 #define igt_timeout(T) \
 	for (struct timespec t__={}; igt_seconds_elapsed(&t__) < (T); )
