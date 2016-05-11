@@ -231,7 +231,7 @@ static void run_test(int nchildren, uint64_t alloc,
 	/* Background load */
 	if (flags & OOM) {
 		igt_fork(child, nchildren) {
-			igt_timeout(timeout) {
+			igt_until_timeout(timeout) {
 				int fd = drm_open_driver(DRIVER_INTEL);
 				for (int pass = 0; pass < nchildren; pass++)
 					leak(fd, alloc);
@@ -243,7 +243,7 @@ static void run_test(int nchildren, uint64_t alloc,
 	if (flags & USERPTR) {
 		igt_require(has_userptr());
 		igt_fork(child, (nchildren + 1)/2) {
-			igt_timeout(timeout) {
+			igt_until_timeout(timeout) {
 				int fd = drm_open_driver(DRIVER_INTEL);
 				for (int pass = 0; pass < nchildren; pass++)
 					userptr(fd, alloc);
@@ -255,7 +255,7 @@ static void run_test(int nchildren, uint64_t alloc,
 
 	/* Exercise major ioctls */
 	igt_fork(child, nchildren) {
-		igt_timeout(timeout) {
+		igt_until_timeout(timeout) {
 			int fd = drm_open_driver(DRIVER_INTEL);
 			for (int pass = 0; pass < nchildren; pass++)
 				func(fd, alloc);

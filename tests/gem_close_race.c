@@ -187,7 +187,7 @@ static void threads(int timeout)
 	fd = open(device, O_RDWR);
 	name.name = gem_flink(fd, gem_create(fd, OBJECT_SIZE));
 
-	igt_timeout(timeout) {
+	igt_until_timeout(timeout) {
 		crashme.fd = open(device, O_RDWR);
 
 		memset(&its, 0, sizeof(its));

@@ -72,8 +72,18 @@ bool __igt_sigiter_continue(struct __igt_sigiter *iter, bool interrupt);
 #define igt_while_interruptible(enable) \
 	for (struct __igt_sigiter iter__={}; __igt_sigiter_continue(&iter__, (enable)); )
 
-#define igt_timeout(T) \
-	for (struct timespec t__={}; igt_seconds_elapsed(&t__) < (T); )
+/**
+ * igt_until_timeout:
+ * @timeout: timeout in seconds
+ *
+ * Convenience macro loop to run the provided code block in a loop until the
+ * timeout has expired. Of course when an individual execution takes too long,
+ * the actual execution time could be a lot longer.
+ *
+ * The code block will be executed at least once.
+ */
+#define igt_until_timeout(timeout) \
+	for (struct timespec t__={}; igt_seconds_elapsed(&t__) < (timeout); )
 
 void igt_exchange_int(void *array, unsigned i, unsigned j);
 void igt_permute_array(void *array, unsigned size,

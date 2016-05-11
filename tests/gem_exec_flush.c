@@ -196,7 +196,7 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 		}
 		munmap(ptr, 64*1024);
 
-		igt_timeout(timeout) {
+		igt_until_timeout(timeout) {
 			bool xor = false;
 			int idx = cycles++ % 1024;
 
@@ -369,7 +369,7 @@ static void batch(int fd, unsigned ring, int nchild, int timeout,
 		reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
 		reloc.write_domain = I915_GEM_DOMAIN_INSTRUCTION;
 
-		igt_timeout(timeout) {
+		igt_until_timeout(timeout) {
 			execbuf.batch_start_offset = 0;
 			reloc.offset = sizeof(uint32_t);
 			if (gen >= 4 && gen < 8)
