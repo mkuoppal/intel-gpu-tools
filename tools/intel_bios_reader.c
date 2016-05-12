@@ -41,8 +41,6 @@
 #include "intel_chipset.h"
 #include "drmtest.h"
 
-static uint32_t devid;
-
 /* no bother to include "edid.h" */
 #define _H_ACTIVE(x) (x[2] + ((x[4] & 0xF0) << 4))
 #define _H_SYNC_OFF(x) (x[8] + ((x[11] & 0xC0) << 2))
@@ -67,6 +65,7 @@ struct context {
 	const struct bdb_header *bdb;
 	int size;
 
+	uint32_t devid;
 	const struct bdb_lvds_lfp_data_ptrs *lvds_lfp_data_ptrs;
 	int panel_type;
 };
@@ -153,12 +152,13 @@ static void dump_general_features(struct context *context,
 	printf("\tExternal VBT: %s\n", YESNO(features->download_ext_vbt));
 	printf("\tEnable SSC: %s\n", YESNO(features->enable_ssc));
 	if (features->enable_ssc) {
-		if (!devid)
+		if (!context->devid)
 			printf("\tSSC frequency: <unknown platform>\n");
-		else if (IS_VALLEYVIEW(devid) || IS_CHERRYVIEW(devid) ||
-			 IS_BROXTON(devid))
+		else if (IS_VALLEYVIEW(context->devid) ||
+			 IS_CHERRYVIEW(context->devid) ||
+			 IS_BROXTON(context->devid))
 			printf("\tSSC frequency: 100 MHz\n");
-		else if (HAS_PCH_SPLIT(devid))
+		else if (HAS_PCH_SPLIT(context->devid))
 			printf("\tSSC frequency: %s\n", features->ssc_freq ?
 			       "100 MHz" : "120 MHz");
 		else
@@ -1412,8 +1412,8 @@ int main(int argc, char **argv)
 			filename = optarg;
 			break;
 		case OPT_DEVID:
-			devid = strtoul(optarg, &endp, 16);
-			if (!devid || *endp) {
+			context.devid = strtoul(optarg, &endp, 16);
+			if (!context.devid || *endp) {
 				fprintf(stderr, "invalid devid '%s'\n", optarg);
 				return EXIT_FAILURE;
 			}
@@ -1517,14 +1517,14 @@ int main(int argc, char **argv)
 	}
 	printf("\n");
 
-	if (!devid) {
+	if (!context.devid) {
 		const char *devid_string = getenv("DEVICE");
 		if (devid_string)
-			devid = strtoul(devid_string, NULL, 16);
+			context.devid = strtoul(devid_string, NULL, 16);
 	}
-	if (!devid)
-		devid = get_device_id(VBIOS, size);
-	if (!devid)
+	if (!context.devid)
+		context.devid = get_device_id(VBIOS, size);
+	if (!context.devid)
 		fprintf(stderr, "Warning: could not find PCI device ID!\n");
 
 	dump_section(&context, BDB_GENERAL_FEATURES);
