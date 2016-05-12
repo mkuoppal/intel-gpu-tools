@@ -62,6 +62,7 @@ struct bdb_block {
 };
 
 struct context {
+	const struct vbt_header *vbt;
 	const struct bdb_header *bdb;
 	int size;
 
@@ -1405,6 +1406,32 @@ static bool dump_section(struct context *context, int section_id)
 	return true;
 }
 
+static void dump_headers(struct context *context)
+{
+	char signature[17];
+	int i;
+
+	printf("VBT vers: %d.%d\n",
+	       context->vbt->version / 100, context->vbt->version % 100);
+
+	strncpy(signature, (char *)context->bdb->signature, 16);
+	signature[16] = 0;
+	printf("BDB sig: %s\n", signature);
+	printf("BDB vers: %d\n", context->bdb->version);
+
+	printf("Available sections: ");
+	for (i = 0; i < 256; i++) {
+		struct bdb_block *block;
+
+		block = find_section(context, i);
+		if (!block)
+			continue;
+		printf("%d ", i);
+		free(block);
+	}
+	printf("\n");
+}
+
 enum opt {
 	OPT_UNKNOWN = '?',
 	OPT_END = -1,
@@ -1441,11 +1468,9 @@ int main(int argc, char **argv)
 	const char *toolname = argv[0];
 	struct stat finfo;
 	int size;
-	struct bdb_header *bdb;
 	struct context context = {
 		.panel_type = -1,
 	};
-	char signature[17];
 	char *endp;
 	int block_number = -1;
 
@@ -1570,34 +1595,17 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	printf("VBT vers: %d.%d\n", vbt->version / 100, vbt->version % 100);
-
 	bdb_off = vbt_off + vbt->bdb_offset;
 	if (bdb_off >= size - sizeof(struct bdb_header)) {
 		printf("Invalid VBT found, BDB points beyond end of data block\n");
 		return 1;
 	}
 
-	bdb = (struct bdb_header *)(VBIOS + bdb_off);
-	strncpy(signature, (char *)bdb->signature, 16);
-	signature[16] = 0;
-	printf("BDB sig: %s\n", signature);
-	printf("BDB vers: %d\n", bdb->version);
-
-	context.bdb = bdb;
+	context.vbt = vbt;
+	context.bdb = (const struct bdb_header *)(VBIOS + bdb_off);
 	context.size = size;
 
-	printf("Available sections: ");
-	for (i = 0; i < 256; i++) {
-		struct bdb_block *block;
-
-		block = find_section(&context, i);
-		if (!block)
-			continue;
-		printf("%d ", i);
-		free(block);
-	}
-	printf("\n");
+	dump_headers(&context);
 
 	if (!context.devid) {
 		const char *devid_string = getenv("DEVICE");
