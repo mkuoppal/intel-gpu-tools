@@ -1408,28 +1408,34 @@ static bool dump_section(struct context *context, int section_id)
 
 static void dump_headers(struct context *context)
 {
-	char signature[17];
-	int i;
+	const struct vbt_header *vbt = context->vbt;
+	const struct bdb_header *bdb = context->bdb;
+	int i, j = 0;
 
-	printf("VBT vers: %d.%d\n",
-	       context->vbt->version / 100, context->vbt->version % 100);
+	printf("VBT signature:\t\"%.*s\"\n",
+	       (int)sizeof(vbt->signature), vbt->signature);
+	printf("VBT version:\t%d.%d\n", vbt->version / 100, vbt->version % 100);
 
-	strncpy(signature, (char *)context->bdb->signature, 16);
-	signature[16] = 0;
-	printf("BDB sig: %s\n", signature);
-	printf("BDB vers: %d\n", context->bdb->version);
+	printf("BDB signature:\t\"%.*s\"\n",
+	       (int)sizeof(bdb->signature), bdb->signature);
+	printf("BDB version:\t%d\n", bdb->version);
 
-	printf("Available sections: ");
+	printf("BDB blocks present:");
 	for (i = 0; i < 256; i++) {
 		struct bdb_block *block;
 
 		block = find_section(context, i);
 		if (!block)
 			continue;
-		printf("%d ", i);
+
+		if (j++ % 16)
+			printf(" %3d", i);
+		else
+			printf("\n\t%3d", i);
+
 		free(block);
 	}
-	printf("\n");
+	printf("\n\n");
 }
 
 enum opt {
@@ -1605,8 +1611,6 @@ int main(int argc, char **argv)
 	context.bdb = (const struct bdb_header *)(VBIOS + bdb_off);
 	context.size = size;
 
-	dump_headers(&context);
-
 	if (!context.devid) {
 		const char *devid_string = getenv("DEVICE");
 		if (devid_string)
@@ -1631,6 +1635,8 @@ int main(int argc, char **argv)
 			return EXIT_FAILURE;
 		}
 	} else {
+		dump_headers(&context);
+
 		/* dump all sections  */
 		for (i = 0; i < 256; i++)
 			dump_section(&context, i);
