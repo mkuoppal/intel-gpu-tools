@@ -101,7 +101,7 @@ static struct bdb_block *find_section(struct context *context, int section_id)
 	block = malloc(sizeof(*block));
 	if (!block) {
 		fprintf(stderr, "out of memory\n");
-		exit(-1);
+		exit(EXIT_FAILURE);
 	}
 
 	/* walk the sections looking for section_id */
@@ -1551,14 +1551,15 @@ int main(int argc, char **argv)
 
 	fd = open(filename, O_RDONLY);
 	if (fd == -1) {
-		printf("Couldn't open \"%s\": %s\n", filename, strerror(errno));
-		return 1;
+		fprintf(stderr, "Couldn't open \"%s\": %s\n",
+			filename, strerror(errno));
+		return EXIT_FAILURE;
 	}
 
 	if (stat(filename, &finfo)) {
-		printf("failed to stat \"%s\": %s\n", filename,
-		       strerror(errno));
-		return 1;
+		fprintf(stderr, "Failed to stat \"%s\": %s\n",
+			filename, strerror(errno));
+		return EXIT_FAILURE;
 	}
 	size = finfo.st_size;
 
@@ -1568,9 +1569,9 @@ int main(int argc, char **argv)
 		VBIOS = malloc (size);
 		while ((ret = read(fd, VBIOS + len, size - len))) {
 			if (ret < 0) {
-				printf("failed to read \"%s\": %s\n", filename,
-				       strerror(errno));
-				return 1;
+				fprintf(stderr, "Failed to read \"%s\": %s\n",
+					filename, strerror(errno));
+				return EXIT_FAILURE;
 			}
 
 			len += ret;
@@ -1582,8 +1583,9 @@ int main(int argc, char **argv)
 	} else {
 		VBIOS = mmap(NULL, size, PROT_READ, MAP_SHARED, fd, 0);
 		if (VBIOS == MAP_FAILED) {
-			printf("failed to map \"%s\": %s\n", filename, strerror(errno));
-			return 1;
+			fprintf(stderr, "Failed to map \"%s\": %s\n",
+				filename, strerror(errno));
+			return EXIT_FAILURE;
 		}
 	}
 
@@ -1597,14 +1599,14 @@ int main(int argc, char **argv)
 	}
 
 	if (!vbt) {
-		printf("VBT signature missing\n");
-		return 1;
+		fprintf(stderr, "VBT signature missing\n");
+		return EXIT_FAILURE;
 	}
 
 	bdb_off = vbt_off + vbt->bdb_offset;
 	if (bdb_off >= size - sizeof(struct bdb_header)) {
-		printf("Invalid VBT found, BDB points beyond end of data block\n");
-		return 1;
+		fprintf(stderr, "Invalid VBT found, BDB points beyond end of data block\n");
+		return EXIT_FAILURE;
 	}
 
 	context.vbt = vbt;
