@@ -1182,13 +1182,13 @@ static void check_final_state(struct test_output *o, struct event_state *es,
 	/* Verify we drop no frames, but only if it's not a TV encoder, since
 	 * those use some funny fake timings behind userspace's back. */
 	if (o->flags & TEST_CHECK_TS && !analog_tv_connector(o)) {
-		int expected;
+		double expected;
 		int count = es->count;
 
 		count *= o->seq_step;
-		expected = elapsed / frame_time(o);
-		igt_assert_f(count >= expected * 99/100 && count <= expected * 101/100,
-			     "dropped frames, expected %d, counted %d, encoder type %d\n",
+		expected = (double)elapsed / frame_time(o);
+		igt_assert_f(fabs((double)count - expected)/expected <= 0.01,
+			     "dropped frames, expected %f, counted %d, encoder type %d\n",
 			     expected, count, o->kencoder[0]->encoder_type);
 	}
 }
