@@ -344,7 +344,7 @@ static void test_ban(const struct intel_execution_engine *e)
 
 	/* The second hang will count as pending and be discarded */
 	active_count--;
-	pending_count += 2; /* inject hang does 2 execs (query, then hang) */
+	pending_count += 1; /* inject hang does 1 real exec + 1 dummy */
 	while (retry--) {
 		inject_hang(fd_bad, 0, e, BAN);
 		active_count++;
