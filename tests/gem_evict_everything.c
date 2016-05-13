@@ -144,10 +144,10 @@ static struct igt_eviction_test_ops fault_ops = {
 	.clear = clear,
 };
 
-static void test_forking_evictions(int fd, int size, int count,
-					unsigned flags)
+static void test_forking_evictions(int fd, uint64_t size, uint64_t count,
+				   unsigned flags)
 {
-	int trash_count;
+	uint64_t trash_count;
 
 	trash_count = intel_get_total_ram_mb() * 11 / 10;
 	intel_require_memory(trash_count, size, CHECK_RAM | CHECK_SWAP);
@@ -155,12 +155,12 @@ static void test_forking_evictions(int fd, int size, int count,
 	forking_evictions(fd, &fault_ops, size, count, trash_count, flags);
 }
 
-static void test_mlocked_evictions(int fd, int size, int count)
+static void test_mlocked_evictions(int fd, uint64_t size, uint64_t count)
 {
 	mlocked_evictions(fd, &fault_ops, size, count);
 }
 
-static void test_swapping_evictions(int fd, int size, int count)
+static void test_swapping_evictions(int fd, uint64_t size, uint64_t count)
 {
 	int trash_count;
 
@@ -170,12 +170,12 @@ static void test_swapping_evictions(int fd, int size, int count)
 	swapping_evictions(fd, &fault_ops, size, count, trash_count);
 }
 
-static void test_minor_evictions(int fd, int size, int count)
+static void test_minor_evictions(int fd, uint64_t size, uint64_t count)
 {
 	minor_evictions(fd, &fault_ops, size, count);
 }
 
-static void test_major_evictions(int fd, int size, int count)
+static void test_major_evictions(int fd, uint64_t size, uint64_t count)
 {
 	major_evictions(fd, &fault_ops, size, count);
 }
