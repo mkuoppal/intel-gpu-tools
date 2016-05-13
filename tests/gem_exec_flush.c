@@ -472,6 +472,11 @@ static void batch(int fd, unsigned ring, int nchild, int timeout,
 	igt_waitchildren();
 }
 
+static const char *yesno(bool x)
+{
+	return x ? "yes" : "no";
+}
+
 igt_main
 {
 	const struct intel_execution_engine *e;
@@ -510,6 +515,7 @@ igt_main
 		fd = drm_open_driver(DRIVER_INTEL);
 		gem_require_mmap_wc(fd);
 		gen = intel_gen(intel_get_drm_devid(fd));
+		igt_info("Has LLC? %s\n", yesno(gem_has_llc(fd)));
 	}
 
 	igt_fork_hang_detector(fd);
