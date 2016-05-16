@@ -30,6 +30,7 @@ pkglibexec_PROGRAMS = \
 	gem_stress \
 	$(TESTS_progs) \
 	$(TESTS_progs_M) \
+	$(TESTS_progs_XM) \
 	$(NULL)
 
 dist_pkglibexec_SCRIPTS = \
