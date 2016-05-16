@@ -509,15 +509,15 @@ static void resolve_subnr(struct brw_reg *reg)
 %token <integer> BASE ELEMENTSIZE SRCREGION DSTREGION TYPE
 
 %token <integer> DEFAULT_EXEC_SIZE_PRAGMA DEFAULT_REG_TYPE_PRAGMA
-%nonassoc SUBREGNUM
-%nonassoc SNDOPR
+%precedence SUBREGNUM
+%precedence SNDOPR
 %left  PLUS MINUS
 %left  MULTIPLY DIVIDE
-%right UMINUS
-%nonassoc DOT
-%nonassoc STR_SYMBOL_REG
-%nonassoc EMPTEXECSIZE
-%nonassoc LPAREN
+%precedence UMINUS
+%precedence DOT
+%precedence STR_SYMBOL_REG
+%precedence EMPTEXECSIZE
+%precedence LPAREN
 
 %type <integer> exp sndopr
 %type <integer> simple_int
@@ -655,7 +655,7 @@ declare_elementsize:  ELEMENTSIZE EQ exp
 		   $$ = $3;
 		}
 ;
-declare_srcregion: /* empty */
+declare_srcregion: %empty /* empty */
 		{
 		  /* XXX is this default correct?*/
 		  memset (&$$, '\0', sizeof ($$));
@@ -668,7 +668,7 @@ declare_srcregion: /* empty */
 		    $$ = $3;
 		}
 ;
-declare_dstregion: /* empty */
+declare_dstregion: %empty /* empty */
 		{
 		    $$ = 1;
 		}
@@ -1962,20 +1962,20 @@ msgtarget:	NULL_TOKEN
 ;
 
 urb_allocate:	ALLOCATE { $$ = 1; }
-		| /* empty */ { $$ = 0; }
+		| %empty /* empty */ { $$ = 0; }
 ;
 
 urb_used:	USED { $$ = 1; }
-		| /* empty */ { $$ = 0; }
+		| %empty /* empty */ { $$ = 0; }
 ;
 
 urb_complete:	COMPLETE { $$ = 1; }
-		| /* empty */ { $$ = 0; }
+		| %empty /* empty */ { $$ = 0; }
 ;
 
 urb_swizzle:	TRANSPOSE { $$ = BRW_URB_SWIZZLE_TRANSPOSE; }
 		| INTERLEAVE { $$ = BRW_URB_SWIZZLE_INTERLEAVE; }
-		| /* empty */ { $$ = BRW_URB_SWIZZLE_NONE; }
+		| %empty /* empty */ { $$ = BRW_URB_SWIZZLE_NONE; }
 ;
 
 sampler_datatype:
@@ -1988,11 +1988,11 @@ math_function:	INV | LOG | EXP | SQRT | POW | SIN | COS | SINCOS | INTDIV
 		| INTMOD | INTDIVMOD
 ;
 
-math_signed:	/* empty */ { $$ = 0; }
+math_signed:	%empty /* empty */ { $$ = 0; }
 		| SIGNED { $$ = 1; }
 ;
 
-math_scalar:	/* empty */ { $$ = 0; }
+math_scalar:	%empty /* empty */ { $$ = 0; }
 		| SCALAR { $$ = 1; }
 ;
 
@@ -2374,7 +2374,7 @@ addrparam:	addrreg COMMA immaddroffset
 /* The immaddroffset provides an immediate offset value added to the addresses
  * from the address register in register-indirect register access.
  */
-immaddroffset:	/* empty */ { $$ = 0; }
+immaddroffset:	%empty /* empty */ { $$ = 0; }
 		| exp
 ;
 
@@ -2384,7 +2384,7 @@ subregnum:	DOT exp
 		{
 		  $$ = $2;
 		}
-		|  %prec SUBREGNUM
+		|  %empty %prec SUBREGNUM
 		{
 		  /* Default to subreg 0 if unspecified. */
 		  $$ = 0;
@@ -2687,7 +2687,7 @@ relativelocation2:
 ;
 
 /* 1.4.7: Regions */
-dstregion:	/* empty */
+dstregion:	%empty /* empty */
 		{
 		  $$ = DEFAULT_DSTREGION;
 		}
@@ -2703,7 +2703,7 @@ dstregion:	/* empty */
 		}
 ;
 
-region:		/* empty */
+region:		%empty /* empty */
 		{
 		  /* XXX is this default value correct?*/
 		  memset (&$$, '\0', sizeof ($$));
@@ -2757,7 +2757,7 @@ indirectregion:	region | region_wh
 /* regtype returns an integer register type suitable for inserting into an
  * instruction.
  */
-regtype:	/* empty */
+regtype:	%empty /* empty */
 		{ $$.type = program_defaults.register_type;$$.is_default = 1;}
 		| TYPE_F { $$.type = BRW_REGISTER_TYPE_F;$$.is_default = 0; }
 		| TYPE_UD { $$.type = BRW_REGISTER_TYPE_UD;$$.is_default = 0; }
@@ -2768,7 +2768,7 @@ regtype:	/* empty */
 		| TYPE_B { $$.type = BRW_REGISTER_TYPE_B;$$.is_default = 0; }
 ;
 
-srcimmtype:	/* empty */
+srcimmtype:	%empty /* empty */
 		{
 		    /* XXX change to default when pragma parse is done */
 		   $$ = BRW_REGISTER_TYPE_D;
@@ -2786,7 +2786,7 @@ srcimmtype:	/* empty */
 /* Returns the swizzle control for an align16 instruction's source operand
  * in the src0 fields.
  */
-swizzle:	/* empty */
+swizzle:	%empty /* empty */
 		{
 		  $$.reg.dw1.bits.swizzle = BRW_SWIZZLE_NOOP;
 		}
@@ -2807,7 +2807,7 @@ chansel:	X | Y | Z | W
 /* Returns a partially completed struct brw_reg, with just the writemask bits
  * filled out.
  */
-writemask:	/* empty */
+writemask:	%empty /* empty */
 		{
 		  $$.dw1.bits.writemask = BRW_WRITEMASK_XYZW;
 		}
@@ -2817,19 +2817,19 @@ writemask:	/* empty */
 		}
 ;
 
-writemask_x:	/* empty */ { $$ = 0; }
+writemask_x:	%empty /* empty */ { $$ = 0; }
 		 | X { $$ = 1 << BRW_CHANNEL_X; }
 ;
 
-writemask_y:	/* empty */ { $$ = 0; }
+writemask_y:	%empty /* empty */ { $$ = 0; }
 		 | Y { $$ = 1 << BRW_CHANNEL_Y; }
 ;
 
-writemask_z:	/* empty */ { $$ = 0; }
+writemask_z:	%empty /* empty */ { $$ = 0; }
 		 | Z { $$ = 1 << BRW_CHANNEL_Z; }
 ;
 
-writemask_w:	/* empty */ { $$ = 0; }
+writemask_w:	%empty /* empty */ { $$ = 0; }
 		 | W { $$ = 1 << BRW_CHANNEL_W; }
 ;
 
@@ -2839,7 +2839,7 @@ imm32:		exp { $$.r = imm32_d; $$.u.d = $1; }
 ;
 
 /* 1.4.12: Predication and modifiers */
-predicate:	/* empty */
+predicate:	%empty /* empty */
 		{
 		  $$.pred_control = BRW_PREDICATE_NONE;
 		  $$.flag_reg_nr = 0;
@@ -2855,12 +2855,12 @@ predicate:	/* empty */
 		}
 ;
 
-predstate:	/* empty */ { $$ = 0; }
+predstate:	%empty /* empty */ { $$ = 0; }
 		| PLUS { $$ = 0; }
 		| MINUS { $$ = 1; }
 ;
 
-predctrl:	/* empty */ { $$ = BRW_PREDICATE_NORMAL; }
+predctrl:	%empty /* empty */ { $$ = BRW_PREDICATE_NORMAL; }
 		| DOT X { $$ = BRW_PREDICATE_ALIGN16_REPLICATE_X; }
 		| DOT Y { $$ = BRW_PREDICATE_ALIGN16_REPLICATE_Y; }
 		| DOT Z { $$ = BRW_PREDICATE_ALIGN16_REPLICATE_Z; }
@@ -2877,15 +2877,15 @@ predctrl:	/* empty */ { $$ = BRW_PREDICATE_NORMAL; }
 		| ALL16H { $$ = BRW_PREDICATE_ALIGN1_ALL16H; }
 ;
 
-negate:		/* empty */ { $$ = 0; }
+negate:		%empty /* empty */ { $$ = 0; }
 		| MINUS { $$ = 1; }
 ;
 
-abs:		/* empty */ { $$ = 0; }
+abs:		%empty /* empty */ { $$ = 0; }
 		| ABS { $$ = 1; }
 ;
 
-execsize:	/* empty */ %prec EMPTEXECSIZE
+execsize:	%empty /* empty */ %prec EMPTEXECSIZE
 		{
 		  $$ = ffs(program_defaults.execute_size) - 1;
 		}
@@ -2902,7 +2902,7 @@ execsize:	/* empty */ %prec EMPTEXECSIZE
 		}
 ;
 
-saturate:	/* empty */ { $$ = BRW_INSTRUCTION_NORMAL; }
+saturate:	%empty /* empty */ { $$ = BRW_INSTRUCTION_NORMAL; }
 		| SATURATE { $$ = BRW_INSTRUCTION_SATURATE; }
 ;
 conditionalmodifier: condition 
@@ -2918,7 +2918,7 @@ conditionalmodifier: condition
 		    $$.flag_subreg_nr = $3.subnr;
 		}
 
-condition: /* empty */    { $$ = BRW_CONDITIONAL_NONE; }
+condition: %empty /* empty */    { $$ = BRW_CONDITIONAL_NONE; }
 		| ZERO
 		| EQUAL
 		| NOT_ZERO
@@ -2933,7 +2933,7 @@ condition: /* empty */    { $$ = BRW_CONDITIONAL_NONE; }
 ;
 
 /* 1.4.13: Instruction options */
-instoptions:	/* empty */
+instoptions:	%empty /* empty */
 		{ memset(&$$, 0, sizeof($$)); }
 		| LCURLY instoption_list RCURLY
 		{ $$ = $2; }
@@ -2949,7 +2949,7 @@ instoption_list:instoption_list COMMA instoption
 		  $$ = $1;
 		  add_option(&$$, $2);
 		}
-		| /* empty, header defaults to zeroes. */
+		| %empty /* empty, header defaults to zeroes. */
 		{
 		  memset(&$$, 0, sizeof($$));
 		}
