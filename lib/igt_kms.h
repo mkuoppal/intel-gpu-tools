@@ -77,28 +77,8 @@ enum port {
  */
 #define kmstest_port_name(port) ((port) + 'A')
 
-/**
- * kmstest_encoder_type_str:
- * @type: DRM_MODE_ENCODER_* enumeration value
- *
- * Returns: A string representing the drm encoder @type.
- */
 const char *kmstest_encoder_type_str(int type);
-
-/**
- * kmstest_connector_status_str:
- * @status: DRM_MODE_* connector status value
- *
- * Returns: A string representing the drm connector status @status.
- */
 const char *kmstest_connector_status_str(int status);
-
-/**
- * kmstest_connector_type_str:
- * @type: DRM_MODE_CONNECTOR_* enumeration value
- *
- * Returns: A string representing the drm connector @type.
- */
 const char *kmstest_connector_type_str(int type);
 
 void kmstest_dump_mode(drmModeModeInfo *mode);

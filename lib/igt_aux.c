@@ -942,6 +942,12 @@ static const struct type_name encoder_type_names[] = {
 	{}
 };
 
+/**
+ * kmstest_encoder_type_str:
+ * @type: DRM_MODE_ENCODER_* enumeration value
+ *
+ * Returns: A string representing the drm encoder @type.
+ */
 const char *kmstest_encoder_type_str(int type)
 {
 	return find_type_name(encoder_type_names, type);
@@ -954,6 +960,12 @@ static const struct type_name connector_status_names[] = {
 	{}
 };
 
+/**
+ * kmstest_connector_status_str:
+ * @status: DRM_MODE_* connector status value
+ *
+ * Returns: A string representing the drm connector status @status.
+ */
 const char *kmstest_connector_status_str(int status)
 {
 	return find_type_name(connector_status_names, status);
@@ -980,6 +992,12 @@ static const struct type_name connector_type_names[] = {
 	{}
 };
 
+/**
+ * kmstest_connector_type_str:
+ * @type: DRM_MODE_CONNECTOR_* enumeration value
+ *
+ * Returns: A string representing the drm connector @type.
+ */
 const char *kmstest_connector_type_str(int type)
 {
 	return find_type_name(connector_type_names, type);
