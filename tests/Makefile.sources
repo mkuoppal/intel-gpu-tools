@@ -20,6 +20,7 @@ TESTS_progs_M = \
 	gem_busy \
 	gem_caching \
 	gem_close_race \
+	gem_concurrent_blit \
 	gem_create \
 	gem_cs_tlb \
 	gem_ctx_bad_exec \
@@ -121,7 +122,6 @@ TESTS_progs_M = \
 	$(NULL)
 
 TESTS_progs_XM = \
-    gem_concurrent_blit \
     gem_concurrent_all \
     $(NULL)
 
