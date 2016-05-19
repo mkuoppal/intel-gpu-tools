@@ -2505,11 +2505,13 @@ void igt_crtc_set_background(igt_pipe_t *pipe, uint64_t background)
 void igt_wait_for_vblank(int drm_fd, enum pipe pipe)
 {
 	drmVBlank wait_vbl;
+	uint32_t pipe_id_flag;
 
 	memset(&wait_vbl, 0, sizeof(wait_vbl));
+	pipe_id_flag = kmstest_get_vbl_flag(pipe);
 
-	wait_vbl.request.type = pipe << DRM_VBLANK_HIGH_CRTC_SHIFT |
-				DRM_VBLANK_RELATIVE;
+	wait_vbl.request.type = DRM_VBLANK_RELATIVE;
+	wait_vbl.request.type |= pipe_id_flag;
 	wait_vbl.request.sequence = 1;
 
 	igt_assert(drmWaitVBlank(drm_fd, &wait_vbl) == 0);
