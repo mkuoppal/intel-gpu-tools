@@ -686,24 +686,23 @@ static void check_state(const struct test_output *o, const struct event_state *e
 	}
 
 	if ((o->flags & TEST_CHECK_TS) && (!analog_tv_connector(o))) {
-		double usec_interflip, usec_diff;
+		double elapsed, expected;
 
 		timersub(&es->current_ts, &es->last_ts, &diff);
-		usec_diff = diff.tv_sec * USEC_PER_SEC + diff.tv_usec;
+		elapsed = 1e6*diff.tv_sec + diff.tv_usec;
+		expected = (es->current_seq - es->last_seq) * frame_time(o);
 
-		usec_interflip = (es->current_seq - es->last_seq) * frame_time(o);
-		igt_assert_f(fabs((usec_diff - usec_interflip) /
-				  usec_interflip) <= 0.005,
-			     "inconsistent %s ts/seq: last %ld.%06ld/%u, current %ld.%06ld/%u\n",
+		igt_debug("%s ts/seq: last %ld.%06ld/%u, current %ld.%06ld/%u: elapsed=%.1fus expected=%.1fus +- %.1fus, error %.1f%%\n",
+			  es->name, es->last_ts.tv_sec, es->last_ts.tv_usec, es->last_seq,
+			  es->current_ts.tv_sec, es->current_ts.tv_usec, es->current_seq,
+			  elapsed, expected, expected * 0.005,
+			  fabs((elapsed - expected) / expected) * 100);
+
+		igt_assert_f(fabs((elapsed - expected) / expected) <= 0.005,
+			     "inconsistent %s ts/seq: last %ld.%06ld/%u, current %ld.%06ld/%u: elapsed=%.1fus expected=%.1fus\n",
 			     es->name, es->last_ts.tv_sec, es->last_ts.tv_usec, es->last_seq,
-			     es->current_ts.tv_sec, es->current_ts.tv_usec, es->current_seq);
-
-		usec_interflip = o->seq_step * frame_time(o);
-		igt_assert_f(fabs((usec_diff - usec_interflip) /
-				  usec_interflip) <= 0.005,
-			     "inter-%s ts jitter: %ld.%06ld, expected %.6f\n",
-			     es->name, diff.tv_sec, diff.tv_usec,
-			     usec_interflip / USEC_PER_SEC);
+			     es->current_ts.tv_sec, es->current_ts.tv_usec, es->current_seq,
+			     elapsed, expected);
 
 		igt_assert_f(es->current_seq == es->last_seq + o->seq_step,
 			     "unexpected %s seq %u, expected %u\n",
@@ -1192,14 +1191,17 @@ static void check_final_state(const struct test_output *o,
 	/* Verify we drop no frames, but only if it's not a TV encoder, since
 	 * those use some funny fake timings behind userspace's back. */
 	if (o->flags & TEST_CHECK_TS && !analog_tv_connector(o)) {
-		double expected;
-		int count = es->count;
+		int count = es->count * o->seq_step;
+		unsigned int min = frame_time(o) * (count - 1);
+		unsigned int max = frame_time(o) * (count + 1);
 
-		count *= o->seq_step;
-		expected = (double)elapsed / frame_time(o);
-		igt_assert_f(fabs((double)count - expected)/expected <= 0.01,
-			     "dropped frames, expected %f, counted %d, encoder type %d\n",
-			     expected, count, o->kencoder[0]->encoder_type);
+		igt_debug("expected %d, counted %d, encoder type %d\n",
+			  (int)(elapsed / frame_time(o)), count,
+			  o->kencoder[0]->encoder_type);
+		igt_assert_f(elapsed >= min && elapsed <= max,
+			     "dropped frames, expected %d, counted %d, encoder type %d\n",
+			     (int)(elapsed / frame_time(o)), count,
+			     o->kencoder[0]->encoder_type);
 	}
 }
 
