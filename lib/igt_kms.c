@@ -322,6 +322,12 @@ const char *kmstest_plane_name(enum igt_plane plane)
 		[IGT_PLANE_1] = "plane1",
 		[IGT_PLANE_2] = "plane2",
 		[IGT_PLANE_3] = "plane3",
+		[IGT_PLANE_4] = "plane4",
+		[IGT_PLANE_5] = "plane5",
+		[IGT_PLANE_6] = "plane6",
+		[IGT_PLANE_7] = "plane7",
+		[IGT_PLANE_8] = "plane8",
+		[IGT_PLANE_9] = "plane9",
 		[IGT_PLANE_CURSOR] = "cursor",
 	};
 
