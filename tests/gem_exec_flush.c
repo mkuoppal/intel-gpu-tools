@@ -36,6 +36,7 @@ IGT_TEST_DESCRIPTION("Basic check of flushing after batches");
 #define BEFORE 32
 #define INTERRUPTIBLE 64
 #define CMDPARSER 128
+#define BASIC 256
 
 static void run(int fd, unsigned ring, int nchild, int timeout,
 		unsigned flags)
@@ -496,13 +497,13 @@ igt_main
 		const char *name;
 		unsigned flags;
 	} modes[] = {
-		{ "ro", 0 },
-		{ "rw", WRITE },
+		{ "ro", BASIC },
+		{ "rw", BASIC | WRITE },
 		{ "ro-before", BEFORE },
 		{ "rw-before", BEFORE | WRITE },
-		{ "pro", KERNEL },
-		{ "prw", KERNEL | WRITE },
-		{ "set", SET_DOMAIN | WRITE },
+		{ "pro", BASIC | KERNEL },
+		{ "prw", BASIC | KERNEL | WRITE },
+		{ "set", BASIC | SET_DOMAIN | WRITE },
 		{ NULL }
 	};
 	int gen = -1;
@@ -551,7 +552,7 @@ igt_main
 
 		for (const struct mode *m = modes; m->name; m++) {
 			igt_subtest_f("%suc-%s-%s",
-				      e->exec_id == 0 ? "basic-" : "",
+				      (m->flags & BASIC && e->exec_id == 0) ? "basic-" : "",
 				      m->name,
 				      e->name)
 				run(fd, ring, ncpus, timeout,
