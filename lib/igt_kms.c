@@ -1404,7 +1404,7 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		pipe->n_planes = n_planes;
 
 		/* make sure we don't overflow the plane array */
-		igt_assert(pipe->n_planes <= IGT_MAX_PLANES);
+		igt_assert_lte(pipe->n_planes, IGT_MAX_PLANES);
 	}
 
 	/*
