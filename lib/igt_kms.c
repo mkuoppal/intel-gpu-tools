@@ -1301,6 +1301,7 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		igt_plane_t *plane;
 		int p = IGT_PLANE_2;
 		int j, type;
+		uint8_t n_planes = 0;
 
 		pipe->crtc_id = resources->crtcs[i];
 		pipe->display = display;
@@ -1348,8 +1349,10 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 				break;
 			}
 
+			n_planes++;
 			plane->pipe = pipe;
 			plane->drm_plane = drm_plane;
+
 			if (is_atomic == 0) {
 				display->is_atomic = 1;
 				igt_atomic_fill_plane_props(display, plane, IGT_NUM_PLANE_PROPS, igt_plane_prop_names);
@@ -1398,8 +1401,7 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 			plane->is_cursor = true;
 		}
 
-		/* planes = 1 primary, (p-1) sprites, 1 cursor */
-		pipe->n_planes = p + 1;
+		pipe->n_planes = n_planes;
 
 		/* make sure we don't overflow the plane array */
 		igt_assert(pipe->n_planes <= IGT_MAX_PLANES);
