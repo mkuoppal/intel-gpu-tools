@@ -481,15 +481,13 @@ static int __wait_for_vblank(unsigned int flags, int crtc_idx,
 {
 	drmVBlank wait_vbl;
 	int ret;
-	unsigned crtc_idx_mask;
+	uint32_t pipe_id_flag;
 	bool event = !(flags & TEST_VBLANK_BLOCK);
 
 	memset(&wait_vbl, 0, sizeof(wait_vbl));
+	pipe_id_flag = kmstest_get_vbl_flag(crtc_idx);
 
-	crtc_idx_mask = crtc_idx << DRM_VBLANK_HIGH_CRTC_SHIFT;
-	igt_assert(!(crtc_idx_mask & ~DRM_VBLANK_HIGH_CRTC_MASK));
-
-	wait_vbl.request.type = crtc_idx_mask;
+	wait_vbl.request.type = pipe_id_flag;
 	if (flags & TEST_VBLANK_ABSOLUTE)
 		wait_vbl.request.type |= DRM_VBLANK_ABSOLUTE;
 	else
