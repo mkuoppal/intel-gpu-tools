@@ -122,6 +122,7 @@ static int loop(int size, unsigned ring, int reps, int ncpus, unsigned flags)
 					execbuf.flags &= ~ENGINE_FLAGS;
 					execbuf.flags |= engines[count++ % nengine];
 					/* fault in */
+					obj.alignment = 0;
 					gem_execbuf(fd, &execbuf);
 
 					/* fault out */
