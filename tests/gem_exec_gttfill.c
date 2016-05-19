@@ -54,12 +54,64 @@ static void xchg_u32(void *array, unsigned i, unsigned j)
 	u32[j] = tmp;
 }
 
+static void submit(int fd, int gen,
+		   struct drm_i915_gem_execbuffer2 *eb,
+		   struct drm_i915_gem_relocation_entry *reloc,
+		   uint32_t *handles, unsigned count)
+{
+	struct drm_i915_gem_exec_object2 obj;
+
+	eb->buffers_ptr = (uintptr_t)&obj;
+	for (unsigned i = 0; i < count; i++) {
+		uint32_t batch[16];
+		unsigned n;
+
+		memset(&obj, 0, sizeof(obj));
+		obj.handle = handles[i];
+		obj.relocs_ptr = (uintptr_t)reloc;
+		obj.relocation_count = 2;
+
+		memset(reloc, 0, 2*sizeof(*reloc));
+		reloc[0].target_handle = obj.handle;
+		reloc[0].offset = eb->batch_start_offset;
+		reloc[0].offset += sizeof(uint32_t);
+		reloc[0].delta = BATCH_SIZE- eb->batch_start_offset - 8;
+		reloc[0].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+		reloc[1].target_handle = obj.handle;
+		reloc[1].offset = eb->batch_start_offset;
+		reloc[1].offset += 3*sizeof(uint32_t);
+		reloc[1].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+
+		n = 0;
+		batch[n] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
+		if (gen >= 8) {
+			batch[n]++;
+			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+			batch[++n] = 0; /* upper_32_bits(address) */
+			reloc[1].offset += sizeof(uint32_t);
+		} else if (gen >= 4) {
+			batch[++n] = 0;
+			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+			reloc[0].offset += sizeof(uint32_t);
+		} else {
+			batch[n]--;
+			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+		}
+		batch[++n] = 0; /* lower_32_bits(value) */
+		batch[++n] = 0; /* upper_32_bits(value) / nop */
+		batch[++n] = MI_BATCH_BUFFER_END;
+		gem_write(fd, obj.handle, eb->batch_start_offset,
+			  batch, sizeof(batch));
+
+		gem_execbuf(fd, eb);
+	}
+}
+
 static void fillgtt(int fd, unsigned ring, int timeout)
 {
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_relocation_entry reloc[2];
-	struct drm_i915_gem_exec_object2 obj;
 	unsigned *handles;
 	unsigned engines[16];
 	unsigned nengine;
@@ -96,7 +148,6 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffer_count = 1;
-	execbuf.buffers_ptr = (uintptr_t)&obj;
 	if (gen < 6)
 		execbuf.flags |= I915_EXEC_SECURE;
 
@@ -105,57 +156,15 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 	for (unsigned i = 0; i < count; i++)
 		handles[i] = gem_create(fd, BATCH_SIZE);
 
+	/* Flush all memory before we start the timer */
+	submit(fd, gen, &execbuf, reloc, handles, count);
+
 	igt_fork(child, nengine) {
 		igt_permute_array(handles, count, xchg_u32);
 		execbuf.batch_start_offset = child*64;
 		execbuf.flags |= engines[child];
 		igt_until_timeout(timeout) {
-			for (unsigned i = 0; i < count; i++) {
-				uint32_t batch[16];
-				unsigned n;
-
-				memset(&obj, 0, sizeof(obj));
-				obj.handle = handles[i];
-				obj.relocs_ptr = (uintptr_t)reloc;
-				obj.relocation_count = 2;
-
-				memset(reloc, 0, sizeof(reloc));
-				reloc[0].target_handle = obj.handle;
-				reloc[0].offset = execbuf.batch_start_offset;
-				reloc[0].offset += sizeof(uint32_t);
-				reloc[0].delta = BATCH_SIZE- 64*child - 8;
-				reloc[0].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
-				reloc[1].target_handle = obj.handle;
-				reloc[1].offset = execbuf.batch_start_offset;
-				reloc[1].offset += 3*sizeof(uint32_t);
-				reloc[1].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
-
-				n = 0;
-				batch[n] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
-				if (gen >= 8) {
-					batch[n]++;
-					batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
-					batch[++n] = 0; /* upper_32_bits(address) */
-					reloc[1].offset += sizeof(uint32_t);
-				} else if (gen >= 4) {
-					batch[++n] = 0;
-					batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
-					reloc[0].offset += sizeof(uint32_t);
-				} else {
-					batch[n]--;
-					batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
-				}
-				batch[++n] = 0; /* lower_32_bits(value) */
-				batch[++n] = 0; /* upper_32_bits(value) / nop */
-				batch[++n] = MI_BATCH_BUFFER_END;
-				gem_write(fd, obj.handle, execbuf.batch_start_offset,
-					  batch, sizeof(batch));
-
-				gem_execbuf(fd, &execbuf);
-
-				/* ...and leak the handle to consume the GTT */
-			}
-
+			submit(fd, gen, &execbuf, reloc, handles, count);
 			for (unsigned i = 0; i < count; i++) {
 				uint32_t handle = handles[i];
 				uint64_t buf[2];
