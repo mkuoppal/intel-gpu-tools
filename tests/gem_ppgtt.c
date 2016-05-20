@@ -74,11 +74,11 @@ static void scratch_buf_init(struct igt_buf *buf,
 
 static void scratch_buf_fini(struct igt_buf *buf)
 {
-	dri_bo_unreference(buf->bo);
+	drm_intel_bo_unreference(buf->bo);
 	memset(buf, 0, sizeof(*buf));
 }
 
-static void fork_rcs_copy(int target, dri_bo **dst, int count, unsigned flags)
+static void fork_rcs_copy(int target, drm_intel_bo **dst, int count, unsigned flags)
 #define CREATE_CONTEXT 0x1
 {
 	igt_render_copyfunc_t render_copy;
@@ -143,7 +143,7 @@ static void fork_rcs_copy(int target, dri_bo **dst, int count, unsigned flags)
 	}
 }
 
-static void fork_bcs_copy(int target, dri_bo **dst, int count)
+static void fork_bcs_copy(int target, drm_intel_bo **dst, int count)
 {
 	int devid;
 
@@ -167,7 +167,7 @@ static void fork_bcs_copy(int target, dri_bo **dst, int count)
 		igt_assert(batch);
 
 		for (int i = 0; i <= target; i++) {
-			dri_bo *src[2];
+			drm_intel_bo *src[2];
 
 			src[0] = create_bo(dst[child]->bufmgr,
 					   ~0);
@@ -177,13 +177,13 @@ static void fork_bcs_copy(int target, dri_bo **dst, int count)
 			intel_copy_bo(batch, src[0], src[1], SIZE);
 			intel_copy_bo(batch, dst[child], src[0], SIZE);
 
-			dri_bo_unreference(src[1]);
-			dri_bo_unreference(src[0]);
+			drm_intel_bo_unreference(src[1]);
+			drm_intel_bo_unreference(src[0]);
 		}
 	}
 }
 
-static void surfaces_check(dri_bo **bo, int count, uint32_t expected)
+static void surfaces_check(drm_intel_bo **bo, int count, uint32_t expected)
 {
 	for (int child = 0; child < count; child++) {
 		uint32_t *ptr;
@@ -322,7 +322,7 @@ int main(int argc, char **argv)
 	igt_subtest_init(argc, argv);
 
 	igt_subtest("blt-vs-render-ctx0") {
-		dri_bo *bcs[1], *rcs[N_CHILD];
+		drm_intel_bo *bcs[1], *rcs[N_CHILD];
 
 		fork_bcs_copy(0x4000, bcs, 1);
 		fork_rcs_copy(0x8000 / N_CHILD, rcs, N_CHILD, 0);
@@ -334,7 +334,7 @@ int main(int argc, char **argv)
 	}
 
 	igt_subtest("blt-vs-render-ctxN") {
-		dri_bo *bcs[1], *rcs[N_CHILD];
+		drm_intel_bo *bcs[1], *rcs[N_CHILD];
 
 		fork_rcs_copy(0x8000 / N_CHILD, rcs, N_CHILD, CREATE_CONTEXT);
 		fork_bcs_copy(0x4000, bcs, 1);
