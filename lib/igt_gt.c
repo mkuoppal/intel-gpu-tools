@@ -137,7 +137,7 @@ igt_hang_ring_t igt_hang_ctx(int fd,
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 exec;
 	struct local_i915_gem_context_param param;
-	uint32_t b[8];
+	uint32_t b[16];
 	unsigned ban;
 	unsigned len;
 
@@ -181,21 +181,21 @@ igt_hang_ring_t igt_hang_ctx(int fd,
 	exec.relocs_ptr = (uintptr_t)&reloc;
 
 	memset(b, 0xc5, sizeof(b));
+	b[0] = 0xffffffff;
 	len = 2;
 	if (intel_gen(intel_get_drm_devid(fd)) >= 8)
 		len++;
-	b[0] = MI_BATCH_BUFFER_START | (len - 2);
-	b[len] = MI_BATCH_BUFFER_END;
-	b[len+1] = MI_NOOP;
+	b[1] = MI_BATCH_BUFFER_START | (len - 2);
+	b[1+len] = MI_BATCH_BUFFER_END;
+	b[2+len] = MI_NOOP;
 	gem_write(fd, exec.handle, 0, b, sizeof(b));
 
-	reloc.offset = 4;
+	reloc.offset = 8;
 	reloc.target_handle = exec.handle;
 	reloc.read_domains = I915_GEM_DOMAIN_COMMAND;
 
 	execbuf.buffers_ptr = (uintptr_t)&exec;
 	execbuf.buffer_count = 1;
-	execbuf.batch_len = sizeof(b);
 	execbuf.flags = ring;
 	i915_execbuffer2_set_context_id(execbuf, ctx);
 	gem_execbuf(fd, &execbuf);
