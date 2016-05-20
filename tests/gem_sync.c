@@ -215,7 +215,7 @@ igt_main
 	igt_fork_hang_detector(fd);
 
 	for (e = intel_execution_engines; e->name; e++) {
-		igt_subtest_f("basic-%s", e->name)
+		igt_subtest_f("%s", e->name)
 			sync_ring(fd, e->exec_id | e->flags, 1);
 		igt_subtest_f("forked-%s", e->name)
 			sync_ring(fd, e->exec_id | e->flags, ncpus);
