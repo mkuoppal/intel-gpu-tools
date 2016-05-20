@@ -139,12 +139,14 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 	igt_require(nengine);
 
 	size = gem_aperture_size(fd);
+	if (size > 1ull<<32) /* Limit to 4GiB as we do not use allow-48b */
+		size = 1ull << 32;
 	igt_require(size < (1ull<<32) * BATCH_SIZE);
 
 	count = size / BATCH_SIZE + 1;
 	igt_debug("Using %'d batches to fill %'llu aperture on %d engines\n",
 		  count, (long long)size, nengine);
-	intel_require_memory(count * nengine, BATCH_SIZE, CHECK_RAM);
+	intel_require_memory(count, BATCH_SIZE, CHECK_RAM);
 
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffer_count = 1;
@@ -195,7 +197,7 @@ igt_main
 	igt_fork_hang_detector(device);
 
 	igt_subtest("basic")
-		fillgtt(device, 0, 10);
+		fillgtt(device, 0, 1); /* just enough to run a single pass */
 
 	for (e = intel_execution_engines; e->name; e++)
 		igt_subtest_f("%s", e->name)
