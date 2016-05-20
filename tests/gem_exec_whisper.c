@@ -367,7 +367,7 @@ igt_main
 		const char *name;
 		unsigned flags;
 	} modes[] = {
-		{ "", 0 },
+		{ "normal", 0 },
 		{ "interruptible", INTERRUPTIBLE },
 		{ "contexts", CONTEXTS },
 		{ "contexts-interruptible", CONTEXTS | INTERRUPTIBLE},
@@ -383,16 +383,13 @@ igt_main
 	igt_fork_hang_detector(fd);
 
 	for (const struct mode *m = modes; m->name; m++)
-		igt_subtest_f("%s", *m->name ? m->name : "basic")
+		igt_subtest_f("%s", m->name)
 			whisper(fd, -1, m->flags);
 
 	for (const struct intel_execution_engine *e = intel_execution_engines;
 	     e->name; e++) {
 		for (const struct mode *m = modes; m->name; m++)
-			igt_subtest_f("%s%s%s",
-				      e->name,
-				      *m->name ? "-" : "",
-				      m->name)
+			igt_subtest_f("%s-%s", e->name, m->name)
 				whisper(fd, e->exec_id | e->flags, m->flags);
 	}
 
