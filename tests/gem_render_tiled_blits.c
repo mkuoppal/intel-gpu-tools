@@ -72,7 +72,7 @@ check_bo(struct intel_batchbuffer *batch, struct igt_buf *buf, uint32_t val)
 
 	render_copy(batch, NULL, buf, 0, 0, WIDTH, HEIGHT, &tmp, 0, 0);
 	if (snoop) {
-		do_or_die(dri_bo_map(linear, 0));
+		do_or_die(drm_intel_bo_map(linear, 0));
 		ptr = linear->virtual;
 	} else {
 		do_or_die(drm_intel_bo_get_subdata(linear, 0, sizeof(data), data));
@@ -86,7 +86,7 @@ check_bo(struct intel_batchbuffer *batch, struct igt_buf *buf, uint32_t val)
 		val++;
 	}
 	if (ptr != data)
-		dri_bo_unmap(linear);
+		drm_intel_bo_unmap(linear);
 }
 
 static void run_test (int fd, int count)
