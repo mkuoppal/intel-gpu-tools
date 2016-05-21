@@ -75,7 +75,7 @@ static void submit(int fd, int gen,
 		reloc[0].target_handle = obj.handle;
 		reloc[0].offset = eb->batch_start_offset;
 		reloc[0].offset += sizeof(uint32_t);
-		reloc[0].delta = BATCH_SIZE- eb->batch_start_offset - 8;
+		reloc[0].delta = BATCH_SIZE - eb->batch_start_offset - 8;
 		reloc[0].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
 		reloc[1].target_handle = obj.handle;
 		reloc[1].offset = eb->batch_start_offset;
@@ -85,10 +85,10 @@ static void submit(int fd, int gen,
 		n = 0;
 		batch[n] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
 		if (gen >= 8) {
+			batch[n] |= 1 << 21;
 			batch[n]++;
 			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
 			batch[++n] = 0; /* upper_32_bits(address) */
-			reloc[1].offset += sizeof(uint32_t);
 		} else if (gen >= 4) {
 			batch[++n] = 0;
 			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
@@ -96,6 +96,7 @@ static void submit(int fd, int gen,
 		} else {
 			batch[n]--;
 			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+			reloc[1].offset -= sizeof(uint32_t);
 		}
 		batch[++n] = 0; /* lower_32_bits(value) */
 		batch[++n] = 0; /* upper_32_bits(value) / nop */
@@ -147,6 +148,7 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 	igt_debug("Using %'d batches to fill %'llu aperture on %d engines\n",
 		  count, (long long)size, nengine);
 	intel_require_memory(count, BATCH_SIZE, CHECK_RAM);
+	intel_detect_and_clear_missed_interrupts(fd);
 
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffer_count = 1;
@@ -181,6 +183,8 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 
 	for (unsigned i = 0; i < count; i++)
 		gem_close(fd, handles[i]);
+
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 igt_main
