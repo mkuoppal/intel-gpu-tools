@@ -567,15 +567,19 @@ void igt_pipe_crc_stop(igt_pipe_crc_t *pipe_crc)
  * @n_crcs: number of CRCs to capture
  * @out_crcs: buffer pointer for the captured CRC values
  *
- * Read @n_crcs from @pipe_crc. This function blocks until @n_crcs are
- * retrieved. @out_crcs is alloced by this function and must be released with
- * free() by the caller.
+ * Read up to @n_crcs from @pipe_crc. This function does not block, and will
+ * return early if not enough CRCs can be captured, if @pipe_crc has been
+ * opened using igt_pipe_crc_new_nonblock(). It will block until @n_crcs are
+ * retrieved if @pipe_crc has been opened using igt_pipe_crc_new(). @out_crcs is
+ * alloced by this function and must be released with free() by the caller.
  *
  * Callers must start and stop the capturing themselves by calling
- * igt_pipe_crc_start() and igt_pipe_crc_stop().
+ * igt_pipe_crc_start() and igt_pipe_crc_stop(). For one-shot CRC collecting
+ * look at igt_pipe_crc_collect_crc().
  *
- * Returns: The number of CRCs captured. Should be equal to @n_crcs in blocking
- * mode, but can be less (even zero) in non-blocking mode.
+ * Returns:
+ * The number of CRCs captured. Should be equal to @n_crcs in blocking mode, but
+ * can be less (even zero) in non-blocking mode.
  */
 int
 igt_pipe_crc_get_crcs(igt_pipe_crc_t *pipe_crc, int n_crcs,
@@ -626,13 +630,18 @@ static void crc_sanity_checks(igt_crc_t *crc)
  * @out_crc: buffer for the captured CRC values
  *
  * Read a single CRC from @pipe_crc. This function blocks until the CRC is
- * retrieved.  @out_crc must be allocated by the caller.
+ * retrieved, irrespective of whether @pipe_crc has been opened with
+ * igt_pipe_crc_new() or igt_pipe_crc_new_nonblock().  @out_crc must be
+ * allocated by the caller.
  *
  * This function takes care of the pipe_crc book-keeping, it will start/stop
  * the collection of the CRC.
  *
  * This function also calls the interactive debug with the "crc" domain, so you
  * can make use of this feature to actually see the screen that is being CRC'd.
+ *
+ * For continuous CRC collection look at igt_pipe_crc_start(),
+ * igt_pipe_crc_get_crcs() and igt_pipe_crc_stop().
  */
 void igt_pipe_crc_collect_crc(igt_pipe_crc_t *pipe_crc, igt_crc_t *out_crc)
 {
