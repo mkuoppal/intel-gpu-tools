@@ -74,6 +74,7 @@ static void stress(struct data *data, unsigned mode, int timeout)
 		CPU_SET(child, &allowed);
 		sched_setaffinity(getpid(), sizeof(cpu_set_t), &allowed);
 
+		state ^= child;
 		igt_until_timeout(timeout) {
 			arg.crtc_id = r->crtcs[hars_petruska_f54_1_random() % r->count_crtcs];
 			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
