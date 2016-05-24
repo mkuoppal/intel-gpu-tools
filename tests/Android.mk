@@ -56,7 +56,10 @@ else
 # the following tests depend on cairo, so skip them
     skip_tests_list += \
     gem_render_copy \
-    pm_lpsp
+    pm_lpsp \
+	drm_read \
+	gem_exec_blt \
+	prime_mmap_kms
 
 # All kms tests depend on cairo
     tmp_list := $(foreach test_name, $(TESTS_progs),\
