@@ -26,6 +26,7 @@
 #include <sched.h>
 
 #include "igt.h"
+#include "igt_stats.h"
 
 IGT_TEST_DESCRIPTION("Stress legacy cursor ioctl");
 
@@ -48,7 +49,11 @@ static void stress(struct data *data,
 {
 	drmModeRes *r;
 	struct drm_mode_cursor arg;
+	uint64_t *results;
 	int n;
+
+	results = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(results != MAP_FAILED);
 
 	r = drmModeGetResources(data->fd);
 	igt_assert(r);
@@ -82,12 +87,32 @@ static void stress(struct data *data,
 			count++;
 		}
 
-		igt_info("[%d] count=%lu\n", child, count);
+		igt_debug("[%d] count=%lu\n", child, count);
+		results[child] = count;
 	}
 	igt_waitchildren();
 
+	if (num_children > 1) {
+		igt_stats_t stats;
+
+		igt_stats_init_with_size(&stats, num_children);
+		results[num_children] = 0;
+		for (int child = 0; child < num_children; child++) {
+			igt_stats_push(&stats, results[child]);
+			results[num_children] += results[child];
+		}
+		igt_info("Total updates %llu (median of %d processes is %.2f)\n",
+			 (long long)results[num_children],
+			 num_children,
+			 igt_stats_get_median(&stats));
+		igt_stats_fini(&stats);
+	} else {
+		igt_info("Total updates %llu\n", (long long)results[0]);
+	}
+
 	gem_close(data->fd, arg.handle);
 	drmModeFreeResources(r);
+	munmap(results, 4096);
 }
 
 igt_main
