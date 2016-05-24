@@ -43,7 +43,8 @@ hars_petruska_f54_1_random (void)
 #undef rol
 }
 
-static void stress(struct data *data, unsigned mode, int timeout)
+static void stress(struct data *data,
+		   int num_children, unsigned mode, int timeout)
 {
 	drmModeRes *r;
 	struct drm_mode_cursor arg;
@@ -63,7 +64,7 @@ static void stress(struct data *data, unsigned mode, int timeout)
 		drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 
 	arg.flags = mode;
-	igt_fork(child, sysconf(_SC_NPROCESSORS_ONLN)) {
+	igt_fork(child, num_children) {
 		struct sched_param rt = {.sched_priority = 99 };
 		cpu_set_t allowed;
 		unsigned long count = 0;
@@ -91,6 +92,7 @@ static void stress(struct data *data, unsigned mode, int timeout)
 
 igt_main
 {
+	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	struct data data = { .fd = -1 };
 
 	igt_skip_on_simulation();
@@ -100,10 +102,15 @@ igt_main
 		kmstest_set_vt_graphics_mode();
 	}
 
-	igt_subtest("stress-bo")
-		stress(&data, DRM_MODE_CURSOR_BO, 20);
-	igt_subtest("stress-move")
-		stress(&data, DRM_MODE_CURSOR_MOVE, 20);
+	igt_subtest("single-bo")
+		stress(&data, 1, DRM_MODE_CURSOR_BO, 20);
+	igt_subtest("single-move")
+		stress(&data, 1, DRM_MODE_CURSOR_MOVE, 20);
+
+	igt_subtest("forked-bo")
+		stress(&data, ncpus, DRM_MODE_CURSOR_BO, 20);
+	igt_subtest("forked-move")
+		stress(&data, ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
 	igt_fixture {
 	}
