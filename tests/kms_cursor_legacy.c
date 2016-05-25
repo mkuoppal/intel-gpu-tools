@@ -32,6 +32,7 @@ IGT_TEST_DESCRIPTION("Stress legacy cursor ioctl");
 
 struct data {
 	int fd;
+	drmModeRes *resources;
 };
 
 static uint32_t state = 0x12345678;
@@ -45,18 +46,16 @@ hars_petruska_f54_1_random (void)
 }
 
 static void stress(struct data *data,
-		   int num_children, unsigned mode, int timeout)
+		   uint32_t *crtc_id, unsigned num_crtcs,
+		   int num_children, unsigned mode,
+		   int timeout)
 {
-	drmModeRes *r;
 	struct drm_mode_cursor arg;
 	uint64_t *results;
 	int n;
 
 	results = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(results != MAP_FAILED);
-
-	r = drmModeGetResources(data->fd);
-	igt_assert(r);
 
 	memset(&arg, 0, sizeof(arg));
 	arg.flags = DRM_MODE_CURSOR_BO;
@@ -65,8 +64,10 @@ static void stress(struct data *data,
 	arg.height = 64;
 	arg.handle = gem_create(data->fd, 4*64*64);
 
-	for (n = 0; n < r->count_crtcs; n++)
+	for (n = 0; n < num_crtcs; n++) {
+		arg.crtc_id = crtc_id[n];
 		drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	}
 
 	arg.flags = mode;
 	igt_fork(child, num_children) {
@@ -82,7 +83,7 @@ static void stress(struct data *data,
 
 		state ^= child;
 		igt_until_timeout(timeout) {
-			arg.crtc_id = r->crtcs[hars_petruska_f54_1_random() % r->count_crtcs];
+			arg.crtc_id = crtc_id[hars_petruska_f54_1_random() % num_crtcs];
 			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 			count++;
 		}
@@ -111,7 +112,6 @@ static void stress(struct data *data,
 	}
 
 	gem_close(data->fd, arg.handle);
-	drmModeFreeResources(r);
 	munmap(results, 4096);
 }
 
@@ -125,18 +125,50 @@ igt_main
 	igt_fixture {
 		data.fd = drm_open_driver_master(DRIVER_INTEL);
 		kmstest_set_vt_graphics_mode();
+
+		data.resources = drmModeGetResources(data.fd);
+		igt_assert(data.resources);
 	}
 
-	igt_subtest("single-bo")
-		stress(&data, 1, DRM_MODE_CURSOR_BO, 20);
-	igt_subtest("single-move")
-		stress(&data, 1, DRM_MODE_CURSOR_MOVE, 20);
+	igt_subtest_group {
+		for (int n = 0; n < 26; n++) {
+			uint32_t *crtcs = &data.resources->crtcs[n];
 
-	igt_subtest("forked-bo")
-		stress(&data, ncpus, DRM_MODE_CURSOR_BO, 20);
-	igt_subtest("forked-move")
-		stress(&data, ncpus, DRM_MODE_CURSOR_MOVE, 20);
+			errno = 0;
+			igt_fixture
+				igt_skip_on(n >= data.resources->count_crtcs);
+
+			igt_subtest_f("single-%c-bo", 'A' + n)
+				stress(&data, crtcs, 1, 1, DRM_MODE_CURSOR_BO, 20);
+			igt_subtest_f("single-%c-move", 'A' + n)
+				stress(&data, crtcs, 1, 1, DRM_MODE_CURSOR_MOVE, 20);
+
+			igt_subtest_f("forked-%c-bo", 'A' + n)
+				stress(&data, crtcs, 1, ncpus, DRM_MODE_CURSOR_BO, 20);
+			igt_subtest_f("forked-%c-move", 'A' + n)
+				stress(&data, crtcs, 1, ncpus, DRM_MODE_CURSOR_MOVE, 20);
+		}
+	}
+
+	igt_subtest("single-all-bo")
+		stress(&data,
+		       data.resources->crtcs, data.resources->count_crtcs,
+		       1, DRM_MODE_CURSOR_BO, 20);
+	igt_subtest("single-all-move")
+		stress(&data,
+		       data.resources->crtcs, data.resources->count_crtcs,
+		       1, DRM_MODE_CURSOR_MOVE, 20);
+
+	igt_subtest("forked-all-bo")
+		stress(&data,
+		       data.resources->crtcs, data.resources->count_crtcs,
+		       ncpus, DRM_MODE_CURSOR_BO, 20);
+	igt_subtest("forked-all-move")
+		stress(&data,
+		       data.resources->crtcs, data.resources->count_crtcs,
+		       ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
 	igt_fixture {
+		drmModeFreeResources(data.resources);
 	}
 }
