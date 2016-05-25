@@ -132,11 +132,13 @@ igt_main
 
 	igt_subtest_group {
 		for (int n = 0; n < 26; n++) {
-			uint32_t *crtcs = &data.resources->crtcs[n];
+			uint32_t *crtcs = NULL;
 
 			errno = 0;
-			igt_fixture
+			igt_fixture {
 				igt_skip_on(n >= data.resources->count_crtcs);
+				crtcs = &data.resources->crtcs[n];
+			}
 
 			igt_subtest_f("single-%c-bo", 'A' + n)
 				stress(&data, crtcs, 1, 1, DRM_MODE_CURSOR_BO, 20);
