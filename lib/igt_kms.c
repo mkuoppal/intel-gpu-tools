@@ -48,10 +48,12 @@
 #include "igt_aux.h"
 #include "intel_chipset.h"
 #include "igt_debugfs.h"
+#include "igt_sysfs.h"
 
 /* list of connectors that need resetting on exit */
 #define MAX_CONNECTORS 32
 static char *forced_connectors[MAX_CONNECTORS + 1];
+static int forced_connectors_device[MAX_CONNECTORS + 1];
 
 static void update_edid_csum(unsigned char *edid)
 {
@@ -596,9 +598,9 @@ bool kmstest_force_connector(int drm_fd, drmModeConnector *connector,
 {
 	char *path, **tmp;
 	const char *value;
-	int debugfs_fd, ret, len;
 	drmModeConnector *temp;
 	uint32_t devid;
+	int len, dir, idx;
 
 	devid = intel_get_drm_devid(drm_fd);
 
@@ -615,7 +617,7 @@ bool kmstest_force_connector(int drm_fd, drmModeConnector *connector,
 		value = "on";
 		break;
 	case FORCE_CONNECTOR_DIGITAL:
-		value = "digital";
+		value = "on-digital";
 		break;
 	case FORCE_CONNECTOR_OFF:
 		value = "off";
@@ -623,20 +625,26 @@ bool kmstest_force_connector(int drm_fd, drmModeConnector *connector,
 
 	default:
 	case FORCE_CONNECTOR_UNSPECIFIED:
-		value = "unspecified";
+		value = "detect";
 		break;
 	}
 
-	igt_assert_neq(asprintf(&path, "%s-%d/force", kmstest_connector_type_str(connector->connector_type), connector->connector_type_id),
-		       -1);
-	debugfs_fd = igt_debugfs_open(path, O_WRONLY | O_TRUNC);
+	dir = igt_sysfs_open(drm_fd, &idx);
+	if (dir < 0)
+		return false;
 
-	if (debugfs_fd == -1) {
+	if (asprintf(&path, "card%d-%s-%d/status",
+		     idx,
+		     kmstest_connector_type_str(connector->connector_type),
+		     connector->connector_type_id) < 0) {
+		close(dir);
 		return false;
 	}
 
-	ret = write(debugfs_fd, value, strlen(value));
-	close(debugfs_fd);
+	if (!igt_sysfs_set(drm_fd, path, value)) {
+		close(dir);
+		return false;
+	}
 
 	for (len = 0, tmp = forced_connectors; *tmp; tmp++) {
 		/* check the connector is not already present */
@@ -647,8 +655,10 @@ bool kmstest_force_connector(int drm_fd, drmModeConnector *connector,
 		len++;
 	}
 
-	if (len != -1 && len < MAX_CONNECTORS)
+	if (len != -1 && len < MAX_CONNECTORS) {
 		forced_connectors[len] = path;
+		forced_connectors_device[len] = dir;
+	}
 
 	if (len >= MAX_CONNECTORS)
 		igt_warn("Connector limit reached, %s will not be reset\n",
@@ -669,8 +679,7 @@ bool kmstest_force_connector(int drm_fd, drmModeConnector *connector,
 	temp = drmModeGetConnector(drm_fd, connector->connector_id);
 	drmModeFreeConnector(temp);
 
-	igt_assert(ret != -1);
-	return (ret == -1) ? false : true;
+	return true;
 }
 
 /**
@@ -2543,14 +2552,10 @@ void igt_enable_connectors(void)
  */
 void igt_reset_connectors(void)
 {
-	char **tmp;
-
 	/* reset the connectors stored in forced_connectors, avoiding any
 	 * functions that are not safe to call in signal handlers */
-
-	for (tmp = forced_connectors; *tmp; tmp++) {
-		int fd = igt_debugfs_open(*tmp, O_WRONLY | O_TRUNC);
-		igt_assert(write(fd, "unspecified", 11) == 11);
-		close(fd);
-	}
+	for (int i = 0; forced_connectors[i]; i++)
+		igt_sysfs_set(forced_connectors_device[i],
+			      forced_connectors[i],
+			      "detect");
 }
