@@ -842,8 +842,8 @@ FILE *__igt_fopen_data(const char* igt_srcdir, const char* igt_datadir,
  * igt_fopen_data:
  * @filename: filename to open.
  *
- * Open a datafile for test, first try from installation directory
- * then from build directory.
+ * Open a datafile for test, first try from installation directory,
+ * then from build directory, and finally from current directory.
  */
 #define igt_fopen_data(filename) \
 	__igt_fopen_data(IGT_SRCDIR, IGT_DATADIR, filename)
