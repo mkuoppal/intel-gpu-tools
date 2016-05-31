@@ -22,7 +22,7 @@
 
 AC_PREREQ([2.60])
 AC_INIT([intel-gpu-tools],
-	[1.14],
+	[1.15],
 	[https://bugs.freedesktop.org/enter_bug.cgi?product=DRI&component=DRM/Intel],
 	[intel-gpu-tools])
 
@@ -322,7 +322,7 @@ echo "       Overlay            : X: ${enable_overlay_xlib}, Xv: ${enable_overla
 echo "       x86-specific tools : ${build_x86}"
 echo ""
 echo " • API-Documentation      : ${enable_gtk_doc}"
-echo " • Fail on warnings:      : ${enable_werror}"
+echo " • Fail on warnings       : ${enable_werror}"
 echo ""
 
 # vim: set ft=config ts=8 sw=8 tw=0 noet :

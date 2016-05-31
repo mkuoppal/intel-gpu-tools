@@ -1,33 +1,81 @@
-Release 1.15 (XXXX-XX-XX)
+Release 1.15 (2016-05-31)
 -------------------------
 
-- prime_mmap_kms: show case dma-buf new API and processes restrictions
-(Tiago Vignatti)
+- New KMS test: tests/kms_cursor_legacy (Stress legacy cursor ioctl)
+(Chris Wilson)
+
+- Several GEM tests have been removed from BAT: tests/gem_exec_whisper,
+tests/gem_sync (dropped individual engines), test/gem_cs_prefetch (replaced
+by test/gem_exec_gttfill), tests/gem_ctx_param_basic (got relabeled
+to tests/gem_ctx_param) (Chris Wilson)
+
+- build: Skip configure step if is NOCONFIGURE set (Tomeu Vizoso)
+
+- tools/intel_bios_reader: Added options for dumping individual panels, specific
+section, hex format and other various fixes (Jani Nikula)
+
+- build: Add optional --enable-werror
+(hard-fail in case of compiler warnings) (Marius Vlad)
+
+- New KMS test: tests/prime_mmap_kms (show case dma-buf new API
+and processes restrictions) (Tiago Vignatti)
+
+- Several tests have gained to ability to be run on different platforms
+than Intel: tests/testdisplay (Tomeu Vizoso), tests/kms_panel_fitting
+(Robert Foss), tests/kms_flip_event_leak, tests/kms_flip (Tomeu Vizoso).
 
 - compute exitcode first: In the case of running multiple subtests which all
 happen to be skipped, igt_exitcode is 0, but the final exit code will be 77.
 (Chris Wilson)
 
-- Shorten basic tests (Tvrtko Ursulin)
+- Shorten tests/kms_flip test (Tvrtko Ursulin)
 
 - Half the timeout for suspend to RAM and a third for suspend to disk
 (Marius Vlad)
 
 - lib: Pass format instead of bpp to create_bo_for_fb (Ville Syrjälä)
 
-- Removed from tests/test-list.txt, tests/gem_concurrent_all/blt and added 
+- Removed from tests/test-list.txt, tests/gem_concurrent_all and added
 tests/test-list-full.txt that contains all the tests. This will speed
 up considerably piglit when starting tests. (Gabriel Feceoru)
 
 - piglit changed its behaviour to prevent overwriting the results. A fairly new
 version of piglit is required to run i-g-t tests. (Gabriel Feceoru)
 
-- Added COMMIT_ATOMIC (lib/igt_kms, w/ test kms_rotation_crc).
+- lib: Replace drmIoctl() with a layer of indirection (Chris Wilson)
+
+- Adding missing Broxton PCI IDs (Rodrigo Vivi)
+
+- Added COMMIT_ATOMIC (lib/igt_kms, w/ tests/kms_rotation_crc).
 Requires nuclear_pageflip parameter turned on in the i915 driver.
 (Mayuresh Gharpure, Pratik Vishwakarma)
 
+- man/: rewrite manual pages in reStructuredText (Jani Nikula)
+
+- tests/drv_module_reload_basic: perform fault injection (Chris Wilson)
+with various improvements (Imre Deak)
+
+- Removed tests/gem_multi_bsd_sync_loop which was superseded by
+tests/gem_ring_sync_loop and tests/gem_dummy_reloc_loop by
+tests/gem_exec_reloc (Chris Wilson)
+
+- New GEM tests: tests/gem_exec_whisper, tests/gem_exec_store,
+test/gem_exec_gttfill, tests/gem_exec_suspend, tests/gem_exec_flush
+(Chris Wilson)
+
+- New benchmarks: benchmarks/gem_syslatency, benchmarks/gem_exec_fault
+(Chris Wilson)
+
+- tests/gem_exec_nop included in BAT (Chris Wilson)
+
+- tests/pm_rpm: Fix crash on machines that lack LLC (David Weinehall)
+
+- lib/igt_fb: Fix domain tracking for GTT cairo surfaces (Chris Wilson)
+
 - Add igt_subtest_group to allow igt_fixture for only a subset of subtests
-  without skipping/failing all subsequent subtests. (Daniel Vetter)
+without skipping/failing all subsequent subtests. (Daniel Vetter)
+
+- Many more fixes and improvements.
 
 Release 1.14 (2016-03-01)
 -------------------------
