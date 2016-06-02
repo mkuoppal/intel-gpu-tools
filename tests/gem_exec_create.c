@@ -101,6 +101,7 @@ static void all(int fd, unsigned flags, int timeout, int ncpus)
 	gem_sync(fd, obj.handle);
 	gem_close(fd, obj.handle);
 
+	intel_detect_and_clear_missed_interrupts(fd);
 	igt_fork(child, ncpus) {
 		struct timespec start, now;
 		unsigned long count;
@@ -141,6 +142,7 @@ static void all(int fd, unsigned flags, int timeout, int ncpus)
 			 child, nengine, count, 1e6*time);
 	}
 	igt_waitchildren();
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 igt_main

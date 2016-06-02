@@ -225,6 +225,7 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 		gem_write(fd, batches[n].handle, 0, batch, sizeof(batch));
 	}
 
+	intel_detect_and_clear_missed_interrupts(fd);
 	igt_while_interruptible(flags & INTERRUPTIBLE) {
 		for (pass = 0; pass < 1024; pass++) {
 			uint64_t offset;
@@ -346,6 +347,7 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 	igt_info("Number of migrations for reloc: %d, interrupted %d, patched %d\n", reloc_migrations, reloc_interruptions, relocations);
 
 	check_bo(fd, scratch.handle);
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 	gem_close(fd, scratch.handle);
 	gem_close(fd, store.handle);
 

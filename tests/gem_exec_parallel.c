@@ -218,6 +218,7 @@ static void all(int fd, unsigned engine, unsigned flags)
 	threads = calloc(1024, sizeof(struct thread));
 	igt_assert(threads);
 
+	intel_detect_and_clear_missed_interrupts(fd);
 	pthread_mutex_init(&mutex, 0);
 	pthread_cond_init(&cond, 0);
 	go = 0;
@@ -249,6 +250,7 @@ static void all(int fd, unsigned engine, unsigned flags)
 		gem_close(fd, handle[i]);
 	}
 
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 	free(threads);
 }
 

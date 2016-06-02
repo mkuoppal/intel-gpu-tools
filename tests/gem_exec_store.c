@@ -48,6 +48,7 @@ static void store_dword(int fd, unsigned ring)
 	igt_skip_on_f(gen == 6 && (ring & ~(3<<13)) == I915_EXEC_BSD,
 		      "MI_STORE_DATA broken on gen6 bsd\n");
 
+	intel_detect_and_clear_missed_interrupts(fd);
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 2;
@@ -91,6 +92,7 @@ static void store_dword(int fd, unsigned ring)
 	gem_read(fd, obj[0].handle, 0, batch, sizeof(batch));
 	gem_close(fd, obj[0].handle);
 	igt_assert_eq(*batch, 0xc0ffee);
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 static void store_all(int fd)
@@ -136,6 +138,7 @@ static void store_all(int fd)
 	batch[++i] = MI_BATCH_BUFFER_END;
 
 	nengine = 0;
+	intel_detect_and_clear_missed_interrupts(fd);
 	for_each_engine(fd, engine) {
 		if (gen == 6 && (engine & ~(3<<13)) == I915_EXEC_BSD)
 			continue;
@@ -202,6 +205,7 @@ static void store_all(int fd)
 
 	for (i = 0; i < nengine; i++)
 		igt_assert_eq_u32(engines[i], i);
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 igt_main

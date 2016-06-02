@@ -306,6 +306,7 @@ static void batch(int fd, unsigned ring, int nchild, int timeout,
 		igt_require(cmdparser > 0);
 	}
 
+	intel_detect_and_clear_missed_interrupts(fd);
 	igt_fork(child, nchild) {
 		const uint32_t bbe = MI_BATCH_BUFFER_END;
 		struct drm_i915_gem_exec_object2 obj[2];
@@ -471,6 +472,7 @@ static void batch(int fd, unsigned ring, int nchild, int timeout,
 		gem_close(fd, obj[0].handle);
 	}
 	igt_waitchildren();
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 static const char *yesno(bool x)
