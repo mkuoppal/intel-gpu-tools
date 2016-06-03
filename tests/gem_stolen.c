@@ -290,6 +290,98 @@ static void stolen_fill_purge_test(int fd)
 		gem_close(fd, handle[i]);
 }
 
+static void stolen_hibernate(int fd)
+{
+	drm_intel_bo *bo;
+	drm_intel_bo *src, *dest;
+	int obj_count = 0, i = 0;
+	int ret, j;
+	uint32_t handle[MAX_OBJECTS], src_handle;
+	uint32_t *virt;
+
+	gem_require_stolen_support(fd);
+
+	src_handle = gem_create(fd, SIZE);
+	src = gem_handle_to_libdrm_bo(bufmgr, fd,
+				     "bo", src_handle);
+	igt_assert(src != NULL);
+
+	ret = drm_intel_gem_bo_map_gtt(src);
+	igt_assert_eq(ret, 0);
+
+	virt = src->virtual;
+	for (j = 0; j < SIZE/DWORD_SIZE; j++) {
+		igt_assert_eq(virt[j], 0);
+		virt[j] = j;
+	}
+
+	drm_intel_bo_unmap(src);
+	/* Exhaust Stolen space */
+	for (i = 0; i < MAX_OBJECTS; i++) {
+		handle[i] = __gem_create_stolen(fd, SIZE);
+		if (!handle[i])
+			break;
+
+		bo = gem_handle_to_libdrm_bo(bufmgr, fd,
+					     "verify_bo", handle[i]);
+		igt_assert(bo != NULL);
+		ret = drm_intel_gem_bo_map_gtt(bo);
+		igt_assert_eq(ret, 0);
+
+		virt = bo->virtual;
+		for (j = 0; j < SIZE/DWORD_SIZE; j++)
+			igt_assert_eq(virt[j], 0);
+
+		drm_intel_bo_unmap(bo);
+		drm_intel_bo_unreference(bo);
+
+		obj_count++;
+	}
+
+	/* Assert if atleast one object is allocated from stolen, that
+	 * is good enough to verify the content preservation across
+	 * hibernation.
+	 */
+	igt_assert(obj_count > 0);
+
+	/* Copy data to all stolen backed objects */
+	for (i = 0; i < obj_count; i++) {
+		dest = gem_handle_to_libdrm_bo(bufmgr, fd,
+					       "dst_bo", handle[i]);
+		igt_assert(dest != NULL);
+		/* Copy contents to stolen backed objects via blt and
+		 * verify post-hibernation, this also helps in identifying
+		 * that the operation was completed before going to
+		 * hibernation.
+		 */
+		intel_copy_bo(batch, dest, src, SIZE);
+	}
+
+	drm_intel_bo_unreference(src);
+
+	igt_system_hibernate_autoresume();
+	/* Check if the object's memory contents are intact
+	 * across hibernation.
+	 */
+	for (i = 0; i < obj_count; i++) {
+		bo = gem_handle_to_libdrm_bo(bufmgr, fd,
+					     "verify_bo", handle[i]);
+		igt_assert(bo != NULL);
+		ret = drm_intel_gem_bo_map_gtt(bo);
+		igt_assert_eq(ret, 0);
+		virt = bo->virtual;
+		for (j = 0; j < SIZE/DWORD_SIZE; j++)
+			igt_assert_eq(virt[j], j);
+
+		drm_intel_bo_unmap(bo);
+		drm_intel_bo_unreference(bo);
+	}
+
+	gem_close(fd, src_handle);
+	for (i = 0; i < obj_count; i++)
+		gem_close(fd, handle[i]);
+}
+
 static void
 stolen_no_mmap(int fd)
 {
@@ -352,6 +444,9 @@ igt_main
 	 */
 	igt_subtest("stolen-fill-purge")
 		stolen_fill_purge_test(fd);
+
+	igt_subtest("stolen-hibernate")
+		stolen_hibernate(fd);
 
 	igt_fixture {
 		intel_batchbuffer_free(batch);
