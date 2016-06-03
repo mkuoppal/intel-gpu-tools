@@ -392,7 +392,7 @@ stolen_no_mmap(int fd)
 
 	handle = gem_create_stolen(fd, SIZE);
 
-	addr = gem_mmap__cpu(fd, handle, 0, SIZE, PROT_READ | PROT_WRITE);
+	addr = __gem_mmap__cpu(fd, handle, 0, SIZE, PROT_READ | PROT_WRITE);
 	igt_assert(addr == NULL);
 
 	gem_close(fd, handle);
