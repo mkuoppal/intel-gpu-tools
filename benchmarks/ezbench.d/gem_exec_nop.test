@@ -2,17 +2,28 @@
 sudo -n true || return 1
 
 for ring in rcs bcs vcs vecs all; do
-    name="gem:exec:nop:$ring:single"
+while read label mode; do
+    name="gem:exec:$label:$ring:single"
     test_name="$test_name $name"
-    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop -s -e $ring -r \$1 ; }"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop $mode -s -e $ring -r \$1 ; }"
 
-    name="gem:exec:nop:$ring:forked"
+    name="gem:exec:$label:$ring:single:forked"
     test_name="$test_name $name"
-    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop -f -s -e $ring -r \$1 ; }"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop $mode -f -s -e $ring -r \$1 ; }"
 
-    name="gem:exec:nop:$ring:continuous"
+    name="gem:exec:$label:$ring:continuous"
     test_name="$test_name $name"
-    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop -e $ring -r \$1 ; }"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop $mode -e $ring -r \$1 ; }"
+
+    name="gem:exec:$label:$ring:continuous:forked"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_exec_nop $mode -f -e $ring -r \$1 ; }"
+done<<MODES
+nop
+write		-W
+read		-R
+rw		-R -W
+MODES
 done
 
 test_exec_time=3

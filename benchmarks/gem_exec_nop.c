@@ -53,6 +53,8 @@
 #define ENGINE_FLAGS  (I915_EXEC_RING_MASK | LOCAL_I915_EXEC_BSD_MASK)
 
 #define SYNC 0x1
+#define WRITE 0x2
+#define READ_ALL 0x4
 
 static double elapsed(const struct timespec *start,
 		      const struct timespec *end)
@@ -62,16 +64,18 @@ static double elapsed(const struct timespec *start,
 
 static uint32_t batch(int fd)
 {
-	const uint32_t buf[] = {MI_BATCH_BUFFER_END};
+	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	uint32_t handle = gem_create(fd, 4096);
-	gem_write(fd, handle, 0, buf, sizeof(buf));
+	gem_write(fd, handle, 0, &bbe, sizeof(bbe));
 	return handle;
 }
 
 static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_exec_object2 obj[2];
+	unsigned all_engines[16];
+	unsigned all_nengine;
 	unsigned engines[16];
 	unsigned nengine;
 	double *shared;
@@ -81,12 +85,15 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 
 	fd = drm_open_driver(DRIVER_INTEL);
 
-	memset(&obj, 0, sizeof(obj));
-	obj.handle = batch(fd);
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = gem_create(fd, 4096);
+	if (flags & WRITE)
+		obj[0].flags = EXEC_OBJECT_WRITE;
+	obj[1].handle = batch(fd);
 
 	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)&obj;
-	execbuf.buffer_count = 1;
+	execbuf.buffers_ptr = (uintptr_t)obj;
+	execbuf.buffer_count = 2;
 	execbuf.flags |= LOCAL_I915_EXEC_HANDLE_LUT;
 	execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
 	if (__gem_execbuf(fd, &execbuf)) {
@@ -95,47 +102,67 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 			return 77;
 	}
 
-	nengine = 0;
+	if (flags & WRITE && !(execbuf.flags & LOCAL_I915_EXEC_HANDLE_LUT))
+		return 77;
+
+	all_nengine = 0;
+	for (ring = 1; ring < 16; ring++) {
+		execbuf.flags &= ~ENGINE_FLAGS;
+		execbuf.flags |= ring;
+		if (__gem_execbuf(fd, &execbuf) == 0)
+			all_engines[all_nengine++] = ring;
+	}
+
 	if (ring == -1) {
-		for (ring = 1; ring < 16; ring++) {
-			execbuf.flags &= ~ENGINE_FLAGS;
-			execbuf.flags |= ring;
-			if (__gem_execbuf(fd, &execbuf) == 0)
-				engines[nengine++] = ring;
-		}
-	} else
-		engines[nengine++] = ring;
+		nengine = all_nengine;
+		memcpy(engines, all_engines, all_nengine*sizeof(engines[0]));
+	} else {
+		nengine = 1;
+		engines[0] = ring;
+	}
 
 	while (reps--) {
 		memset(shared, 0, 4096);
 
-		gem_set_domain(fd, obj.handle, I915_GEM_DOMAIN_GTT, 0);
+		gem_set_domain(fd, obj[1].handle, I915_GEM_DOMAIN_GTT, 0);
 		sleep(1); /* wait for the hw to go back to sleep */
 
 		igt_fork(child, ncpus) {
 			struct timespec start, end;
 			unsigned count = 0;
 
-			obj.handle = batch(fd);
+			obj[0].handle = gem_create(fd, 4096);
+			obj[1].handle = batch(fd);
 
 			clock_gettime(CLOCK_MONOTONIC, &start);
 			do {
 				for (int inner = 0; inner < 1024; inner++) {
+					if (flags & READ_ALL) {
+						obj[0].flags = 0;
+						for (int n = 0; n < all_nengine; n++) {
+							execbuf.flags &= ~ENGINE_FLAGS;
+							execbuf.flags |= all_engines[n];
+							gem_execbuf(fd, &execbuf);
+						}
+						if (flags & WRITE)
+							obj[0].flags = EXEC_OBJECT_WRITE;
+					}
 					execbuf.flags &= ~ENGINE_FLAGS;
 					execbuf.flags |= engines[count++ % nengine];
 					gem_execbuf(fd, &execbuf);
 					if (flags & SYNC)
-						gem_sync(fd, obj.handle);
+						gem_sync(fd, obj[1].handle);
 				}
 
 				clock_gettime(CLOCK_MONOTONIC, &end);
 			} while (elapsed(&start, &end) < 2.);
 
-			gem_sync(fd, obj.handle);
+			gem_sync(fd, obj[1].handle);
 			clock_gettime(CLOCK_MONOTONIC, &end);
 			shared[child] = 1e6*elapsed(&start, &end) / count;
 
-			gem_close(fd, obj.handle);
+			gem_close(fd, obj[1].handle);
+			gem_close(fd, obj[0].handle);
 		}
 		igt_waitchildren();
 
@@ -143,11 +170,14 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 			shared[ncpus] += shared[child];
 		printf("%7.3f\n", shared[ncpus] / ncpus);
 
+		obj[0].flags = 0;
 		for (int n = 0; n < nengine; n++) {
 			execbuf.flags &= ~ENGINE_FLAGS;
 			execbuf.flags |= engines[n];
 			gem_execbuf(fd, &execbuf);
 		}
+		if (flags & WRITE)
+			obj[0].flags = EXEC_OBJECT_WRITE;
 	}
 	return 0;
 }
@@ -189,6 +219,14 @@ int main(int argc, char **argv)
 
 		case 's':
 			flags |= SYNC;
+			break;
+
+		case 'W':
+			flags |= WRITE;
+			break;
+
+		case 'A':
+			flags |= READ_ALL;
 			break;
 
 		default:
