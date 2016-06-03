@@ -641,7 +641,7 @@ bool kmstest_force_connector(int drm_fd, drmModeConnector *connector,
 		return false;
 	}
 
-	if (!igt_sysfs_set(drm_fd, path, value)) {
+	if (!igt_sysfs_set(dir, path, value)) {
 		close(dir);
 		return false;
 	}
