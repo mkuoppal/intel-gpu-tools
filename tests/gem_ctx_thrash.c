@@ -41,7 +41,23 @@ static void xchg_int(void *array, unsigned i, unsigned j)
 	igt_swap(A[i], A[j]);
 }
 
-static unsigned get_num_contexts(int fd)
+static bool has_execlists(void)
+{
+	FILE *file;
+	bool enabled = false;
+
+	file = fopen("/sys/module/i915/parameters/enable_execlists", "r");
+	if (file) {
+		int value;
+		if (fscanf(file, "%d", &value) == 1)
+			enabled = value != 0;
+		fclose(file);
+	}
+
+	return enabled;
+}
+
+static unsigned get_num_contexts(int fd, int num_engines)
 {
 	uint64_t ggtt_size;
 	unsigned size;
@@ -49,7 +65,13 @@ static unsigned get_num_contexts(int fd)
 
 	/* Compute the number of contexts we can allocate to fill the GGTT */
 	ggtt_size = gem_global_aperture_size(fd);
+
 	size = 64 << 10; /* Most gen require at least 64k for ctx */
+	if (has_execlists()) {
+		size *= 2; /* ringbuffer as well */
+		if (num_engines) /* one per engine with execlists */
+			size *= num_engines;
+	}
 
 	count = 3 * (ggtt_size / size) / 2;
 	igt_info("Creating %lld contexts (assuming of size %lld)\n",
@@ -95,7 +117,6 @@ static void single(const char *name, bool all_engines)
 
 	fd = drm_open_driver_master(DRIVER_INTEL);
 	gen = intel_gen(intel_get_drm_devid(fd));
-	num_ctx = get_num_contexts(fd);
 
 	num_engines = 0;
 	if (all_engines) {
@@ -120,6 +141,8 @@ static void single(const char *name, bool all_engines)
 		}
 	} else
 		engines[num_engines++] = 0;
+
+	num_ctx = get_num_contexts(fd, num_engines);
 
 	size = ALIGN(num_ctx * sizeof(uint32_t), 4096);
 	scratch = gem_create(fd, ALIGN(num_ctx * sizeof(uint32_t), 4096));
@@ -218,7 +241,6 @@ static void processes(void)
 	int fd, *fds;
 
 	fd = drm_open_driver(DRIVER_INTEL);
-	num_ctx = get_num_contexts(fd);
 
 	num_engines = 0;
 	for (e = intel_execution_engines; e->name; e++) {
@@ -238,6 +260,8 @@ static void processes(void)
 		if (num_engines == ARRAY_SIZE(engines))
 			break;
 	}
+
+	num_ctx = get_num_contexts(fd, num_engines);
 
 	/* tweak rlimits to allow us to create this many files */
 	igt_assert(getrlimit(RLIMIT_NOFILE, &rlim) == 0);
@@ -337,7 +361,7 @@ static void threads(void)
 	struct thread data;
 
 	data.fd = drm_open_driver_render(DRIVER_INTEL);
-	data.num_ctx = get_num_contexts(data.fd);
+	data.num_ctx = get_num_contexts(data.fd, false);
 	data.all_ctx = malloc(data.num_ctx * sizeof(uint32_t));
 	igt_assert(data.all_ctx);
 	for (unsigned n = 0; n < data.num_ctx; n++)
