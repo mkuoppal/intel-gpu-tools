@@ -52,7 +52,14 @@ static void stress(struct data *data,
 {
 	struct drm_mode_cursor arg;
 	uint64_t *results;
+	bool torture;
 	int n;
+
+	torture = false;
+	if (num_children < 0) {
+		torture = true;
+		num_children = -num_children;
+	}
 
 	results = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(results != MAP_FAILED);
@@ -90,6 +97,24 @@ static void stress(struct data *data,
 
 		igt_debug("[%d] count=%lu\n", child, count);
 		results[child] = count;
+	}
+	if (torture) {
+		igt_fork(child, num_children) {
+			struct sched_param rt = {.sched_priority = 1 };
+			cpu_set_t allowed;
+			unsigned long long count = 0;
+
+			sched_setscheduler(getpid(), SCHED_RR, &rt);
+
+			CPU_ZERO(&allowed);
+			CPU_SET(child, &allowed);
+			sched_setaffinity(getpid(), sizeof(cpu_set_t), &allowed);
+			igt_until_timeout(timeout) {
+				count++;
+				__builtin_ia32_pause();
+			}
+			igt_debug("[hog:%d] count=%llu\n", child, count);
+		}
 	}
 	igt_waitchildren();
 
@@ -149,6 +174,11 @@ igt_main
 				stress(&data, crtcs, 1, ncpus, DRM_MODE_CURSOR_BO, 20);
 			igt_subtest_f("forked-%c-move", 'A' + n)
 				stress(&data, crtcs, 1, ncpus, DRM_MODE_CURSOR_MOVE, 20);
+
+			igt_subtest_f("torture-%c-bo", 'A' + n)
+				stress(&data, crtcs, 1, -ncpus, DRM_MODE_CURSOR_BO, 20);
+			igt_subtest_f("torture-%c-move", 'A' + n)
+				stress(&data, crtcs, 1, -ncpus, DRM_MODE_CURSOR_MOVE, 20);
 		}
 	}
 
@@ -169,6 +199,15 @@ igt_main
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       ncpus, DRM_MODE_CURSOR_MOVE, 20);
+
+	igt_subtest("torture-all-bo")
+		stress(&data,
+		       data.resources->crtcs, data.resources->count_crtcs,
+		       -ncpus, DRM_MODE_CURSOR_BO, 20);
+	igt_subtest("torture-all-move")
+		stress(&data,
+		       data.resources->crtcs, data.resources->count_crtcs,
+		       -ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
 	igt_fixture {
 		drmModeFreeResources(data.resources);
