@@ -113,6 +113,7 @@ static bool ignore_engine(int gen, unsigned engine)
 #define CONTEXTS 0x1
 #define FDS 0x2
 #define INTERRUPTIBLE 0x4
+#define CHAIN 0x8
 
 static void whisper(int fd, unsigned engine, unsigned flags)
 {
@@ -232,6 +233,11 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 
 			write_seqno(pass);
 
+			if (flags & CHAIN) {
+				execbuf.flags &= ~ENGINE_MASK;
+				execbuf.flags |= engines[rand() % nengine];
+			}
+
 			reloc.presumed_offset = scratch.offset;
 			reloc.delta = 4*pass;
 			offset = reloc.presumed_offset + reloc.delta;
@@ -283,8 +289,10 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 							 gem_flink(fd, handle[1]));
 				}
 
-				execbuf.flags &= ~ENGINE_MASK;
-				execbuf.flags |= engines[rand() % nengine];
+				if (!(flags & CHAIN)) {
+					execbuf.flags &= ~ENGINE_MASK;
+					execbuf.flags |= engines[rand() % nengine];
+				}
 				if (flags & CONTEXTS)
 					execbuf.rsvd1 = contexts[rand() % 64];
 				gem_execbuf(this_fd, &execbuf);
@@ -371,10 +379,13 @@ igt_main
 	} modes[] = {
 		{ "normal", 0 },
 		{ "interruptible", INTERRUPTIBLE },
+		{ "chain", CHAIN },
 		{ "contexts", CONTEXTS },
 		{ "contexts-interruptible", CONTEXTS | INTERRUPTIBLE},
+		{ "contexts-chain", CONTEXTS | CHAIN },
 		{ "fds", FDS },
 		{ "fds-interruptible", FDS | INTERRUPTIBLE},
+		{ "fds-chain", FDS | CHAIN},
 		{ NULL }
 	};
 	int fd;
@@ -390,9 +401,13 @@ igt_main
 
 	for (const struct intel_execution_engine *e = intel_execution_engines;
 	     e->name; e++) {
-		for (const struct mode *m = modes; m->name; m++)
+		for (const struct mode *m = modes; m->name; m++) {
+			if (m->flags & CHAIN)
+				continue;
+
 			igt_subtest_f("%s-%s", e->name, m->name)
 				whisper(fd, e->exec_id | e->flags, m->flags);
+		}
 	}
 
 	igt_stop_hang_detector();
