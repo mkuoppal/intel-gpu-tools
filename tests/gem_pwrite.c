@@ -280,6 +280,7 @@ int main(int argc, char **argv)
 	}
 
 	igt_subtest("stolen-normal") {
+		gem_require_stolen_support(fd);
 		for (count = 1; count <= 1<<17; count <<= 1) {
 			struct timeval start, end;
 
@@ -297,6 +298,7 @@ int main(int argc, char **argv)
 
 	for (c = cache; c->level != -1; c++) {
 		igt_subtest_f("stolen-%s", c->name) {
+			gem_require_stolen_support(fd);
 			gem_set_caching(fd, dst, c->level);
 			for (count = 1; count <= 1<<17; count <<= 1) {
 				struct timeval start, end;

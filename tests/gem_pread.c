@@ -152,6 +152,7 @@ int main(int argc, char **argv)
 	}
 
 	igt_subtest("stolen-normal") {
+		gem_require_stolen_support(fd);
 		for (count = 1; count <= 1<<17; count <<= 1) {
 			struct timeval start, end;
 
@@ -167,6 +168,7 @@ int main(int argc, char **argv)
 	}
 	for (c = cache; c->level != -1; c++) {
 		igt_subtest_f("stolen-%s", c->name) {
+			gem_require_stolen_support(fd);
 			gem_set_caching(fd, src_stolen, c->level);
 
 			for (count = 1; count <= 1<<17; count <<= 1) {
@@ -190,6 +192,7 @@ int main(int argc, char **argv)
 	 * user space buffer
 	 */
 	igt_subtest("pagefault-pread") {
+		gem_require_stolen_support(fd);
 		large_stolen = gem_create_stolen(fd, LARGE_OBJECT_SIZE);
 		stolen_nopf_user = (uint32_t *) mmap(NULL, LARGE_OBJECT_SIZE,
 						PROT_WRITE,

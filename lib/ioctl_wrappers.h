@@ -94,7 +94,8 @@ void *__gem_mmap__wc(int fd, uint32_t handle, uint64_t offset, uint64_t size, un
  * memory is available. Automatically skips through igt_require() if not.
  */
 #define gem_require_stolen_support(fd) \
-			igt_require(gem_create__has_stolen_support(fd))
+			igt_require(gem_create__has_stolen_support(fd) && \
+				    (gem_total_stolen_size(fd) > 0))
 
 /**
  * gem_require_mmap_wc:
@@ -153,6 +154,8 @@ int gem_gtt_type(int fd);
 bool gem_uses_ppgtt(int fd);
 bool gem_uses_full_ppgtt(int fd);
 int gem_available_fences(int fd);
+uint64_t gem_total_mappable_size(int fd);
+uint64_t gem_total_stolen_size(int fd);
 uint64_t gem_available_aperture_size(int fd);
 uint64_t gem_aperture_size(int fd);
 uint64_t gem_global_aperture_size(int fd);
