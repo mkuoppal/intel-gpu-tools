@@ -28,6 +28,12 @@
 #include "igt.h"
 #include "igt_stats.h"
 
+#if defined(__x86_64__) || defined(__i386__)
+#define cpu_relax()	__builtin_ia32_pause()
+#else
+#define cpu_relax()	asm volatile("": : :"memory")
+#endif
+
 IGT_TEST_DESCRIPTION("Stress legacy cursor ioctl");
 
 struct data {
@@ -111,7 +117,7 @@ static void stress(struct data *data,
 			sched_setaffinity(getpid(), sizeof(cpu_set_t), &allowed);
 			igt_until_timeout(timeout) {
 				count++;
-				__builtin_ia32_pause();
+				cpu_relax();
 			}
 			igt_debug("[hog:%d] count=%llu\n", child, count);
 		}
