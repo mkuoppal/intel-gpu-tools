@@ -181,16 +181,31 @@ igt_hang_ring_t igt_hang_ctx(int fd,
 	exec.relocs_ptr = (uintptr_t)&reloc;
 
 	memset(b, 0xc5, sizeof(b));
-	b[0] = 0xffffffff;
+
+	/*
+	 * We emit invalid command to provoke a gpu hang.
+	 * If that doesn't work, we do bb start loop.
+	 * Note that the bb start aligment is illegal due this.
+	 * But hey, we are here to hang the gpu so whatever works.
+	 * We skip 0xfffffff on gen9 as it confuses hw in an such a way that
+	 * it will skip over the bb start, causing runaway head and
+	 * thus much slower hang detection.
+	 */
 	len = 2;
-	if (intel_gen(intel_get_drm_devid(fd)) >= 8)
+	if (intel_gen(intel_get_drm_devid(fd)) >= 8) {
+		b[0] = MI_NOOP;
 		len++;
+	} else {
+		b[0] = 0xffffffff;
+	}
+
 	b[1] = MI_BATCH_BUFFER_START | (len - 2);
 	b[1+len] = MI_BATCH_BUFFER_END;
 	b[2+len] = MI_NOOP;
 	gem_write(fd, exec.handle, 0, b, sizeof(b));
 
 	reloc.offset = 8;
+	reloc.delta = 4;
 	reloc.target_handle = exec.handle;
 	reloc.read_domains = I915_GEM_DOMAIN_COMMAND;
 
