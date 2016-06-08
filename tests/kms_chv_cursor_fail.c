@@ -163,9 +163,6 @@ static void test_edge_pos(data_t *data, int sx, int ex, int y, bool swap_axis)
 		}
 		igt_debug("\n");
 	}
-
-
-	igt_pipe_crc_start(data->pipe_crc);
 }
 
 static void test_edge(data_t *data, int sy, int ey, int sx, int ex, bool swap_axis)
