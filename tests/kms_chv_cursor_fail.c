@@ -109,24 +109,26 @@ static void cursor_move(data_t *data, int x, int y, int i)
 }
 
 #define XSTEP 8
-#define YSTEP 32
-#define XOFF 0
+#define YSTEP 8
 #define NCRC 128
 
 static void test_edge_pos(data_t *data, int sx, int ex, int y, bool swap_axis)
 {
 	igt_crc_t *crc = NULL;
-	int i, n, x, xdir;
+	int i, n, x, xdir, dx;
 
 	if (sx > ex)
 		xdir = -1;
 	else
 		xdir = 1;
 
+	dx = (ex - sx)/XSTEP;
+
 	igt_pipe_crc_start(data->pipe_crc);
 
 	i = 0;
-	for (x = sx + XOFF; xdir * (x - ex - XOFF) <= 0; x += xdir * XSTEP) {
+
+	for (x = sx; xdir * (x - ex) <= 0; x += dx) {
 		int xx, yy;
 
 		if (swap_axis) {
@@ -168,21 +170,23 @@ static void test_edge_pos(data_t *data, int sx, int ex, int y, bool swap_axis)
 static void test_edge(data_t *data, int sy, int ey, int sx, int ex, bool swap_axis)
 {
 	int crtc_id = data->output->config.crtc->crtc_id;
-	int y, ydir;
+	int y, ydir, dy;
 
 	if (sy > ey)
 		ydir = -1;
 	else
 		ydir = 1;
 
+	dy = (ey - sy) / YSTEP;
+
 	igt_assert_eq(drmModeMoveCursor(data->drm_fd, crtc_id, -data->curw, -data->curh), 0);
 	igt_assert_eq(drmModeSetCursor(data->drm_fd, crtc_id, data->fb.gem_handle, data->curw, data->curh), 0);
 
 	for (y = sy; ydir * (y - ey) <= 0; ) {
 		test_edge_pos(data, sx, ex, y, swap_axis);
-		y += ydir * YSTEP;
+		y += dy;
 		test_edge_pos(data, ex, sx, y, swap_axis);
-		y += ydir * YSTEP;
+		y += dy;
 	}
 
 	igt_assert_eq(drmModeMoveCursor(data->drm_fd, crtc_id, -data->curw, -data->curh), 0);
