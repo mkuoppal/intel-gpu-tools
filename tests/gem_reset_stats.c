@@ -148,6 +148,8 @@ static int gem_reset_status(int fd, int ctx_id)
 	return RS_NO_ERROR;
 }
 
+static struct timespec ts_injected;
+
 #define BAN HANG_ALLOW_BAN
 #define ASYNC 2
 static void inject_hang(int fd, uint32_t ctx,
@@ -155,6 +157,8 @@ static void inject_hang(int fd, uint32_t ctx,
 			unsigned flags)
 {
 	igt_hang_ring_t hang;
+
+	clock_gettime(CLOCK_MONOTONIC, &ts_injected);
 
 	hang = igt_hang_ctx(fd, ctx, e->exec_id | e->flags, flags & BAN, NULL);
 	if ((flags & ASYNC) == 0)
@@ -238,6 +242,8 @@ static void test_rs(const struct intel_execution_engine *e,
 			assert_reset_status(i, fd[i], 0, RS_BATCH_PENDING);
 	}
 
+	igt_assert(igt_seconds_elapsed(&ts_injected) <= 30);
+
 	for (i = 0; i < num_fds; i++)
 		close(fd[i]);
 }
@@ -289,6 +295,8 @@ static void test_rs_ctx(const struct intel_execution_engine *e,
 		}
 	}
 	sync_gpu();
+
+	igt_assert(igt_seconds_elapsed(&ts_injected) <= 30);
 
 	for (i = 0; i < num_fds; i++)
 		assert_reset_status(i, fd[i], 0, RS_NO_ERROR);
