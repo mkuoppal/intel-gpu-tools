@@ -96,14 +96,39 @@ static void execbuf1(int fd, uint64_t alloc)
 	gem_madvise(fd, obj.handle, I915_MADV_DONTNEED);
 }
 
+/* Since we want to trigger oom (SIGKILL), we don't want small allocations
+ * to fail and generate a false error (SIGSEGV)! So we redirect allocations
+ * though GEM objects, which should be much more likely to trigger oom. There
+ * are still small allocations within the kernel, so still a small chance of
+ * ENOMEM instead of a full oom.
+ */
+static void *__gem_calloc(int fd, size_t count, size_t size, uint64_t *out_size)
+{
+	uint32_t handle;
+	uint64_t total;
+	void *ptr;
+
+	total = count * size;
+	total = (total + 4095) & -4096;
+
+	handle = gem_create(fd, total);
+	ptr = gem_mmap__cpu(fd, handle, 0, total, PROT_WRITE);
+	gem_set_domain(fd, handle, I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+	gem_close(fd, handle);
+
+	*out_size = total;
+	return ptr;
+}
+
 static void execbufN(int fd, uint64_t alloc)
 {
 	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_exec_object2 *obj;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	int count = alloc >> 20;
+	uint64_t obj_size;
 
-	obj = calloc(alloc + 1, sizeof(*obj));
+	obj = __gem_calloc(fd, alloc + 1, sizeof(*obj), &obj_size);
 	memset(&execbuf, 0, sizeof(execbuf));
 
 	obj[count].handle = gem_create(fd, 4096);
@@ -120,7 +145,7 @@ static void execbufN(int fd, uint64_t alloc)
 
 	for (int i = 0; i <= count; i++)
 		gem_madvise(fd, obj[i].handle, I915_MADV_DONTNEED);
-	free(obj);
+	munmap(obj, obj_size);
 }
 
 static void hang(int fd, uint64_t alloc)
@@ -129,8 +154,9 @@ static void hang(int fd, uint64_t alloc)
 	struct drm_i915_gem_exec_object2 *obj;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	int count = alloc >> 20;
+	uint64_t obj_size;
 
-	obj = calloc(alloc + 1, sizeof(*obj));
+	obj = __gem_calloc(fd, alloc + 1, sizeof(*obj), &obj_size);
 	memset(&execbuf, 0, sizeof(execbuf));
 
 	obj[count].handle = gem_create(fd, 4096);
@@ -148,7 +174,7 @@ static void hang(int fd, uint64_t alloc)
 	gem_close(fd, igt_hang_ring(fd, 0).handle);
 	for (int i = 0; i <= count; i++)
 		gem_madvise(fd, obj[i].handle, I915_MADV_DONTNEED);
-	free(obj);
+	munmap(obj, obj_size);
 }
 
 static void userptr(int fd, uint64_t alloc)
