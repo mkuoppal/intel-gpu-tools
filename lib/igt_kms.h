@@ -114,6 +114,7 @@ struct kmstest_connector_config {
 	uint32_t atomic_props_connector[IGT_NUM_CONNECTOR_PROPS];
 	int crtc_idx;
 	int pipe;
+	unsigned valid_crtc_idx_mask;
 };
 
 /**
@@ -327,12 +328,32 @@ void igt_fb_set_size(struct igt_fb *fb, igt_plane_t *plane,
 
 void igt_wait_for_vblank(int drm_fd, enum pipe pipe);
 
+static inline bool igt_pipe_connector_valid(enum pipe pipe,
+					    igt_output_t *output)
+{
+	return output->valid && (output->config.valid_crtc_idx_mask & (1 << pipe));
+}
+
+#define for_each_if(condition) if (!(condition)) {} else
+
 #define for_each_connected_output(display, output)		\
 	for (int i__ = 0;  i__ < (display)->n_outputs; i__++)	\
-		if ((output = &(display)->outputs[i__]), output->valid)
+		for_each_if (((output = &(display)->outputs[i__]), output->valid))
 
 #define for_each_pipe(display, pipe)					\
 	for (pipe = 0; pipe < igt_display_get_n_pipes(display); pipe++)	\
+
+/* Big complex macro to make 'break' work as expected. */
+#define for_each_pipe_with_valid_output(display, pipe, output) \
+	for (int con__ = pipe = 0; \
+	     pipe < igt_display_get_n_pipes((display)) && con__ < (display)->n_outputs; \
+	     con__ = (con__ + 1 < (display)->n_outputs) ? con__ + 1 : (pipe = pipe + 1, 0)) \
+		for_each_if (((output = &(display)->outputs[con__]), \
+			     igt_pipe_connector_valid(pipe, output)))
+
+#define for_each_valid_output_on_pipe(display, pipe, output) \
+	for_each_connected_output(display, output) \
+		for_each_if (igt_pipe_connector_valid(pipe, output))
 
 #define for_each_plane_on_pipe(display, pipe, plane)			\
 	for (int j__ = 0; (plane) = &(display)->pipes[(pipe)].planes[j__], \
