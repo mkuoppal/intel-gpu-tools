@@ -144,12 +144,9 @@ run_rmfb_test(struct rmfb_data *data, bool reopen)
 	int valid_tests = 0;
 	enum pipe pipe;
 
-	for_each_connected_output(&data->display, output) {
-		for_each_pipe(&data->display, pipe) {
-			if (test_rmfb(data, output, pipe, reopen))
-				valid_tests++;
-		}
-	}
+	for_each_pipe_with_valid_output(&data->display, pipe, output)
+		if (test_rmfb(data, output, pipe, reopen))
+			valid_tests++;
 
 	igt_require_f(valid_tests, "no valid crtc/connector combinations found\n");
 }
