@@ -115,6 +115,7 @@ TESTS_progs_M = \
 	pm_rps \
 	pm_rc6_residency \
 	pm_sseu \
+	prime_busy \
 	prime_mmap \
 	prime_mmap_coherency \
 	prime_mmap_kms \
