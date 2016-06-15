@@ -717,15 +717,15 @@ static void check_state_correlation(struct test_output *o,
 		return;
 
 	timersub(&es2->current_ts, &es1->current_ts, &tv_diff);
-	usec_diff = tv_diff.tv_sec * 1000 * 1000 + tv_diff.tv_usec;
+	usec_diff = tv_diff.tv_sec * USEC_PER_SEC + tv_diff.tv_usec;
 
 	seq_diff = es2->current_seq - es1->current_seq;
 	ftime = frame_time(o);
 	usec_diff -= seq_diff * ftime;
 
 	igt_assert_f(fabs(usec_diff) / ftime <= 0.005,
-		     "timestamp mismatch between %s and %s (diff %.4f sec)\n",
-		     es1->name, es2->name, usec_diff / 1000 / 1000);
+		     "timestamp mismatch between %s and %s (diff %.6f sec)\n",
+		     es1->name, es2->name, usec_diff / USEC_PER_SEC);
 }
 
 static void check_all_state(struct test_output *o,
