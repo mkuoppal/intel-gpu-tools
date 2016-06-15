@@ -531,7 +531,7 @@ static int do_wait_for_vblank(struct test_output *o, int pipe_id,
 }
 
 static bool
-analog_tv_connector(struct test_output *o)
+analog_tv_connector(const struct test_output *o)
 {
 	uint32_t connector_type = o->kconnector[0]->connector_type;
 
@@ -574,7 +574,7 @@ static void page_flip_handler(int fd, unsigned int frame, unsigned int sec,
 		event_handler(&o->flip_state, frame, sec, usec);
 }
 
-static double frame_time(struct test_output *o)
+static double frame_time(const struct test_output *o)
 {
 	return 1000.0 * o->kmode[0].htotal * o->kmode[0].vtotal / o->kmode[0].clock;
 }
@@ -640,7 +640,7 @@ static void vblank_handler(int fd, unsigned int frame, unsigned int sec,
 	fixup_premature_vblank_ts(o, &o->vblank_state);
 }
 
-static void check_state(struct test_output *o, struct event_state *es)
+static void check_state(const struct test_output *o, const struct event_state *es)
 {
 	struct timeval diff;
 	double usec_interflip;
@@ -1173,7 +1173,8 @@ fb_is_bound(struct test_output *o, int fb)
 	return true;
 }
 
-static void check_final_state(struct test_output *o, struct event_state *es,
+static void check_final_state(const struct test_output *o,
+			      const struct event_state *es,
 			      unsigned int elapsed)
 {
 	igt_assert_f(es->count > 0,
