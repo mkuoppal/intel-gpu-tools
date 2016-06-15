@@ -693,6 +693,13 @@ static void check_state(const struct test_output *o, const struct event_state *e
 		timersub(&es->current_ts, &es->last_ts, &diff);
 		usec_diff = diff.tv_sec * USEC_PER_SEC + diff.tv_usec;
 
+		usec_interflip = (es->current_seq - es->last_seq) * frame_time(o);
+		igt_assert_f(fabs((usec_diff - usec_interflip) /
+				  usec_interflip) <= 0.005,
+			     "inconsistent %s ts/seq: last %ld.%06ld/%u, current %ld.%06ld/%u\n",
+			     es->name, es->last_ts.tv_sec, es->last_ts.tv_usec, es->last_seq,
+			     es->current_ts.tv_sec, es->current_ts.tv_usec, es->current_seq);
+
 		usec_interflip = o->seq_step * frame_time(o);
 		igt_assert_f(fabs((usec_diff - usec_interflip) /
 				  usec_interflip) <= 0.005,
