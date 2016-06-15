@@ -518,6 +518,8 @@ static void ricochet(int tiled, int sprite_w, int sprite_h,
 	char                                key;
 	int				    sprite_plane_count = 0;
 	int 				    i;
+	int 				    found_count = 0;
+
 	// Open up I915 graphics device
 	gfx_fd = drmOpen("i915", NULL);
 	if (gfx_fd < 0) {
@@ -564,9 +566,14 @@ static void ricochet(int tiled, int sprite_w, int sprite_h,
 		// Find the native (preferred) display mode
 		connector_find_preferred_mode(gfx_fd, gfx_resources, &curr_connector);
 		if (curr_connector.mode_valid == 0) {
-			printf("No valid preferred mode detected\n");
-			goto out;
+
+			if (((c_index + 1) == gfx_resources->count_connectors) &&
+			    (found_count == 0))
+				printf("Failed to find any valid connections.\n");
+			continue;
 		}
+
+		found_count++;
 
 		// Determine if sprite hardware is available on pipe
 		// associated with this connector.
