@@ -696,8 +696,9 @@ static void check_state(const struct test_output *o, const struct event_state *e
 		usec_interflip = o->seq_step * frame_time(o);
 		igt_assert_f(fabs((usec_diff - usec_interflip) /
 				  usec_interflip) <= 0.005,
-			     "inter-%s ts jitter: %ld.%06ld\n",
-			     es->name, diff.tv_sec, diff.tv_usec);
+			     "inter-%s ts jitter: %ld.%06ld, expected %.6f\n",
+			     es->name, diff.tv_sec, diff.tv_usec,
+			     usec_interflip / USEC_PER_SEC);
 
 		igt_assert_f(es->current_seq == es->last_seq + o->seq_step,
 			     "unexpected %s seq %u, expected %u\n",
