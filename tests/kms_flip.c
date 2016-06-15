@@ -643,7 +643,6 @@ static void vblank_handler(int fd, unsigned int frame, unsigned int sec,
 static void check_state(const struct test_output *o, const struct event_state *es)
 {
 	struct timeval diff;
-	double usec_interflip;
 
 	dump_event_state(es);
 
@@ -689,10 +688,13 @@ static void check_state(const struct test_output *o, const struct event_state *e
 	}
 
 	if ((o->flags & TEST_CHECK_TS) && (!analog_tv_connector(o))) {
-		timersub(&es->current_ts, &es->last_ts, &diff);
-		usec_interflip = (double)o->seq_step * frame_time(o);
+		double usec_interflip, usec_diff;
 
-		igt_assert_f(fabs((((double) diff.tv_usec) - usec_interflip) /
+		timersub(&es->current_ts, &es->last_ts, &diff);
+		usec_diff = diff.tv_sec * USEC_PER_SEC + diff.tv_usec;
+
+		usec_interflip = o->seq_step * frame_time(o);
+		igt_assert_f(fabs((usec_diff - usec_interflip) /
 				  usec_interflip) <= 0.005,
 			     "inter-%s ts jitter: %ld.%06ld\n",
 			     es->name, diff.tv_sec, diff.tv_usec);
