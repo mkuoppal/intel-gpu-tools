@@ -120,7 +120,9 @@ TESTS_progs_M = \
 	prime_mmap_coherency \
 	prime_mmap_kms \
 	prime_self_import \
+	prime_vgem \
 	template \
+	vgem_basic \
 	$(NULL)
 
 TESTS_progs_XM = \
@@ -216,6 +218,7 @@ TESTS_scripts = \
 	sysfs_l3_parity \
 	test_rte_check \
 	tools_test \
+	vgem_reload_basic \
 	$(NULL)
 
 # This target contains testcases which support automagic subtest enumeration
