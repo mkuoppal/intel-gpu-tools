@@ -140,6 +140,7 @@ TESTS_progs = \
 	drm_vma_limiter_cached \
 	drm_vma_limiter_cpu \
 	drm_vma_limiter_gtt \
+	drv_missed_irq \
 	gem_bad_length \
 	gem_cpu_reloc \
 	gem_cs_prefetch \
@@ -210,7 +211,6 @@ TESTS_scripts_M = \
 TESTS_scripts = \
 	debugfs_emon_crash \
 	drv_debugfs_reader \
-	drv_missed_irq_hang \
 	drv_module_reload_basic \
 	kms_sysfs_edid_timing \
 	sysfs_l3_parity \
