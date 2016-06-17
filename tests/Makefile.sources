@@ -31,6 +31,7 @@ TESTS_progs_M = \
 	gem_evict_alignment \
 	gem_evict_everything \
 	gem_exec_alignment \
+	gem_exec_async \
 	gem_exec_bad_domains \
 	gem_exec_basic \
 	gem_exec_create \
