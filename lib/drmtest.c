@@ -90,24 +90,29 @@ static int __get_drm_device_name(int fd, char *name)
 	return -1;
 }
 
-bool is_i915_device(int fd)
+static bool __is_device(int fd, const char *expect)
 {
-	int ret;
 	char name[5] = "";
 
-	ret = __get_drm_device_name(fd, name);
+	if (__get_drm_device_name(fd, name))
+		return false;
 
-	return !ret && strcmp("i915", name) == 0;
+	return strcmp(expect, name) == 0;
+}
+
+bool is_i915_device(int fd)
+{
+	return __is_device(fd, "i915");
 }
 
 static bool is_vc4_device(int fd)
 {
-	int ret;
-	char name[5] = "";
+	return __is_device(fd, "vc4");
+}
 
-	ret = __get_drm_device_name(fd, name);
-
-	return !ret && strcmp("vc4", name) == 0;
+static bool is_vgem_device(int fd)
+{
+	return __is_device(fd, "vgem");
 }
 
 static bool has_known_intel_chipset(int fd)
@@ -213,6 +218,13 @@ int drm_get_card(void)
 	return -1;
 }
 
+static void modprobe(const char *driver)
+{
+	char buf[128];
+	snprintf(buf, sizeof(buf), "/sbin/modprobe %s", driver);
+	system(buf);
+}
+
 /**
  * __drm_open_driver:
  * @chipset: OR'd flags for each chipset to search, eg. #DRIVER_INTEL
@@ -224,23 +236,28 @@ int drm_get_card(void)
  */
 int __drm_open_driver(int chipset)
 {
+	if (chipset & DRIVER_VGEM)
+		modprobe("vgem");
+
 	for (int i = 0; i < 16; i++) {
 		char name[80];
 		int fd;
-		bool found_intel, found_vc4;
 
 		sprintf(name, "/dev/dri/card%u", i);
 		fd = open(name, O_RDWR);
 		if (fd == -1)
 			continue;
 
-		found_intel = is_i915_device(fd) &&
-			      has_known_intel_chipset(fd) &&
-			      (chipset & DRIVER_INTEL);
+		if (chipset & DRIVER_INTEL && is_i915_device(fd) &&
+		    has_known_intel_chipset(fd))
+			return fd;
 
-		found_vc4 = is_vc4_device(fd) && (chipset & DRIVER_VC4);
+		if (chipset & DRIVER_VC4 &&
+		    is_vc4_device(fd))
+			return fd;
 
-		if ((chipset & DRIVER_ANY) || found_intel || found_vc4)
+		if (chipset & DRIVER_VGEM &&
+		    is_vgem_device(fd))
 			return fd;
 
 		close(fd);
