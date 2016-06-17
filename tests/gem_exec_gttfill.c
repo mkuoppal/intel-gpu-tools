@@ -196,9 +196,8 @@ igt_main
 
 	igt_fixture {
 		device = drm_open_driver(DRIVER_INTEL);
+		igt_fork_hang_detector(device);
 	}
-
-	igt_fork_hang_detector(device);
 
 	igt_subtest("basic")
 		fillgtt(device, 0, 1); /* just enough to run a single pass */
@@ -210,9 +209,8 @@ igt_main
 	igt_subtest("all")
 		fillgtt(device, 0, 150);
 
-	igt_stop_hang_detector();
-
 	igt_fixture {
+		igt_stop_hang_detector();
 		close(device);
 	}
 }

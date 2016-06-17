@@ -152,9 +152,9 @@ igt_main
 		fd = drm_open_driver(DRIVER_INTEL);
 		handle = gem_create(fd, 4096);
 		gem_write(fd, handle, 0, &bbe, sizeof(bbe));
-	}
 
-	igt_fork_hang_detector(fd);
+		igt_fork_hang_detector(fd);
+	}
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%s%s", e->exec_id == 0 ? "basic-" : "", e->name)
@@ -167,9 +167,8 @@ igt_main
 			single(fd, handle, e, INTERRUPTIBLE, ncpus);
 	}
 
-	igt_stop_hang_detector();
-
 	igt_fixture {
+		igt_stop_hang_detector();
 		gem_close(fd, handle);
 		close(fd);
 	}

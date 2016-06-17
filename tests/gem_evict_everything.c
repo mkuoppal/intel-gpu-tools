@@ -266,10 +266,10 @@ igt_main
 		test_major_evictions(fd, size, count);
 	}
 
-	igt_stop_hang_helper();
+	igt_stop_signal_helper();
 
 	igt_fixture {
-		igt_stop_signal_helper();
+		igt_stop_hang_helper();
 		close(fd);
 	}
 }

@@ -208,9 +208,9 @@ igt_main
 		device = drm_open_driver(DRIVER_INTEL);
 		handle = gem_create(device, 4096);
 		gem_write(device, handle, 0, &bbe, sizeof(bbe));
-	}
 
-	igt_fork_hang_detector(device);
+		igt_fork_hang_detector(device);
+	}
 
 	igt_subtest("basic")
 		all(device, handle, 10);
@@ -222,9 +222,8 @@ igt_main
 	igt_subtest("all")
 		all(device, handle, 150);
 
-	igt_stop_hang_detector();
-
 	igt_fixture {
+		igt_stop_hang_detector();
 		gem_close(device, handle);
 		close(device);
 	}

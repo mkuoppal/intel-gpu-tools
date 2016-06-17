@@ -390,10 +390,11 @@ igt_main
 	};
 	int fd;
 
-	igt_fixture
+	igt_fixture {
 		fd = drm_open_driver_master(DRIVER_INTEL);
 
-	igt_fork_hang_detector(fd);
+		igt_fork_hang_detector(fd);
+	}
 
 	for (const struct mode *m = modes; m->name; m++)
 		igt_subtest_f("%s", m->name)
@@ -410,8 +411,8 @@ igt_main
 		}
 	}
 
-	igt_stop_hang_detector();
-
-	igt_fixture
+	igt_fixture {
+		igt_stop_hang_detector();
 		close(fd);
+	}
 }

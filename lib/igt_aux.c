@@ -403,9 +403,6 @@ void igt_fork_hang_detector(int fd)
 {
 	struct stat st;
 
-	if (igt_only_list_subtests())
-		return;
-
 	igt_assert(fstat(fd, &st) == 0);
 
 	signal(SIGRTMAX, sig_abort);
@@ -415,9 +412,6 @@ void igt_fork_hang_detector(int fd)
 
 void igt_stop_hang_detector(void)
 {
-	if (igt_only_list_subtests())
-		return;
-
 	igt_stop_helper(&hang_detector);
 }
 #else

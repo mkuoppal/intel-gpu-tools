@@ -213,10 +213,11 @@ igt_main
 	const struct intel_execution_engine *e;
 	int fd;
 
-	igt_fixture
+	igt_fixture {
 		fd = drm_open_driver_master(DRIVER_INTEL);
 
-	igt_fork_hang_detector(fd);
+		igt_fork_hang_detector(fd);
+	}
 
 	for (e = intel_execution_engines; e->name; e++)
 		igt_subtest_f("basic-%s", e->name)
@@ -225,8 +226,8 @@ igt_main
 	igt_subtest("basic-all")
 		store_all(fd);
 
-	igt_stop_hang_detector();
-
-	igt_fixture
+	igt_fixture {
+		igt_stop_hang_detector();
 		close(fd);
+	}
 }

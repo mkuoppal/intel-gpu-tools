@@ -150,10 +150,11 @@ igt_main
 	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	int device = -1;
 
-	igt_fixture
+	igt_fixture {
 		device = drm_open_driver(DRIVER_INTEL);
 
-	igt_fork_hang_detector(device);
+		igt_fork_hang_detector(device);
+	}
 
 	igt_subtest("basic")
 		all(device, 0, 20, 1);
@@ -163,8 +164,9 @@ igt_main
 	igt_subtest("madvise")
 		all(device, LEAK, 20, 1);
 
-	igt_stop_hang_detector();
 
-	igt_fixture
+	igt_fixture {
+		igt_stop_hang_detector();
 		close(device);
+	}
 }

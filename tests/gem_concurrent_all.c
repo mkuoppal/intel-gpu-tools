@@ -1432,7 +1432,8 @@ run_mode(const char *prefix,
 			continue;
 
 		if (!*h->suffix)
-			igt_fork_hang_detector(fd);
+			igt_fixture
+				igt_fork_hang_detector(fd);
 
 		for (p = all ? pipelines : pskip; p->prefix; p++) {
 			igt_fixture p->require();
@@ -1563,7 +1564,8 @@ run_mode(const char *prefix,
 		}
 
 		if (!*h->suffix)
-			igt_stop_hang_detector();
+			igt_fixture
+				igt_stop_hang_detector();
 	}
 
 	igt_fixture

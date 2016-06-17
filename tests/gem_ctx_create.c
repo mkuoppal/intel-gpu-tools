@@ -160,9 +160,9 @@ igt_main
 			}
 		} else
 			ppgtt_engines[ppgtt_nengine++] = 0;
-	}
 
-	igt_fork_hang_detector(fd);
+		igt_fork_hang_detector(fd);
+	}
 
 	igt_subtest("basic") {
 		memset(&create, 0, sizeof(create));
@@ -193,8 +193,8 @@ igt_main
 			active(fd, e->exec_id | e->flags, 20, ncpus);
 	}
 
-	igt_stop_hang_detector();
-
-	igt_fixture
+	igt_fixture {
+		igt_stop_hang_detector();
 		close(fd);
+	}
 }
