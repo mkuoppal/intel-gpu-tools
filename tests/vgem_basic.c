@@ -23,8 +23,12 @@
 
 #include "igt.h"
 #include "igt_vgem.h"
+#include "igt_debugfs.h"
+#include "igt_sysfs.h"
 
 #include <sys/mman.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
 IGT_TEST_DESCRIPTION("Basic sanity check of Virtual GEM module (vGEM).");
 
@@ -140,6 +144,62 @@ static void test_dmabuf_mmap(int fd)
 	munmap(ptr, bo.size);
 }
 
+static void test_sysfs_read(int fd)
+{
+	int dir = igt_sysfs_open(fd, NULL);
+	DIR *dirp = fdopendir(dir);
+	struct dirent *de;
+
+	while ((de = readdir(dirp))) {
+		struct stat st;
+
+		if (*de->d_name == '.')
+			continue;
+
+		if (fstatat(dir, de->d_name, &st, 0))
+			continue;
+
+		if (S_ISDIR(st.st_mode))
+			continue;
+
+		igt_debug("Reading %s\n", de->d_name);
+		igt_set_timeout(1, "vgem sysfs read stalled");
+		free(igt_sysfs_get(dir, de->d_name));
+		igt_reset_timeout();
+	}
+
+	closedir(dirp);
+	close(dir);
+}
+
+static void test_debugfs_read(int fd)
+{
+	int dir = igt_debugfs_dir(fd);
+	DIR *dirp = fdopendir(dir);
+	struct dirent *de;
+
+	while ((de = readdir(dirp))) {
+		struct stat st;
+
+		if (*de->d_name == '.')
+			continue;
+
+		if (fstatat(dir, de->d_name, &st, 0))
+			continue;
+
+		if (S_ISDIR(st.st_mode))
+			continue;
+
+		igt_debug("Reading %s\n", de->d_name);
+		igt_set_timeout(1, "vgem debugfs read stalled");
+		free(igt_sysfs_get(dir, de->d_name));
+		igt_reset_timeout();
+	}
+
+	closedir(dirp);
+	close(dir);
+}
+
 static bool has_prime_export(int fd)
 {
 	uint64_t value;
@@ -175,6 +235,11 @@ igt_main
 		igt_subtest_f("dmabuf-mmap")
 			test_dmabuf_mmap(fd);
 	}
+
+	igt_subtest("sysfs")
+		test_sysfs_read(fd);
+	igt_subtest("debugfs")
+		test_debugfs_read(fd);
 
 	igt_fixture {
 		close(fd);

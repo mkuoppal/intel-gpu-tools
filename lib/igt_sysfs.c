@@ -179,6 +179,7 @@ char *igt_sysfs_get(int dir, const char *attr)
 		if (!newbuf)
 			break;
 
+		buf = newbuf;
 		len *= 2;
 		offset += ret;
 		rem = len - offset - 1;

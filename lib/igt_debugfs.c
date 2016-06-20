@@ -87,28 +87,30 @@ typedef struct {
 	char dri_path[128];
 } igt_debugfs_t;
 
+static const char *__debugfs_mount(void)
+{
+	struct stat st;
+
+	if (stat("/debug/dri", &st) == 0)
+		return "/debug/dri";
+
+	if (stat("/sys/kernel/debug/dri", &st) == 0)
+		return "/sys/kernel/debug/dri";
+
+	igt_assert(stat("/sys/kernel/debug", &st) == 0);
+	igt_assert(mount("debug", "/sys/kernel/debug", "debugfs", 0, 0) == 0);
+	return "/sys/kernel/debug/dri";
+}
+
 static bool __igt_debugfs_init(igt_debugfs_t *debugfs)
 {
-	const char *path = "/sys/kernel/debug";
 	struct stat st;
 	int n;
 
-	if (stat("/debug/dri", &st) == 0) {
-		path = "/debug/dri";
-		goto find_minor;
-	}
-
-	if (stat("/sys/kernel/debug/dri", &st) == 0)
-		goto find_minor;
-
-	igt_assert(stat("/sys/kernel/debug", &st) == 0);
-
-	mount("debug", "/sys/kernel/debug", "debugfs", 0, 0);
-
-find_minor:
-	strcpy(debugfs->root, path);
+	strcpy(debugfs->root, __debugfs_mount());
 	for (n = 0; n < 16; n++) {
-		int len = sprintf(debugfs->dri_path, "%s/dri/%d", path, n);
+		int len = sprintf(debugfs->dri_path,
+				  "%s/dri/%d", debugfs->root, n);
 		sprintf(debugfs->dri_path + len, "/i915_error_state");
 		if (stat(debugfs->dri_path, &st) == 0) {
 			debugfs->dri_path[len] = '\0';
@@ -117,7 +119,6 @@ find_minor:
 	}
 
 	debugfs->dri_path[0] = '\0';
-
 	return false;
 }
 
@@ -796,3 +797,27 @@ int igt_get_stable_obj_count(int driver)
 	return obj_count;
 }
 
+
+/* Non-i915 specific debugfs API */
+
+/**
+ * igt_debugfs_dir:
+ * @device: fd of the device (or -1 to default to Intel)
+ *
+ * This opens the debugfs directory corresponding to device for use
+ * with igt_debugfs_set() and igt_debugfs_get().
+ *
+ * Returns:
+ * The directory fd, or -1 on failure.
+ */
+int igt_debugfs_dir(int fd)
+{
+	struct stat st;
+	char path[256];
+
+	if (fstat(fd, &st) || !S_ISCHR(st.st_mode))
+		return -1;
+
+	sprintf(path, "%s/%d", __debugfs_mount(), (int)(st.st_rdev & 0xff));
+	return open(path, O_RDONLY);
+}
