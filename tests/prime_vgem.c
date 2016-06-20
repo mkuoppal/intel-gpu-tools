@@ -153,6 +153,7 @@ static void work(int i915, int dmabuf, unsigned ring, uint32_t flags)
 	struct drm_i915_gem_relocation_entry store[1024+1];
 	struct drm_i915_gem_execbuffer2 execbuf;
 	unsigned size = ALIGN(ARRAY_SIZE(store)*16 + 4, 4096);
+	bool read_busy, write_busy;
 	uint32_t *batch, *bbe;
 	int i, count;
 
@@ -228,12 +229,14 @@ static void work(int i915, int dmabuf, unsigned ring, uint32_t flags)
 	gem_close(i915, obj[BATCH].handle);
 	gem_close(i915, obj[SCRATCH].handle);
 
-	igt_assert(prime_busy(dmabuf, true));
-	igt_assert(prime_busy(dmabuf, false));
+	write_busy = prime_busy(dmabuf, false);
+	read_busy = prime_busy(dmabuf, true);
 
 	*bbe = MI_BATCH_BUFFER_END;
 	__sync_synchronize();
 	munmap(batch, size);
+
+	igt_assert(read_busy && write_busy);
 }
 
 static void test_busy(int i915, int vgem, unsigned ring, uint32_t flags)
