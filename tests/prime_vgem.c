@@ -48,15 +48,14 @@ static void test_read(int vgem, int i915)
 	for (i = 0; i < 1024; i++)
 		ptr[1024*i] = i;
 	munmap(ptr, scratch.size);
+	gem_close(vgem, scratch.handle);
 
 	for (i = 0; i < 1024; i++) {
 		uint32_t tmp;
 		gem_read(i915, handle, 4096*i, &tmp, sizeof(tmp));
 		igt_assert_eq(tmp, i);
 	}
-
 	gem_close(i915, handle);
-	gem_close(vgem, scratch.handle);
 }
 
 static void test_write(int vgem, int i915)
@@ -75,16 +74,16 @@ static void test_write(int vgem, int i915)
 	handle = prime_fd_to_handle(i915, dmabuf);
 	close(dmabuf);
 
+	ptr = vgem_mmap(vgem, &scratch, PROT_READ);
+	gem_close(vgem, scratch.handle);
+
 	for (i = 0; i < 1024; i++)
 		gem_write(i915, handle, 4096*i, &i, sizeof(i));
+	gem_close(i915, handle);
 
-	ptr = vgem_mmap(vgem, &scratch, PROT_READ);
 	for (i = 0; i < 1024; i++)
 		igt_assert_eq(ptr[1024*i], i);
 	munmap(ptr, scratch.size);
-
-	gem_close(i915, handle);
-	gem_close(vgem, scratch.handle);
 }
 
 static void test_gtt(int vgem, int i915)

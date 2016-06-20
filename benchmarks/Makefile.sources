@@ -19,4 +19,5 @@ benchmarks_PROGRAMS =			\
 	gem_syslatency			\
 	gem_userptr_benchmark		\
 	kms_vblank			\
+	vgem_mmap			\
 	$(NULL)
