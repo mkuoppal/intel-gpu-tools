@@ -90,7 +90,7 @@ static void test_gtt(int vgem, int i915)
 {
 	struct vgem_bo scratch;
 	uint32_t handle;
-	uint32_t *ptr;
+	uint32_t *ptr, *gtt;
 	int dmabuf, i;
 
 	scratch.width = 1024;
@@ -117,6 +117,18 @@ static void test_gtt(int vgem, int i915)
 	ptr = gem_mmap__gtt(i915, handle, scratch.size, PROT_READ);
 	for (i = 0; i < 1024; i++)
 		igt_assert_eq(ptr[1024*i], ~i);
+	munmap(ptr, scratch.size);
+
+
+	ptr = vgem_mmap(vgem, &scratch, PROT_WRITE);
+	gtt = gem_mmap__gtt(i915, handle, scratch.size, PROT_WRITE);
+	for (i = 0; i < 1024; i++) {
+		gtt[1024*i] = i;
+		igt_assert_eq(ptr[1024*i], i);
+		ptr[1024*i] = ~i;
+		igt_assert_eq(gtt[1024*i], ~i);
+	}
+	munmap(gtt, scratch.size);
 	munmap(ptr, scratch.size);
 
 	gem_close(i915, handle);
