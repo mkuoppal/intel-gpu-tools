@@ -14,6 +14,8 @@ libintel_tools_la_SOURCES = 	\
 	igt_edid_template.h	\
 	igt_gt.c		\
 	igt_gt.h		\
+	igt_gvt.c		\
+	igt_gvt.h		\
 	igt_stats.c		\
 	igt_stats.h		\
 	igt_sysfs.c		\
