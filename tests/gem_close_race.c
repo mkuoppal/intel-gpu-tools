@@ -48,7 +48,6 @@
 #define BLT_WRITE_ALPHA		(1<<21)
 #define BLT_WRITE_RGB		(1<<20)
 
-static char device[80];
 static uint32_t devid;
 static bool has_64bit_relocations;
 
@@ -145,8 +144,7 @@ static void process(int child)
 	uint32_t handle;
 	int fd;
 
-	fd = open(device, O_RDWR);
-	igt_assert_neq(fd, -1);
+	fd = drm_open_driver(DRIVER_INTEL);
 
 	handle = load(fd);
 	if ((child & 63) == 63)
@@ -184,11 +182,11 @@ static void threads(int timeout)
 	sev.sigev_signo = SIGRTMIN;
 	igt_assert(timer_create(CLOCK_MONOTONIC, &sev, &timer) == 0);
 
-	fd = open(device, O_RDWR);
+	fd = drm_open_driver(DRIVER_INTEL);
 	name.name = gem_flink(fd, gem_create(fd, OBJECT_SIZE));
 
 	igt_until_timeout(timeout) {
-		crashme.fd = open(device, O_RDWR);
+		crashme.fd = drm_open_driver(DRIVER_INTEL);
 
 		memset(&its, 0, sizeof(its));
 		its.it_value.tv_nsec = msec(1) + (rand() % msec(10));
@@ -201,6 +199,8 @@ static void threads(int timeout)
 			selfcopy(crashme.fd, name.handle, 100);
 			drmIoctl(crashme.fd, DRM_IOCTL_GEM_CLOSE, &name.handle);
 		} while (1);
+
+		close(crashme.fd);
 	}
 
 	timer_delete(timer);
