@@ -221,7 +221,7 @@ int drm_get_card(void)
 static void modprobe(const char *driver)
 {
 	char buf[128];
-	snprintf(buf, sizeof(buf), "/sbin/modprobe %s", driver);
+	snprintf(buf, sizeof(buf), "/sbin/modprobe -s %s", driver);
 	system(buf);
 }
 
