@@ -658,21 +658,37 @@ struct edp_power_seq {
 	uint16_t t12;
 } __attribute__ ((packed));
 
-struct edp_link_params {
+struct edp_fast_link_params {
 	uint8_t rate:4;
 	uint8_t lanes:4;
 	uint8_t preemphasis:4;
 	uint8_t vswing:4;
 } __attribute__ ((packed));
 
-struct bdb_edp {
+struct edp_pwm_delays {
+	uint16_t pwm_on_to_backlight_enable;
+	uint16_t backlight_disable_to_pwm_off;
+} __attribute__ ((packed));
+
+struct edp_full_link_params {
+	uint8_t preemphasis:4;
+	uint8_t vswing:4;
+} __attribute__ ((packed));
+
+struct bdb_edp { /* 155 */
 	struct edp_power_seq power_seqs[16];
 	uint32_t color_depth;
-	struct edp_link_params link_params[16];
+	struct edp_fast_link_params fast_link_params[16];
 	uint32_t sdrrs_msa_timing_delay;
 
-	uint16_t edp_s3d_feature;
-	uint16_t edp_t3_optimization;
+	uint16_t s3d_feature; /* 163 */
+	uint16_t t3_optimization; /* 165 */
+	uint64_t vswing_preemph_table_selection; /* 173 */
+	uint16_t fast_link_training; /* 182 */
+	uint16_t dpcd_600h_write_required; /* 185 */
+	struct edp_pwm_delays pwm_delays[16]; /* 186 */
+	uint16_t full_link_params_provided; /* 199 */
+	struct edp_full_link_params full_link_params[16]; /* 199 */
 } __attribute__ ((packed));
 
 

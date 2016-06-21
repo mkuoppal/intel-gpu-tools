@@ -754,14 +754,14 @@ static void dump_edp(struct context *context,
 		msa = (edp->sdrrs_msa_timing_delay >> (i * 2)) & 3;
 		printf("\t\teDP sDRRS MSA Delay: Lane %d\n", msa + 1);
 
-		printf("\t\tLink params:\n");
+		printf("\t\tFast link params:\n");
 		printf("\t\t\trate: ");
-		if (edp->link_params[i].rate == EDP_RATE_1_62)
+		if (edp->fast_link_params[i].rate == EDP_RATE_1_62)
 			printf("1.62G\n");
-		else if (edp->link_params[i].rate == EDP_RATE_2_7)
+		else if (edp->fast_link_params[i].rate == EDP_RATE_2_7)
 			printf("2.7G\n");
 		printf("\t\t\tlanes: ");
-		switch (edp->link_params[i].lanes) {
+		switch (edp->fast_link_params[i].lanes) {
 		case EDP_LANE_1:
 			printf("x1 mode\n");
 			break;
@@ -773,11 +773,11 @@ static void dump_edp(struct context *context,
 			break;
 		default:
 			printf("(unknown value %d)\n",
-			       edp->link_params[i].lanes);
+			       edp->fast_link_params[i].lanes);
 			break;
 		}
 		printf("\t\t\tpre-emphasis: ");
-		switch (edp->link_params[i].preemphasis) {
+		switch (edp->fast_link_params[i].preemphasis) {
 		case EDP_PREEMPHASIS_NONE:
 			printf("none\n");
 			break;
@@ -792,11 +792,11 @@ static void dump_edp(struct context *context,
 			break;
 		default:
 			printf("(unknown value %d)\n",
-			       edp->link_params[i].preemphasis);
+			       edp->fast_link_params[i].preemphasis);
 			break;
 		}
 		printf("\t\t\tvswing: ");
-		switch (edp->link_params[i].vswing) {
+		switch (edp->fast_link_params[i].vswing) {
 		case EDP_VSWING_0_4V:
 			printf("0.4V\n");
 			break;
@@ -811,8 +811,98 @@ static void dump_edp(struct context *context,
 			break;
 		default:
 			printf("(unknown value %d)\n",
-			       edp->link_params[i].vswing);
+			       edp->fast_link_params[i].vswing);
 			break;
+		}
+
+		if (context->bdb->version >= 162) {
+			bool val = (edp->s3d_feature >> i) & 1;
+			printf("\t\tStereo 3D feature: %s\n", YESNO(val));
+		}
+
+		if (context->bdb->version >= 165) {
+			bool val = (edp->t3_optimization >> i) & 1;
+			printf("\t\tT3 optimization: %s\n", YESNO(val));
+		}
+
+		if (context->bdb->version >= 173) {
+			int val = (edp->vswing_preemph_table_selection >> (i * 4)) & 0xf;
+
+			printf("\t\tVswing/preemphasis table selection: ");
+			switch (val) {
+			case 0:
+				printf("Low power (200 mV)\n");
+				break;
+			case 1:
+				printf("Default (400 mV)\n");
+				break;
+			default:
+				printf("(unknown value %d)\n", val);
+				break;
+			}
+		}
+
+		if (context->bdb->version >= 182) {
+			bool val = (edp->fast_link_training >> i) & 1;
+			printf("\t\tFast link training: %s\n", YESNO(val));
+		}
+
+		if (context->bdb->version >= 185) {
+			bool val = (edp->dpcd_600h_write_required >> i) & 1;
+			printf("\t\tDPCD 600h write required: %s\n", YESNO(val));
+		}
+
+		if (context->bdb->version >= 186) {
+			printf("\t\tPWM delays:\n"
+			       "\t\t\tPWM on to backlight enable: %d\n"
+			       "\t\t\tBacklight disable to PWM off: %d\n",
+			       edp->pwm_delays[i].pwm_on_to_backlight_enable,
+			       edp->pwm_delays[i].backlight_disable_to_pwm_off);
+		}
+
+		if (context->bdb->version >= 199) {
+			bool val = (edp->full_link_params_provided >> i) & 1;
+
+			printf("\t\tFull link params provided: %s\n", YESNO(val));
+			printf("\t\tFull link params:\n");
+			printf("\t\t\tpre-emphasis: ");
+			switch (edp->full_link_params[i].preemphasis) {
+			case EDP_PREEMPHASIS_NONE:
+				printf("none\n");
+				break;
+			case EDP_PREEMPHASIS_3_5dB:
+				printf("3.5dB\n");
+				break;
+			case EDP_PREEMPHASIS_6dB:
+				printf("6dB\n");
+				break;
+			case EDP_PREEMPHASIS_9_5dB:
+				printf("9.5dB\n");
+				break;
+			default:
+				printf("(unknown value %d)\n",
+				       edp->full_link_params[i].preemphasis);
+				break;
+			}
+			printf("\t\t\tvswing: ");
+			switch (edp->full_link_params[i].vswing) {
+			case EDP_VSWING_0_4V:
+				printf("0.4V\n");
+				break;
+			case EDP_VSWING_0_6V:
+				printf("0.6V\n");
+				break;
+			case EDP_VSWING_0_8V:
+				printf("0.8V\n");
+				break;
+			case EDP_VSWING_1_2V:
+				printf("1.2V\n");
+				break;
+			default:
+				printf("(unknown value %d)\n",
+				       edp->full_link_params[i].vswing);
+				break;
+			}
 		}
 	}
 }
