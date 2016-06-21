@@ -5,6 +5,9 @@
 # ... we've broken this way too often :(
 #
 
+SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
+. $SOURCE_DIR/drm_getopt.sh
+
 function unload() {
 	/sbin/rmmod vgem
 	# drm may be used by other devices (nouveau, radeon, udl, etc)
@@ -18,5 +21,5 @@ function unload() {
 
 unload &> /dev/null
 
-/sbin/modprobe vgem $* || exit 1
-unload || exit 1
+/sbin/modprobe vgem $* || exit $IGT_EXIT_FAILURE
+unload || exit $IGT_EXIT_FAILURE
