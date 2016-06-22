@@ -21,5 +21,7 @@ function unload() {
 
 unload &> /dev/null
 
+/sbin/modprobe -q -n vgem || exit $IGT_EXIT_SKIP
+
 /sbin/modprobe vgem $* || exit $IGT_EXIT_FAILURE
 unload || exit $IGT_EXIT_FAILURE
