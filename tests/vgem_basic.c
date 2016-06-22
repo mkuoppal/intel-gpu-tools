@@ -32,6 +32,12 @@
 
 IGT_TEST_DESCRIPTION("Basic sanity check of Virtual GEM module (vGEM).");
 
+static void test_client(int fd)
+{
+	close(drm_open_driver(DRIVER_VGEM));
+	close(drm_open_driver_render(DRIVER_VGEM));
+}
+
 static void test_create(int fd)
 {
 	struct vgem_bo bo;
@@ -217,6 +223,9 @@ igt_main
 	igt_fixture {
 		fd = drm_open_driver(DRIVER_VGEM);
 	}
+
+	igt_subtest_f("second-client")
+		test_client(fd);
 
 	igt_subtest_f("create")
 		test_create(fd);
