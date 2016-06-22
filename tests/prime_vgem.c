@@ -309,19 +309,95 @@ static void test_sync(int i915, int vgem, unsigned ring, uint32_t flags)
 	vgem_create(vgem, &scratch);
 	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
 
+	ptr = mmap(NULL, scratch.size, PROT_READ, MAP_SHARED, dmabuf, 0);
+	igt_assert(ptr != MAP_FAILED);
+	gem_close(vgem, scratch.handle);
+
 	work(i915, dmabuf, ring, flags);
 
 	prime_sync_start(dmabuf, false);
-
-	ptr = vgem_mmap(vgem, &scratch, PROT_READ);
 	for (i = 0; i < 1024; i++)
 		igt_assert_eq_u32(ptr[i], i);
-	munmap(ptr, 4096);
 
 	prime_sync_end(dmabuf, false);
-
-	gem_close(vgem, scratch.handle);
 	close(dmabuf);
+
+	munmap(ptr, scratch.size);
+}
+
+static void test_fence_wait(int i915, int vgem, unsigned ring, unsigned flags)
+{
+	struct vgem_bo scratch;
+	uint32_t fence;
+	uint32_t *ptr;
+	int dmabuf;
+
+	scratch.width = 1024;
+	scratch.height = 1;
+	scratch.bpp = 32;
+	vgem_create(vgem, &scratch);
+
+	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
+	fence = vgem_fence_attach(vgem, &scratch, true);
+	igt_assert(prime_busy(dmabuf, false));
+	gem_close(vgem, scratch.handle);
+
+	ptr = mmap(NULL, scratch.size, PROT_READ, MAP_SHARED, dmabuf, 0);
+	igt_assert(ptr != MAP_FAILED);
+
+	igt_fork(child, 1)
+		work(i915, dmabuf, ring, flags);
+
+	sleep(1);
+
+	/* Check for invalidly completing the task early */
+	for (int i = 0; i < 1024; i++)
+		igt_assert_eq_u32(ptr[i], 0);
+
+	igt_assert(prime_busy(dmabuf, false));
+	vgem_fence_signal(vgem, fence);
+	igt_waitchildren();
+
+	/* But after signaling and waiting, it should be done */
+	prime_sync_start(dmabuf, false);
+	for (int i = 0; i < 1024; i++)
+		igt_assert_eq_u32(ptr[i], i);
+	prime_sync_end(dmabuf, false);
+
+	close(dmabuf);
+
+	munmap(ptr, scratch.size);
+}
+
+static void test_fence_hang(int i915, int vgem, bool write)
+{
+	struct vgem_bo scratch;
+	uint32_t *ptr;
+	int dmabuf;
+	int i;
+
+	scratch.width = 1024;
+	scratch.height = 1;
+	scratch.bpp = 32;
+	vgem_create(vgem, &scratch);
+	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
+	vgem_fence_attach(vgem, &scratch, write);
+
+	ptr = mmap(NULL, scratch.size, PROT_READ, MAP_SHARED, dmabuf, 0);
+	igt_assert(ptr != MAP_FAILED);
+	gem_close(vgem, scratch.handle);
+
+	work(i915, dmabuf, I915_EXEC_DEFAULT, 0);
+
+	/* The work should have been cancelled */
+
+	prime_sync_start(dmabuf, false);
+	for (i = 0; i < 1024; i++)
+		igt_assert_eq_u32(ptr[i], 0);
+	prime_sync_end(dmabuf, false);
+	close(dmabuf);
+
+	munmap(ptr, scratch.size);
 }
 
 static bool has_prime_export(int fd)
@@ -342,6 +418,138 @@ static bool has_prime_import(int fd)
 		return false;
 
 	return value & DRM_PRIME_CAP_IMPORT;
+}
+
+static uint32_t set_fb_on_crtc(int fd, int pipe, struct vgem_bo *bo, uint32_t fb_id)
+{
+	drmModeRes *resources = drmModeGetResources(fd);
+	struct drm_mode_modeinfo *modes = malloc(4096*sizeof(*modes));
+	uint32_t encoders[32];
+
+	for (int o = 0; o < resources->count_connectors; o++) {
+		struct drm_mode_get_connector conn;
+		struct drm_mode_crtc set;
+		int e, m;
+
+		memset(&conn, 0, sizeof(conn));
+		conn.connector_id = resources->connectors[o];
+		conn.count_modes = 4096;
+		conn.modes_ptr = (uintptr_t)modes;
+		conn.count_encoders = 32;
+		conn.encoders_ptr = (uintptr_t)encoders;
+
+		drmIoctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn);
+
+		for (e = 0; e < conn.count_encoders; e++) {
+			struct drm_mode_get_encoder enc;
+
+			memset(&enc, 0, sizeof(enc));
+			enc.encoder_id = encoders[e];
+			drmIoctl(fd, DRM_IOCTL_MODE_GETENCODER, &enc);
+			if (enc.possible_crtcs & (1 << pipe))
+				break;
+		}
+		if (e == conn.count_encoders)
+			continue;
+
+		for (m = 0; m < conn.count_modes; m++) {
+			if (modes[m].hdisplay == bo->width &&
+			    modes[m].vdisplay == bo->height)
+				break;
+		}
+		if (m == conn.count_modes)
+			continue;
+
+		memset(&set, 0, sizeof(set));
+		set.crtc_id = resources->crtcs[pipe];
+		set.fb_id = fb_id;
+		set.set_connectors_ptr = (uintptr_t)&conn.connector_id;
+		set.count_connectors = 1;
+		set.mode = modes[m];
+		set.mode_valid = 1;
+		if (drmIoctl(fd, DRM_IOCTL_MODE_SETCRTC, &set) == 0) {
+			drmModeFreeResources(resources);
+			return set.crtc_id;
+		}
+	}
+
+	drmModeFreeResources(resources);
+	return 0;
+}
+
+static inline uint32_t pipe_select(int pipe)
+{
+	if (pipe > 1)
+		return pipe << DRM_VBLANK_HIGH_CRTC_SHIFT;
+	else if (pipe > 0)
+		return DRM_VBLANK_SECONDARY;
+	else
+		return 0;
+}
+
+static unsigned get_vblank(int fd, int pipe, unsigned flags)
+{
+	union drm_wait_vblank vbl;
+
+	memset(&vbl, 0, sizeof(vbl));
+	vbl.request.type = DRM_VBLANK_RELATIVE | pipe_select(pipe) | flags;
+	if (drmIoctl(fd, DRM_IOCTL_WAIT_VBLANK, &vbl))
+		return 0;
+
+	return vbl.reply.sequence;
+}
+
+static void test_flip(int i915, int vgem, bool hang)
+{
+	struct drm_event_vblank vbl;
+	uint32_t fb_id, crtc_id;
+	uint32_t handle, fence;
+	struct pollfd pfd;
+	struct vgem_bo bo;
+
+	bo.width = 1024;
+	bo.height = 768;
+	bo.bpp = 32;
+	vgem_create(vgem, &bo);
+
+	pfd.fd = prime_handle_to_fd(vgem, bo.handle);
+	handle = prime_fd_to_handle(i915, pfd.fd);
+	igt_assert(handle);
+	close(pfd.fd);
+
+	do_or_die(__kms_addfb(i915, handle, bo.width, bo.height, bo.pitch,
+			      DRM_FORMAT_XRGB8888, I915_TILING_NONE,
+			      LOCAL_DRM_MODE_FB_MODIFIERS, &fb_id));
+	igt_assert(fb_id);
+	igt_require((crtc_id = set_fb_on_crtc(i915, 0, &bo, fb_id)));
+
+	/* Schedule a flip to wait upon vgem being written */
+	fence = vgem_fence_attach(vgem, &bo, true);
+	do_or_die(drmModePageFlip(i915, crtc_id, fb_id,
+				  DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
+
+	/* Check we don't flip before the fence is ready */
+	pfd.fd = i915;
+	pfd.events = POLLIN;
+	for (int n = 0; n < 5; n++) {
+		igt_assert_eq(poll(&pfd, 1, 0), 0);
+		get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
+	}
+
+	/* And then the flip is completed as soon as it is ready */
+	if (!hang) {
+		vgem_fence_signal(vgem, fence);
+		get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
+		igt_assert_eq(poll(&pfd, 1, 0), 1);
+	}
+	/* Even if hung, the flip must complete *eventually* */
+	igt_set_timeout(20, "Ignored hang"); /* XXX lower fail threshold? */
+	igt_assert_eq(read(i915, &vbl, sizeof(vbl)), sizeof(vbl));
+	igt_reset_timeout();
+
+	do_or_die(drmModeRmFB(i915, fb_id));
+	gem_close(i915, handle);
+	gem_close(vgem, bo.handle);
 }
 
 igt_main
@@ -409,6 +617,36 @@ igt_main
 			gem_quiescent_gpu(i915);
 			test_wait(i915, vgem, e->exec_id, e->flags);
 		}
+	}
+
+	/* Fence testing */
+	igt_subtest_group {
+		igt_fixture {
+			igt_require(vgem_has_fences(vgem));
+		}
+
+		for (e = intel_execution_engines; e->name; e++) {
+			igt_subtest_f("%sfence-wait-%s",
+					e->exec_id == 0 ? "basic-" : "",
+					e->name) {
+				gem_require_ring(i915, e->exec_id | e->flags);
+				igt_skip_on_f(gen == 6 &&
+						e->exec_id == I915_EXEC_BSD,
+						"MI_STORE_DATA broken on gen6 bsd\n");
+				gem_quiescent_gpu(i915);
+				test_fence_wait(i915, vgem, e->exec_id, e->flags);
+			}
+		}
+
+		igt_subtest("fence-read-hang")
+			test_fence_hang(i915, vgem, false);
+		igt_subtest("fence-write-hang")
+			test_fence_hang(i915, vgem, true);
+
+		igt_subtest("basic-fence-flip")
+			test_flip(i915, vgem, false);
+		igt_subtest("fence-flip-hang")
+			test_flip(i915, vgem, true);
 	}
 
 	igt_fixture {

@@ -39,4 +39,8 @@ void vgem_create(int fd, struct vgem_bo *bo);
 void *__vgem_mmap(int fd, struct vgem_bo *bo, unsigned prot);
 void *vgem_mmap(int fd, struct vgem_bo *bo, unsigned prot);
 
+bool vgem_has_fences(int fd);
+uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, bool write);
+void vgem_fence_signal(int fd, uint32_t fence);
+
 #endif /* IGT_VGEM_H */

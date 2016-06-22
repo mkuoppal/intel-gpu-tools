@@ -80,3 +80,73 @@ void *vgem_mmap(int fd, struct vgem_bo *bo, unsigned prot)
 	return ptr;
 }
 
+#define LOCAL_VGEM_FENCE_ATTACH   0x1
+#define LOCAL_VGEM_FENCE_SIGNAL   0x2
+
+#define LOCAL_IOCTL_VGEM_FENCE_ATTACH     DRM_IOWR( DRM_COMMAND_BASE + LOCAL_VGEM_FENCE_ATTACH, struct local_vgem_fence_attach)
+#define LOCAL_IOCTL_VGEM_FENCE_SIGNAL     DRM_IOW( DRM_COMMAND_BASE + LOCAL_VGEM_FENCE_SIGNAL, struct local_vgem_fence_signal)
+
+struct local_vgem_fence_attach {
+	uint32_t handle;
+	uint32_t flags;
+#define VGEM_FENCE_WRITE 0x1
+	uint32_t out_fence;
+	uint32_t pad;
+};
+
+struct local_vgem_fence_signal {
+	uint32_t fence;
+	uint32_t flags;
+};
+
+bool vgem_has_fences(int fd)
+{
+	struct local_vgem_fence_signal arg;
+	int err;
+
+	err = 0;
+	memset(&arg, 0, sizeof(arg));
+	if (drmIoctl(fd, LOCAL_IOCTL_VGEM_FENCE_SIGNAL, &arg))
+		err = -errno;
+	errno = 0;
+	return err == -ENOENT;
+}
+
+static int __vgem_fence_attach(int fd, struct local_vgem_fence_attach *arg)
+{
+	int err = 0;
+	if (igt_ioctl(fd, LOCAL_IOCTL_VGEM_FENCE_ATTACH, arg))
+		err = -errno;
+	errno = 0;
+	return err;
+}
+
+uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, bool write)
+{
+	struct local_vgem_fence_attach arg;
+
+	memset(&arg, 0, sizeof(arg));
+	arg.handle = bo->handle;
+	if (write)
+		arg.flags |= VGEM_FENCE_WRITE;
+	igt_assert_eq(__vgem_fence_attach(fd, &arg), 0);
+	return arg.out_fence;
+}
+
+static int __vgem_fence_signal(int fd, struct local_vgem_fence_signal *arg)
+{
+	int err = 0;
+	if (igt_ioctl(fd, LOCAL_IOCTL_VGEM_FENCE_SIGNAL, arg))
+		err = -errno;
+	errno = 0;
+	return err;
+}
+
+void vgem_fence_signal(int fd, uint32_t fence)
+{
+	struct local_vgem_fence_signal arg;
+
+	memset(&arg, 0, sizeof(arg));
+	arg.fence = fence;
+	igt_assert_eq(__vgem_fence_signal(fd, &arg), 0);
+}

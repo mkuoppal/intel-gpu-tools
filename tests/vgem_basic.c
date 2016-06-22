@@ -27,6 +27,7 @@
 #include "igt_sysfs.h"
 
 #include <sys/mman.h>
+#include <sys/poll.h>
 #include <sys/stat.h>
 #include <dirent.h>
 
@@ -150,6 +151,82 @@ static void test_dmabuf_mmap(int fd)
 	munmap(ptr, bo.size);
 }
 
+static bool prime_busy(int fd, bool excl)
+{
+	struct pollfd pfd = { .fd = fd, .events = excl ? POLLOUT : POLLIN };
+	return poll(&pfd, 1, 0) == 0;
+}
+
+static void test_dmabuf_fence(int fd)
+{
+	struct vgem_bo bo;
+	int dmabuf;
+	uint32_t fence;
+
+	bo.width = 1024;
+	bo.height = 1;
+	bo.bpp = 32;
+	vgem_create(fd, &bo);
+
+	/* export, then fence */
+
+	dmabuf = prime_handle_to_fd(fd, bo.handle);
+
+	fence = vgem_fence_attach(fd, &bo, false);
+	igt_assert(!prime_busy(dmabuf, false));
+	igt_assert(prime_busy(dmabuf, true));
+
+	vgem_fence_signal(fd, fence);
+	igt_assert(!prime_busy(dmabuf, false));
+	igt_assert(!prime_busy(dmabuf, true));
+
+	fence = vgem_fence_attach(fd, &bo, true);
+	igt_assert(prime_busy(dmabuf, false));
+	igt_assert(prime_busy(dmabuf, true));
+
+	vgem_fence_signal(fd, fence);
+	igt_assert(!prime_busy(dmabuf, false));
+	igt_assert(!prime_busy(dmabuf, true));
+
+	gem_close(fd, bo.handle);
+}
+
+static void test_dmabuf_fence_before(int fd)
+{
+	struct vgem_bo bo;
+	int dmabuf;
+	uint32_t fence;
+
+	bo.width = 1024;
+	bo.height = 1;
+	bo.bpp = 32;
+	vgem_create(fd, &bo);
+
+	fence = vgem_fence_attach(fd, &bo, false);
+	dmabuf = prime_handle_to_fd(fd, bo.handle);
+
+	igt_assert(!prime_busy(dmabuf, false));
+	igt_assert(prime_busy(dmabuf, true));
+
+	vgem_fence_signal(fd, fence);
+	igt_assert(!prime_busy(dmabuf, false));
+	igt_assert(!prime_busy(dmabuf, true));
+
+	gem_close(fd, bo.handle);
+	vgem_create(fd, &bo);
+
+	fence = vgem_fence_attach(fd, &bo, true);
+	dmabuf = prime_handle_to_fd(fd, bo.handle);
+	igt_assert(prime_busy(dmabuf, false));
+	igt_assert(prime_busy(dmabuf, true));
+
+	vgem_fence_signal(fd, fence);
+	igt_assert(!prime_busy(dmabuf, false));
+	igt_assert(!prime_busy(dmabuf, true));
+
+	gem_close(fd, bo.handle);
+}
+
 static void test_sysfs_read(int fd)
 {
 	int dir = igt_sysfs_open(fd, NULL);
@@ -239,11 +316,22 @@ igt_main
 			igt_require(has_prime_export(fd));
 		}
 
-		igt_subtest_f("dmabuf-export")
+		igt_subtest("dmabuf-export")
 			test_dmabuf_export(fd);
 
-		igt_subtest_f("dmabuf-mmap")
+		igt_subtest("dmabuf-mmap")
 			test_dmabuf_mmap(fd);
+
+		igt_subtest_group {
+			igt_fixture {
+				igt_require(vgem_has_fences(fd));
+			}
+
+			igt_subtest("dmabuf-fence")
+				test_dmabuf_fence(fd);
+			igt_subtest("dmabuf-fence-before")
+				test_dmabuf_fence_before(fd);
+		}
 	}
 
 	igt_subtest("sysfs")
