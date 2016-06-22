@@ -325,13 +325,13 @@ static void basic_flip(struct data *data)
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 
 	/* Start with a synchronous flip to align with the vblank */
-	drmModePageFlip(data->fd, arg.crtc_id, fb_id, 0, NULL);
+	do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id, 0, NULL));
 	do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 	vblank_start = get_vblank(data->fd, 0, 0);
 
 	/* Schedule a nonblocking flip for the next vblank */
-	drmModePageFlip(data->fd, arg.crtc_id, fb_id,
-			DRM_MODE_PAGE_FLIP_EVENT, NULL);
+	do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id,
+				DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
 
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 	for (int n = 0; n < target; n++)
