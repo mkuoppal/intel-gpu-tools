@@ -146,6 +146,206 @@ static void stress(struct data *data,
 	munmap(results, 4096);
 }
 
+static bool set_fb_on_crtc(struct data *data, int pipe, struct igt_fb *fb_info)
+{
+	struct drm_mode_modeinfo *modes = malloc(4096*sizeof(*modes));
+	uint32_t encoders[32];
+
+	for (int o = 0; o < data->resources->count_connectors; o++) {
+		struct drm_mode_get_connector conn;
+		struct drm_mode_crtc set;
+		int e, m;
+
+		memset(&conn, 0, sizeof(conn));
+		conn.connector_id = data->resources->connectors[o];
+		conn.count_modes = 4096;
+		conn.modes_ptr = (uintptr_t)modes;
+		conn.count_encoders = 32;
+		conn.encoders_ptr = (uintptr_t)encoders;
+
+		drmIoctl(data->fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn);
+
+		for (e = 0; e < conn.count_encoders; e++) {
+			struct drm_mode_get_encoder enc;
+
+			memset(&enc, 0, sizeof(enc));
+			enc.encoder_id = encoders[e];
+			drmIoctl(data->fd, DRM_IOCTL_MODE_GETENCODER, &enc);
+			if (enc.possible_crtcs & (1 << pipe))
+				break;
+		}
+		if (e == conn.count_encoders)
+			continue;
+
+		for (m = 0; m < conn.count_modes; m++) {
+			if (modes[m].hdisplay == fb_info->width &&
+			    modes[m].vdisplay == fb_info->height)
+				break;
+		}
+		if (m == conn.count_modes)
+			continue;
+
+		memset(&set, 0, sizeof(set));
+		set.crtc_id = data->resources->crtcs[pipe];
+		set.fb_id = fb_info->fb_id;
+		set.set_connectors_ptr = (uintptr_t)&conn.connector_id;
+		set.count_connectors = 1;
+		set.mode = modes[m];
+		set.mode_valid = 1;
+		if (drmIoctl(data->fd, DRM_IOCTL_MODE_SETCRTC, &set) == 0)
+			return true;
+	}
+
+	return false;
+}
+
+static void flip(struct data *data,
+		int cursor_pipe, int flip_pipe,
+		int timeout)
+{
+	struct drm_mode_cursor arg;
+	uint64_t *results;
+	struct igt_fb fb_info;
+	uint32_t fb_id;
+
+	results = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(results != MAP_FAILED);
+
+	memset(&arg, 0, sizeof(arg));
+	arg.flags = DRM_MODE_CURSOR_BO;
+	arg.crtc_id = data->resources->crtcs[cursor_pipe];
+	arg.width = 64;
+	arg.height = 64;
+	arg.handle = gem_create(data->fd, 4*64*64);
+
+	drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+
+	fb_id = igt_create_fb(data->fd, 1024, 768, DRM_FORMAT_XRGB8888,
+			      I915_TILING_NONE, &fb_info);
+	igt_require(set_fb_on_crtc(data, flip_pipe, &fb_info));
+
+	arg.flags = DRM_MODE_CURSOR_MOVE;
+	igt_fork(child, 1) {
+		unsigned long count = 0;
+
+		igt_until_timeout(timeout) {
+			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+			count++;
+		}
+
+		igt_debug("cursor count=%lu\n", count);
+		results[0] = count;
+	}
+	igt_fork(child, 1) {
+		unsigned long count = 0;
+		unsigned crtc = data->resources->crtcs[flip_pipe];
+
+		igt_until_timeout(timeout) {
+			char buf[128];
+			drmModePageFlip(data->fd, crtc, fb_id,
+					DRM_MODE_PAGE_FLIP_EVENT,
+					NULL);
+			read(data->fd, buf, sizeof(buf));
+			count++;
+		}
+
+		igt_debug("flip count=%lu\n", count);
+		results[1] = count;
+	}
+	igt_waitchildren();
+
+	gem_close(data->fd, arg.handle);
+	munmap(results, 4096);
+}
+
+static inline uint32_t pipe_select(int pipe)
+{
+	if (pipe > 1)
+		return pipe << DRM_VBLANK_HIGH_CRTC_SHIFT;
+	else if (pipe > 0)
+		return DRM_VBLANK_SECONDARY;
+	else
+		return 0;
+}
+
+static unsigned get_vblank(int fd, int pipe, unsigned flags)
+{
+	union drm_wait_vblank vbl;
+
+	memset(&vbl, 0, sizeof(vbl));
+	vbl.request.type = DRM_VBLANK_RELATIVE | pipe_select(pipe) | flags;
+	if (drmIoctl(fd, DRM_IOCTL_WAIT_VBLANK, &vbl))
+		return 0;
+
+	return vbl.reply.sequence;
+}
+
+static void basic_flip(struct data *data)
+{
+	struct drm_mode_cursor arg;
+	struct igt_fb fb_info;
+	unsigned vblank_start;
+	int target;
+	char buf[128];
+	uint32_t fb_id;
+
+	memset(&arg, 0, sizeof(arg));
+	arg.flags = DRM_MODE_CURSOR_BO;
+	arg.crtc_id = data->resources->crtcs[0];
+	arg.width = 64;
+	arg.height = 64;
+	arg.handle = gem_create(data->fd, 4*64*64);
+
+	drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	arg.flags = DRM_MODE_CURSOR_MOVE;
+
+	fb_id = igt_create_fb(data->fd, 1024, 768, DRM_FORMAT_XRGB8888,
+			      I915_TILING_NONE, &fb_info);
+	igt_require(set_fb_on_crtc(data, 0, &fb_info));
+
+	target = 4096;
+	do {
+		vblank_start = get_vblank(data->fd, 0, DRM_VBLANK_NEXTONMISS);
+		igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+		for (int n = 0; n < target; n++)
+			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+		target /= 2;
+		if (get_vblank(data->fd, 0, 0) == vblank_start)
+			break;
+	} while (target);
+	igt_require(target > 1);
+
+	igt_debug("Using a target of %d cursor updates per half-vblank\n",
+		  target);
+
+	vblank_start = get_vblank(data->fd, 0, DRM_VBLANK_NEXTONMISS);
+	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+	for (int n = 0; n < target; n++)
+		do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+
+	/* Start with a synchronous flip to align with the vblank */
+	drmModePageFlip(data->fd, arg.crtc_id, fb_id, 0, NULL);
+	do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	vblank_start = get_vblank(data->fd, 0, 0);
+
+	/* Schedule a nonblocking flip for the next vblank */
+	drmModePageFlip(data->fd, arg.crtc_id, fb_id,
+			DRM_MODE_PAGE_FLIP_EVENT, NULL);
+
+	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+	for (int n = 0; n < target; n++)
+		do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+
+	igt_set_timeout(1, "Stuck page flip");
+	read(data->fd, buf, sizeof(buf));
+	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start + 1);
+	igt_reset_timeout();
+
+	igt_remove_fb(data->fd, &fb_info);
+}
+
 igt_main
 {
 	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -214,6 +414,20 @@ igt_main
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       -ncpus, DRM_MODE_CURSOR_MOVE, 20);
+
+	igt_subtest_group {
+		igt_subtest("basic-cursor-vs-flip")
+			basic_flip(&data);
+
+		igt_subtest("cursorA-vs-flipA")
+			flip(&data, 0, 0, 10);
+		igt_subtest("cursorA-vs-flipB")
+			flip(&data, 0, 1, 10);
+		igt_subtest("cursorB-vs-flipA")
+			flip(&data, 1, 0, 10);
+		igt_subtest("cursorB-vs-flipB")
+			flip(&data, 1, 1, 10);
+	}
 
 	igt_fixture {
 		drmModeFreeResources(data.resources);
