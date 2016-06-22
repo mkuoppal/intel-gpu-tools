@@ -286,7 +286,7 @@ static void basic_flip(struct data *data)
 	struct igt_fb fb_info;
 	unsigned vblank_start;
 	int target;
-	char buf[128];
+	struct drm_event buf;
 	uint32_t fb_id;
 
 	memset(&arg, 0, sizeof(arg));
@@ -324,10 +324,9 @@ static void basic_flip(struct data *data)
 		do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 
-	/* Start with a synchronous flip to align with the vblank */
-	do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id, 0, NULL));
+	/* Start with a synchronous query to align with the vblank */
+	vblank_start = get_vblank(data->fd, 0, DRM_VBLANK_NEXTONMISS);
 	do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
-	vblank_start = get_vblank(data->fd, 0, 0);
 
 	/* Schedule a nonblocking flip for the next vblank */
 	do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id,
@@ -339,7 +338,7 @@ static void basic_flip(struct data *data)
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 
 	igt_set_timeout(1, "Stuck page flip");
-	read(data->fd, buf, sizeof(buf));
+	read(data->fd, &buf, sizeof(buf));
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start + 1);
 	igt_reset_timeout();
 
