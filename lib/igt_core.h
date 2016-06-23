@@ -297,6 +297,17 @@ void __igt_fail_assert(const char *domain, const char *file,
 void igt_exit(void) __attribute__((noreturn));
 
 /**
+ * igt_ignore_warn:
+ * @expr: condition to ignore
+ *
+ *
+ * Stops the compiler warning about an unused return value.
+ */
+static inline void igt_ignore_warn(bool value)
+{
+}
+
+/**
  * igt_assert:
  * @expr: condition to test
  *

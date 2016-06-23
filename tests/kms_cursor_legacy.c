@@ -245,7 +245,9 @@ static void flip(struct data *data,
 			drmModePageFlip(data->fd, crtc, fb_id,
 					DRM_MODE_PAGE_FLIP_EVENT,
 					NULL);
-			read(data->fd, buf, sizeof(buf));
+			while (read(data->fd, buf, sizeof(buf)) < 0 &&
+			       (errno == EINTR || errno == EAGAIN))
+				;
 			count++;
 		}
 
@@ -338,7 +340,7 @@ static void basic_flip(struct data *data)
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 
 	igt_set_timeout(1, "Stuck page flip");
-	read(data->fd, &buf, sizeof(buf));
+	igt_ignore_warn(read(data->fd, &buf, sizeof(buf)));
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start + 1);
 	igt_reset_timeout();
 

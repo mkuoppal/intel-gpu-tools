@@ -129,8 +129,9 @@ igt_simple_main
 	fprintf(file, "0x%x", -1);
 	fclose(file);
 
+	expect_rings = -1;
 	file = igt_debugfs_fopen("i915_ring_test_irq", "r");
-	fscanf(file, "%x", &expect_rings);
+	igt_ignore_warn(fscanf(file, "%x", &expect_rings));
 	fclose(file);
 
 	igt_debug("Testing rings %x\n", expect_rings);

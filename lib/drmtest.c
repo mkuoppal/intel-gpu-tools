@@ -218,11 +218,11 @@ int drm_get_card(void)
 	return -1;
 }
 
-static void modprobe(const char *driver)
+static int modprobe(const char *driver)
 {
 	char buf[128];
 	snprintf(buf, sizeof(buf), "/sbin/modprobe -s %s", driver);
-	system(buf);
+	return system(buf);
 }
 
 /**
