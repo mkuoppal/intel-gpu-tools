@@ -282,13 +282,13 @@ static unsigned get_vblank(int fd, int pipe, unsigned flags)
 	return vbl.reply.sequence;
 }
 
-static void basic_flip(struct data *data)
+static void basic_flip_vs_cursor(struct data *data, int nloops)
 {
 	struct drm_mode_cursor arg;
+	struct drm_event_vblank vbl;
 	struct igt_fb fb_info;
 	unsigned vblank_start;
 	int target;
-	struct drm_event buf;
 	uint32_t fb_id;
 
 	memset(&arg, 0, sizeof(arg));
@@ -326,25 +326,111 @@ static void basic_flip(struct data *data)
 		do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 
-	/* Start with a synchronous query to align with the vblank */
-	vblank_start = get_vblank(data->fd, 0, DRM_VBLANK_NEXTONMISS);
-	do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
-
-	/* Schedule a nonblocking flip for the next vblank */
-	do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id,
-				DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
-
-	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
-	for (int n = 0; n < target; n++)
+	while (nloops--) {
+		/* Start with a synchronous query to align with the vblank */
+		vblank_start = get_vblank(data->fd, 0, DRM_VBLANK_NEXTONMISS);
 		do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
-	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
 
-	igt_set_timeout(1, "Stuck page flip");
-	igt_ignore_warn(read(data->fd, &buf, sizeof(buf)));
-	igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start + 1);
-	igt_reset_timeout();
+		/* Schedule a nonblocking flip for the next vblank */
+		do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id,
+					DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
+
+		igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+		for (int n = 0; n < target; n++)
+			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+		igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+
+		igt_set_timeout(1, "Stuck page flip");
+		igt_ignore_warn(read(data->fd, &vbl, sizeof(vbl)));
+		igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start + 1);
+		igt_reset_timeout();
+	}
 
 	igt_remove_fb(data->fd, &fb_info);
+	gem_close(data->fd, arg.handle);
+}
+
+static void basic_cursor_vs_flip(struct data *data, int nloops)
+{
+	struct drm_mode_cursor arg;
+	struct drm_event_vblank vbl;
+	struct igt_fb fb_info;
+	unsigned vblank_start, vblank_last;
+	volatile unsigned long *shared;
+	int target;
+	uint32_t fb_id;
+
+	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(shared != MAP_FAILED);
+
+	memset(&arg, 0, sizeof(arg));
+	arg.flags = DRM_MODE_CURSOR_BO;
+	arg.crtc_id = data->resources->crtcs[0];
+	arg.width = 64;
+	arg.height = 64;
+	arg.handle = gem_create(data->fd, 4*64*64);
+
+	drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	arg.flags = DRM_MODE_CURSOR_MOVE;
+
+	fb_id = igt_create_fb(data->fd, 1024, 768, DRM_FORMAT_XRGB8888,
+			      I915_TILING_NONE, &fb_info);
+	igt_require(set_fb_on_crtc(data, 0, &fb_info));
+
+	target = 4096;
+	do {
+		vblank_start = get_vblank(data->fd, 0, DRM_VBLANK_NEXTONMISS);
+		igt_assert_eq(get_vblank(data->fd, 0, 0), vblank_start);
+		for (int n = 0; n < target; n++)
+			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+		target /= 2;
+		if (get_vblank(data->fd, 0, 0) == vblank_start)
+			break;
+	} while (target);
+	igt_require(target > 1);
+
+	igt_debug("Using a target of %d cursor updates per half-vblank\n",
+		  target);
+
+	for (int i = 0; i < nloops; i++) {
+		shared[0] = 0;
+		igt_fork(child, 1) {
+			unsigned long count = 0;
+			while (!shared[0]) {
+				drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
+				count++;
+			}
+			igt_debug("child: %lu cursor updates\n", count);
+			shared[0] = count;
+		}
+		do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id,
+					DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
+		igt_assert_eq(read(data->fd, &vbl, sizeof(vbl)), sizeof(vbl));
+		vblank_start = vblank_last = vbl.sequence;
+		for (int n = 0; n < 60; n++) {
+			do_or_die(drmModePageFlip(data->fd, arg.crtc_id, fb_id,
+						DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
+			igt_assert_eq(read(data->fd, &vbl, sizeof(vbl)), sizeof(vbl));
+			if (vbl.sequence != vblank_last + 1) {
+				igt_warn("page flip %d was delayed, missed %d frames\n",
+					 n, vbl.sequence - vblank_last - 1);
+			}
+			vblank_last = vbl.sequence;
+		}
+		igt_assert_eq(vbl.sequence, vblank_start + 60);
+
+		shared[0] = 1;
+		igt_waitchildren();
+		igt_assert_f(shared[0] > 60*target,
+			     "completed %lu cursor updated in a period of 60 flips, "
+			     "we expect to complete approximately %lu updateds, "
+			     "with the threshold set at %lu\n",
+			     shared[0], 2*60ul*target, 60ul*target);
+	}
+
+	igt_remove_fb(data->fd, &fb_info);
+	gem_close(data->fd, arg.handle);
+	munmap((void *)shared, 4096);
 }
 
 igt_main
@@ -417,8 +503,14 @@ igt_main
 		       -ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
 	igt_subtest_group {
+		igt_subtest("basic-flip-vs-cursor")
+			basic_flip_vs_cursor(&data, 1);
+		igt_subtest("long-flip-vs-cursor")
+			basic_flip_vs_cursor(&data, 150);
 		igt_subtest("basic-cursor-vs-flip")
-			basic_flip(&data);
+			basic_cursor_vs_flip(&data, 1);
+		igt_subtest("long-cursor-vs-flip")
+			basic_cursor_vs_flip(&data, 150);
 
 		igt_subtest("cursorA-vs-flipA")
 			flip(&data, 0, 0, 10);
