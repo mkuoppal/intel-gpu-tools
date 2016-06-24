@@ -92,14 +92,14 @@ static const char *__debugfs_mount(void)
 	struct stat st;
 
 	if (stat("/debug/dri", &st) == 0)
-		return "/debug/dri";
+		return "/debug";
 
 	if (stat("/sys/kernel/debug/dri", &st) == 0)
-		return "/sys/kernel/debug/dri";
+		return "/sys/kernel/debug";
 
 	igt_assert(stat("/sys/kernel/debug", &st) == 0);
 	igt_assert(mount("debug", "/sys/kernel/debug", "debugfs", 0, 0) == 0);
-	return "/sys/kernel/debug/dri";
+	return "/sys/kernel/debug";
 }
 
 static bool __igt_debugfs_init(igt_debugfs_t *debugfs)
@@ -109,7 +109,7 @@ static bool __igt_debugfs_init(igt_debugfs_t *debugfs)
 
 	strcpy(debugfs->root, __debugfs_mount());
 	for (n = 0; n < 16; n++) {
-		int len = sprintf(debugfs->dri_path, "%s/%d", debugfs->root, n);
+		int len = sprintf(debugfs->dri_path, "%s/dri/%d", debugfs->root, n);
 		sprintf(debugfs->dri_path + len, "/i915_error_state");
 		if (stat(debugfs->dri_path, &st) == 0) {
 			debugfs->dri_path[len] = '\0';
