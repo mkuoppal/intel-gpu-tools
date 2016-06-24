@@ -1169,7 +1169,9 @@ void igt_exit(void)
 			igt_exitcode = IGT_EXIT_SKIP;
 	}
 
-	kmsg(KERN_INFO "%s: exiting, ret=%d\n", command_str, igt_exitcode);
+	if (command_str)
+		kmsg(KERN_INFO "%s: exiting, ret=%d\n",
+		     command_str, igt_exitcode);
 	igt_debug("Exiting with status code %d\n", igt_exitcode);
 
 	for (int c = 0; c < num_test_children; c++)
