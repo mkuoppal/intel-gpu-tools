@@ -375,9 +375,10 @@ int igt_open_forcewake_handle(void)
 		return -1;
 	return igt_debugfs_open("i915_forcewake_user", O_WRONLY);
 }
-static unsigned int clflush_size;
 
 #if defined(__x86_64__) || defined(__i386__)
+static unsigned int clflush_size;
+
 int igt_setup_clflush(void)
 {
 	FILE *file;
