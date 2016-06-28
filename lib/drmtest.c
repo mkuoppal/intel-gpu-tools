@@ -338,7 +338,7 @@ int drm_open_driver(int chipset)
 	if (__sync_fetch_and_add(&open_count, 1))
 		return fd;
 
-	if(chipset & DRIVER_INTEL){
+	if (is_i915_device(fd)) {
 		gem_quiescent_gpu(fd);
 		igt_install_exit_handler(quiescent_gpu_at_exit);
 	}
