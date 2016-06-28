@@ -92,12 +92,14 @@ enum igt_atomic_crtc_properties {
        IGT_CRTC_CTM,
        IGT_CRTC_DEGAMMA_LUT,
        IGT_CRTC_GAMMA_LUT,
+       IGT_CRTC_MODE_ID,
+       IGT_CRTC_ACTIVE,
        IGT_NUM_CRTC_PROPS
 };
 
 enum igt_atomic_connector_properties {
        IGT_CONNECTOR_SCALING_MODE = 0,
-       IGT_CONNECTOR_DPMS,
+       IGT_CONNECTOR_CRTC_ID,
        IGT_NUM_CONNECTOR_PROPS
 };
 
@@ -107,10 +109,7 @@ struct kmstest_connector_config {
 	drmModeEncoder *encoder;
 	drmModeModeInfo default_mode;
 	uint64_t connector_scaling_mode;
-	bool connector_scaling_mode_changed;
-	uint64_t connector_dpms;
-	bool connector_dpms_changed;
-	uint32_t atomic_props_crtc[IGT_NUM_CRTC_PROPS];
+	bool connector_scaling_mode_changed, crtc_changed;
 	uint32_t atomic_props_connector[IGT_NUM_CONNECTOR_PROPS];
 	int crtc_idx;
 	int pipe;
@@ -250,10 +249,21 @@ struct igt_pipe {
 	enum pipe pipe;
 	bool enabled;
 	int n_planes;
+
+	uint32_t atomic_props_crtc[IGT_NUM_CRTC_PROPS];
+
 	igt_plane_t planes[IGT_MAX_PLANES];
 	uint64_t background; /* Background color MSB BGR 16bpc LSB */
 	uint32_t background_changed : 1;
 	uint32_t background_property;
+
+	uint64_t mode_id;
+	uint32_t mode_changed : 1;
+
+	uint32_t atomic_connector_mask;
+
+	uint32_t active;
+	uint32_t active_changed : 1;
 
 	uint64_t degamma_blob;
 	uint32_t degamma_property;
@@ -336,6 +346,10 @@ static inline bool igt_pipe_connector_valid(enum pipe pipe,
 
 #define for_each_if(condition) if (!(condition)) {} else
 
+#define for_each_output(display, output) \
+	for (int i__ = 0;  i__ < (display)->n_outputs; i__++)	\
+		for_each_if (((output = &(display)->outputs[i__]), 1))
+
 #define for_each_connected_output(display, output)		\
 	for (int i__ = 0;  i__ < (display)->n_outputs; i__++)	\
 		for_each_if (((output = &(display)->outputs[i__]), output->valid))
@@ -352,7 +366,7 @@ static inline bool igt_pipe_connector_valid(enum pipe pipe,
 			     igt_pipe_connector_valid(pipe, output)))
 
 #define for_each_valid_output_on_pipe(display, pipe, output) \
-	for_each_connected_output(display, output) \
+	for_each_output(display, output) \
 		for_each_if (igt_pipe_connector_valid(pipe, output))
 
 #define for_each_plane_on_pipe(display, pipe, plane)			\
@@ -379,9 +393,9 @@ static inline bool igt_pipe_connector_valid(enum pipe pipe,
  * @prop: one of igt_atomic_crtc_properties
  * @value: the value to add
  */
-#define igt_atomic_populate_crtc_req(req, output, prop, value) \
-	igt_assert_lt(0, drmModeAtomicAddProperty(req, output->config.crtc->crtc_id,\
-						  output->config.atomic_props_crtc[prop], value))
+#define igt_atomic_populate_crtc_req(req, pipe_obj, prop, value) \
+	igt_assert_lt(0, drmModeAtomicAddProperty(req, pipe_obj->crtc_id,\
+						  pipe_obj->atomic_props_crtc[prop], value))
 /**
  * igt_atomic_populate_connector_req:
  * @req: A pointer to drmModeAtomicReq

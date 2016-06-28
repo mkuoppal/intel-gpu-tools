@@ -60,7 +60,7 @@ test_rmfb(struct rmfb_data *data, igt_output_t *output, enum pipe pipe, bool reo
 	uint64_t cursor_width, cursor_height;
 
 	igt_output_set_pipe(output, pipe);
-	igt_display_commit(&data->display);
+	igt_display_commit2(&data->display, data->display.is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	if (!output->valid) {
 		igt_output_set_pipe(output, PIPE_ANY);
@@ -129,10 +129,16 @@ test_rmfb(struct rmfb_data *data, igt_output_t *output, enum pipe pipe, bool reo
 		igt_assert_eq(planeres->fb_id, 0);
 
 		drmModeFreePlane(planeres);
+		igt_plane_set_fb(plane, NULL);
 	}
 
+	for_each_pipe(&data->display, pipe)
+		data->display.pipes[pipe].mode_id = 0;
+
 	igt_output_set_pipe(output, PIPE_ANY);
-	igt_display_commit2(&data->display, data->display.is_atomic ? COMMIT_ATOMIC : COMMIT_UNIVERSAL);
+
+	if (!data->display.is_atomic)
+		igt_display_commit2(&data->display, COMMIT_UNIVERSAL);
 
 	return true;
 }
