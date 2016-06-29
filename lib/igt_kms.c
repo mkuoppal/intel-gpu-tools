@@ -164,8 +164,8 @@ static const char *igt_plane_prop_names[IGT_NUM_PLANE_PROPS] = {
 
 static const char *igt_crtc_prop_names[IGT_NUM_CRTC_PROPS] = {
 	"background_color",
-	"DEGAMMA_LUT",
 	"CTM",
+	"DEGAMMA_LUT",
 	"GAMMA_LUT",
 };
 
