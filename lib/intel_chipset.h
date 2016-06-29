@@ -447,11 +447,7 @@ void intel_check_pch(void);
 				 IS_SKL_GT3(devid) || \
 				 IS_SKL_GT4(devid))
 
-#define IS_BROXTON(devid)	((devid) == PCI_CHIP_BROXTON_0 || \
-				 (devid) == PCI_CHIP_BROXTON_1 || \
-				 (devid) == PCI_CHIP_BROXTON_2 || \
-				 (devid) == PCI_CHIP_BROXTON_3 || \
-				 (devid) == PCI_CHIP_BROXTON_4)
+#define IS_BROXTON(devid)	(intel_device_info(devid)->is_broxton)
 
 #define IS_BROADWATER(devid)	(intel_device_info(devid)->is_broadwater)
 #define IS_CRESTLINE(devid)	(intel_device_info(devid)->is_crestline)
