@@ -372,10 +372,6 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_HASWELL_CRW_B_GT3 || \
 				 (devid) == PCI_CHIP_HASWELL_CRW_E_GT3)
 
-#define IS_HASWELL(devid)	(IS_HSW_GT1(devid) || \
-				 IS_HSW_GT2(devid) || \
-				 IS_HSW_GT3(devid))
-
 #define IS_SKL_GT1(devid)	((devid) == PCI_CHIP_SKYLAKE_ULT_GT1	|| \
 				 (devid) == PCI_CHIP_SKYLAKE_ULX_GT1	|| \
 				 (devid) == PCI_CHIP_SKYLAKE_DT_GT1	|| \
@@ -423,6 +419,7 @@ void intel_check_pch(void);
 
 #define IS_KBL_GT4(devid)	((devid) == PCI_CHIP_KABYLAKE_HALO_GT4)
 
+#define IS_HASWELL(devid)	(intel_device_info(devid)->is_haswell)
 #define IS_BROADWELL(devid)	(intel_device_info(devid)->is_broadwell)
 #define IS_CHERRYVIEW(devid)	(intel_device_info(devid)->is_cherryview)
 #define IS_KABYLAKE(devid)	(intel_device_info(devid)->is_kabylake)
