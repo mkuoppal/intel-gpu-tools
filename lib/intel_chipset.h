@@ -442,11 +442,7 @@ void intel_check_pch(void);
  				 IS_KBL_GT3(devid) || \
  				 IS_KBL_GT4(devid))
 
-#define IS_SKYLAKE(devid)	(IS_SKL_GT1(devid) || \
-				 IS_SKL_GT2(devid) || \
-				 IS_SKL_GT3(devid) || \
-				 IS_SKL_GT4(devid))
-
+#define IS_SKYLAKE(devid)	(intel_device_info(devid)->is_skylake)
 #define IS_BROXTON(devid)	(intel_device_info(devid)->is_broxton)
 
 #define IS_BROADWATER(devid)	(intel_device_info(devid)->is_broadwater)
