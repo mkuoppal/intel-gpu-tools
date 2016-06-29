@@ -269,13 +269,6 @@ void intel_check_pch(void);
 
 #endif /* __GTK_DOC_IGNORE__ */
 
-#define IS_G45(devid)		((devid) == PCI_CHIP_IGD_E_G || \
-				 (devid) == PCI_CHIP_Q45_G || \
-				 (devid) == PCI_CHIP_G45_G || \
-				 (devid) == PCI_CHIP_G41_G)
-#define IS_GM45(devid)		((devid) == PCI_CHIP_GM45_GM)
-#define IS_G4X(devid)		(IS_G45(devid) || IS_GM45(devid))
-
 #define IS_HSW_GT1(devid)	((devid) == PCI_CHIP_HASWELL_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_M_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_S_GT1 || \
@@ -400,6 +393,13 @@ void intel_check_pch(void);
 #define IS_G33(devid)		(intel_device_info(devid)->is_bearlake || \
 				 intel_device_info(devid)->is_pineview)
 
+#define IS_BROADWATER(devid)	(intel_device_info(devid)->is_broadwater)
+#define IS_CRESTLINE(devid)	(intel_device_info(devid)->is_crestline)
+
+#define IS_GM45(devid)		(intel_device_info(devid)->is_cantiga)
+#define IS_G45(devid)		(intel_device_info(devid)->is_eaglelake)
+#define IS_G4X(devid)		(IS_G45(devid) || IS_GM45(devid))
+
 #define IS_IRONLAKE(devid)	(intel_device_info(devid)->is_ironlake)
 #define IS_ARRANDALE(devid)	(intel_device_info(devid)->is_arrandale)
 #define IS_IVYBRIDGE(devid)	(intel_device_info(devid)->is_ivybridge)
@@ -410,9 +410,6 @@ void intel_check_pch(void);
 #define IS_KABYLAKE(devid)	(intel_device_info(devid)->is_kabylake)
 #define IS_SKYLAKE(devid)	(intel_device_info(devid)->is_skylake)
 #define IS_BROXTON(devid)	(intel_device_info(devid)->is_broxton)
-
-#define IS_BROADWATER(devid)	(intel_device_info(devid)->is_broadwater)
-#define IS_CRESTLINE(devid)	(intel_device_info(devid)->is_crestline)
 
 #define IS_GEN(devid, x)	(intel_device_info(devid)->gen & (1u << ((x)-1)))
 #define AT_LEAST_GEN(devid, x)	(intel_device_info(devid)->gen & -(1u << ((x)-1)))
