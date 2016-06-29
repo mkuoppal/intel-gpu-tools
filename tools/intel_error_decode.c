@@ -847,4 +847,4 @@ main(int argc, char *argv[])
 	return 0;
 }
 
-/* vim: set ts=8 sw=8 tw=0 noet :*/
+/* vim: set ts=8 sw=8 tw=0 cino=:0,(0 noet :*/

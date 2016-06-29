@@ -127,7 +127,7 @@ static bool has_known_intel_chipset(int fd)
 	if (ioctl(fd, DRM_IOCTL_I915_GETPARAM, &gp, sizeof(gp)))
 		return false;
 
-	if (!IS_INTEL(devid))
+	if (!intel_gen(devid))
 		return false;
 
 	__drm_device_id = devid;

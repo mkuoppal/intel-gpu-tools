@@ -2476,31 +2476,21 @@ int main(int argc, char **argv)
 	else
 		intel_mmio_use_pci_bar(pci_dev);
 
+	printf("%s audio registers:\n\n", intel_device_info(devid)->codename);
 	if (IS_VALLEYVIEW(devid)) {
-		printf("Valleyview audio registers:\n\n");
 		dump_ironlake();
 	}  else if (IS_GEN9(devid)
 		|| IS_BROADWELL(devid) || IS_HASWELL(devid)) {
-		printf("%s audio registers:\n\n",
-			IS_BROXTON(devid) ? "Broxton" :
-			(IS_KABYLAKE(devid) ? "Kabylake" :
-			(IS_SKYLAKE(devid) ? "Skylake" :
-			(IS_BROADWELL(devid) ? "Broadwell" : "Haswell"))));
 		dump_hsw_plus();
 	} else if (IS_GEN6(devid) || IS_GEN7(devid)
 		|| getenv("HAS_PCH_SPLIT")) {
-		printf("%s audio registers:\n\n",
-				IS_GEN6(devid) ? "SandyBridge" : "IvyBridge");
 		intel_check_pch();
 		dump_cpt();
 	} else if (IS_GEN5(devid)) {
-		printf("Ironlake audio registers:\n\n");
 		dump_ironlake();
 	} else if (IS_G4X(devid)) {
-		printf("G45 audio registers:\n\n");
 		dump_eaglelake();
 	} else if (IS_CHERRYVIEW(devid)) {
-		printf("Braswell audio registers:\n\n");
 		dump_braswell();
 	}
 

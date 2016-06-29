@@ -29,7 +29,7 @@
 #include <stdio.h>
 
 #include "igfx.h"
-#include "i915_pciids.h"
+#include "../lib/i915_pciids.h"
 
 static const struct igfx_info generic_info = {
 	.gen = -1,

@@ -657,26 +657,7 @@ static int intel_reg_help(struct config *config, int argc, char *argv[])
  */
 static const char *get_codename(uint32_t devid)
 {
-	if (IS_GEN5(devid))
-		return "ironlake";
-	else if (IS_GEN6(devid))
-		return "sandybridge";
-	else if (IS_IVYBRIDGE(devid))
-		return "ivybridge";
-	else if (IS_HASWELL(devid))
-		return "haswell";
-	else if (IS_BROADWELL(devid))
-		return "broadwell";
-	else if (IS_SKYLAKE(devid))
-		return "skylake";
-	else if (IS_KABYLAKE(devid))
-		return "kabylake";
-	else if (IS_CHERRYVIEW(devid))
-		return "cherryview";
-	else if (IS_VALLEYVIEW(devid))
-		return "valleyview";
-
-	return NULL;
+	return intel_device_info(devid)->codename;
 }
 
 /*

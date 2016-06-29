@@ -141,37 +141,6 @@ intel_get_drm_devid(int fd)
 }
 
 /**
- * intel_gen:
- * @devid: pci device id
- *
- * Computes the Intel GFX generation for the give device id.
- *
- * Returns:
- * The GFX generation on successful lookup, -1 on failure.
- */
-int intel_gen(uint32_t devid)
-{
-	if (IS_GEN2(devid))
-		return 2;
-	if (IS_GEN3(devid))
-		return 3;
-	if (IS_GEN4(devid))
-		return 4;
-	if (IS_GEN5(devid))
-		return 5;
-	if (IS_GEN6(devid))
-		return 6;
-	if (IS_GEN7(devid))
-		return 7;
-	if (IS_GEN8(devid))
-		return 8;
-	if (IS_GEN9(devid))
-		return 9;
-
-	return -1;
-}
-
-/**
  * intel_check_pch:
  *
  * Detects the PCH chipset type of the running systems and fills in the results

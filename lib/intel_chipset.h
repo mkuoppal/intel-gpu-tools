@@ -29,10 +29,44 @@
 #define _INTEL_CHIPSET_H
 
 #include <pciaccess.h>
+#include <stdbool.h>
 
 struct pci_device *intel_get_pci_device(void);
 uint32_t intel_get_drm_devid(int fd);
-int intel_gen(uint32_t devid);
+
+const struct intel_device_info {
+	unsigned gen;
+	bool is_mobile : 1;
+	bool is_whitney : 1;
+	bool is_almador : 1;
+	bool is_brookdale : 1;
+	bool is_montara : 1;
+	bool is_springdale : 1;
+	bool is_grantsdale : 1;
+	bool is_alviso : 1;
+	bool is_lakeport : 1;
+	bool is_calistoga : 1;
+	bool is_bearlake : 1;
+	bool is_pineview : 1;
+	bool is_broadwater : 1;
+	bool is_crestline : 1;
+	bool is_eaglelake : 1;
+	bool is_cantiga : 1;
+	bool is_ironlake : 1;
+	bool is_arrandale : 1;
+	bool is_sandybridge : 1;
+	bool is_ivybridge : 1;
+	bool is_valleyview : 1;
+	bool is_haswell : 1;
+	bool is_broadwell : 1;
+	bool is_cherryview : 1;
+	bool is_skylake : 1;
+	bool is_broxton : 1;
+	bool is_kabylake : 1;
+	const char *codename;
+} *intel_device_info(uint16_t devid) __attribute__((pure));
+
+unsigned intel_gen(uint16_t devid) __attribute__((pure));
 
 extern enum pch_type intel_pch;
 
@@ -275,36 +309,6 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_Q33_G || \
 				 (devid) == PCI_CHIP_Q35_G || IS_IGD(devid))
 
-#define IS_GEN2(devid)		((devid) == PCI_CHIP_I830_M || \
-				 (devid) == PCI_CHIP_845_G || \
-				 (devid) == PCI_CHIP_I854_G || \
-				 (devid) == PCI_CHIP_I855_GM || \
-				 (devid) == PCI_CHIP_I865_G)
-
-#define IS_GEN3(devid)		(IS_945(devid) || IS_915(devid))
-
-#define IS_GEN4(devid)		((devid) == PCI_CHIP_I965_G || \
-				 (devid) == PCI_CHIP_I965_Q || \
-				 (devid) == PCI_CHIP_I965_G_1 || \
-				 (devid) == PCI_CHIP_I965_GM || \
-				 (devid) == PCI_CHIP_I965_GME || \
-				 (devid) == PCI_CHIP_I946_GZ || \
-				 IS_G4X(devid))
-
-#define IS_GEN5(devid)		(IS_ILD(devid) || IS_ILM(devid))
-
-#define IS_GEN6(devid)		((devid) == PCI_CHIP_SANDYBRIDGE_GT1 || \
-				 (devid) == PCI_CHIP_SANDYBRIDGE_GT2 || \
-				 (devid) == PCI_CHIP_SANDYBRIDGE_GT2_PLUS || \
-				 (devid) == PCI_CHIP_SANDYBRIDGE_M_GT1 || \
-				 (devid) == PCI_CHIP_SANDYBRIDGE_M_GT2 || \
-				 (devid) == PCI_CHIP_SANDYBRIDGE_M_GT2_PLUS || \
-				 (devid) == PCI_CHIP_SANDYBRIDGE_S)
-
-#define IS_GEN7(devid)		(IS_IVYBRIDGE(devid) || \
-				 IS_HASWELL(devid) || \
-				 IS_VALLEYVIEW(devid))
-
 #define IS_IVYBRIDGE(devid)	((devid) == PCI_CHIP_IVYBRIDGE_GT1 || \
 				 (devid) == PCI_CHIP_IVYBRIDGE_GT2 || \
 				 (devid) == PCI_CHIP_IVYBRIDGE_M_GT1 || \
@@ -396,9 +400,6 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_CHERRYVIEW_2 || \
 				 (devid) == PCI_CHIP_CHERRYVIEW_3)
 
-#define IS_GEN8(devid)		(IS_BROADWELL(devid) || \
-				 IS_CHERRYVIEW(devid))
-
 #define IS_SKL_GT1(devid)	((devid) == PCI_CHIP_SKYLAKE_ULT_GT1	|| \
 				 (devid) == PCI_CHIP_SKYLAKE_ULX_GT1	|| \
 				 (devid) == PCI_CHIP_SKYLAKE_DT_GT1	|| \
@@ -462,38 +463,8 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_BROXTON_3 || \
 				 (devid) == PCI_CHIP_BROXTON_4)
 
-#define IS_GEN9(devid)		(IS_KABYLAKE(devid) || \
-				 IS_SKYLAKE(devid) || \
-				 IS_BROXTON(devid))
-
 #define IS_965(devid)		(IS_GEN4(devid) || \
 				 IS_GEN5(devid) || \
-				 IS_GEN6(devid) || \
-				 IS_GEN7(devid) || \
-				 IS_GEN8(devid) || \
-				 IS_GEN9(devid))
-
-#define IS_INTEL(devid)		(IS_GEN2(devid) || \
-				 IS_GEN3(devid) || \
-				 IS_GEN4(devid) || \
-				 IS_GEN5(devid) || \
-				 IS_GEN6(devid) || \
-				 IS_GEN7(devid) || \
-				 IS_GEN8(devid) || \
-				 IS_GEN9(devid))
-
-#define HAS_PCH_SPLIT(devid)	(IS_GEN5(devid) || \
-				 IS_GEN6(devid) || \
-				 IS_IVYBRIDGE(devid) || IS_HASWELL(devid) || \
-				 IS_BROADWELL(devid) || \
-				 IS_SKYLAKE(devid))
-
-#define HAS_BLT_RING(devid)	(IS_GEN6(devid) || \
-				 IS_GEN7(devid) || \
-				 IS_GEN8(devid) || \
-				 IS_GEN9(devid))
-
-#define HAS_BSD_RING(devid)	(IS_GEN5(devid) || \
 				 IS_GEN6(devid) || \
 				 IS_GEN7(devid) || \
 				 IS_GEN8(devid) || \
@@ -507,6 +478,21 @@ void intel_check_pch(void);
 #define IS_CRESTLINE(devid)	((devid) == PCI_CHIP_I965_GM || \
 				 (devid) == PCI_CHIP_I965_GME)
 
-#define HAS_VEBOX_RING(devid)   (IS_HASWELL(devid))
+#define IS_GEN(devid, x)	(intel_device_info(devid)->gen & (1u << ((x)-1)))
+#define AT_LEAST_GEN(devid, x)	(intel_device_info(devid)->gen & -(1u << ((x)-1)))
+
+#define IS_GEN2(devid)		IS_GEN(devid, 2)
+#define IS_GEN3(devid)		IS_GEN(devid, 3)
+#define IS_GEN4(devid)		IS_GEN(devid, 4)
+#define IS_GEN5(devid)		IS_GEN(devid, 5)
+#define IS_GEN6(devid)		IS_GEN(devid, 6)
+#define IS_GEN7(devid)		IS_GEN(devid, 7)
+#define IS_GEN8(devid)		IS_GEN(devid, 8)
+#define IS_GEN9(devid)		IS_GEN(devid, 9)
+
+#define HAS_BSD_RING(devid)	AT_LEAST_GEN(devid, 5)
+#define HAS_BLT_RING(devid)	AT_LEAST_GEN(devid, 6)
+
+#define HAS_PCH_SPLIT(devid)	AT_LEAST_GEN(devid, 5) /* XXX Valleyview? */
 
 #endif /* _INTEL_CHIPSET_H */
