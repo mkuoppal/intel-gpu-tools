@@ -36,6 +36,7 @@ TESTS_progs_M = \
 	gem_exec_basic \
 	gem_exec_create \
 	gem_exec_faulting_reloc \
+	gem_exec_fence \
 	gem_exec_flush \
 	gem_exec_gttfill \
 	gem_exec_latency \
