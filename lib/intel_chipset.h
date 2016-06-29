@@ -385,11 +385,6 @@ void intel_check_pch(void);
 				 (((devid) & 0x000f) == BDW_WORKSTATION) ? 1 : \
 				 (((devid) & 0x000f) == BDW_ULX) ? 1 : 0)
 
-#define IS_CHERRYVIEW(devid)	((devid) == PCI_CHIP_CHERRYVIEW_0 || \
-				 (devid) == PCI_CHIP_CHERRYVIEW_1 || \
-				 (devid) == PCI_CHIP_CHERRYVIEW_2 || \
-				 (devid) == PCI_CHIP_CHERRYVIEW_3)
-
 #define IS_SKL_GT1(devid)	((devid) == PCI_CHIP_SKYLAKE_ULT_GT1	|| \
 				 (devid) == PCI_CHIP_SKYLAKE_ULX_GT1	|| \
 				 (devid) == PCI_CHIP_SKYLAKE_DT_GT1	|| \
@@ -437,11 +432,8 @@ void intel_check_pch(void);
 
 #define IS_KBL_GT4(devid)	((devid) == PCI_CHIP_KABYLAKE_HALO_GT4)
 
-#define IS_KABYLAKE(devid)	(IS_KBL_GT1(devid) || \
- 				 IS_KBL_GT2(devid) || \
- 				 IS_KBL_GT3(devid) || \
- 				 IS_KBL_GT4(devid))
-
+#define IS_CHERRYVIEW(devid)	(intel_device_info(devid)->is_cherryview)
+#define IS_KABYLAKE(devid)	(intel_device_info(devid)->is_kabylake)
 #define IS_SKYLAKE(devid)	(intel_device_info(devid)->is_skylake)
 #define IS_BROXTON(devid)	(intel_device_info(devid)->is_broxton)
 
