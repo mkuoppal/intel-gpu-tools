@@ -276,18 +276,6 @@ void intel_check_pch(void);
 #define IS_GM45(devid)		((devid) == PCI_CHIP_GM45_GM)
 #define IS_G4X(devid)		(IS_G45(devid) || IS_GM45(devid))
 
-#define IS_915(devid)		((devid) == PCI_CHIP_I915_G || \
-				 (devid) == PCI_CHIP_E7221_G || \
-				 (devid) == PCI_CHIP_I915_GM)
-
-#define IS_945GM(devid)		((devid) == PCI_CHIP_I945_GM || \
-				 (devid) == PCI_CHIP_I945_GME)
-
-#define IS_945(devid)		((devid) == PCI_CHIP_I945_G || \
-				 (devid) == PCI_CHIP_I945_GM || \
-				 (devid) == PCI_CHIP_I945_GME || \
-				 IS_G33(devid))
-
 #define IS_HSW_GT1(devid)	((devid) == PCI_CHIP_HASWELL_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_M_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_S_GT1 || \
@@ -395,6 +383,18 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_KABYLAKE_ULT_GT3_2)
 
 #define IS_KBL_GT4(devid)	((devid) == PCI_CHIP_KABYLAKE_HALO_GT4)
+
+#define IS_915G(devid)		(intel_device_info(devid)->is_grantsdale)
+#define IS_915GM(devid)		(intel_device_info(devid)->is_alviso)
+
+#define IS_915(devid)		(IS_915G(devid) || IS_915GM(devid))
+
+#define IS_945G(devid)		(intel_device_info(devid)->is_lakeport)
+#define IS_945GM(devid)		(intel_device_info(devid)->is_calistoga)
+
+#define IS_945(devid)		(IS_945G(devid) || \
+				 IS_945GM(devid) || \
+				 IS_G33(devid))
 
 #define IS_PINEVIEW(devid)	(intel_device_info(devid)->is_pineview)
 #define IS_G33(devid)		(intel_device_info(devid)->is_bearlake || \
