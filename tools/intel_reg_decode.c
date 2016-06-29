@@ -392,7 +392,7 @@ DEBUGSTRING(i830_debug_vgacntrl)
 
 DEBUGSTRING(i830_debug_fp)
 {
-	if (IS_IGD(devid)) {
+	if (IS_PINEVIEW(devid)) {
 		snprintf(result, len, "n = %d, m1 = %d, m2 = %d",
 			 ffs((val & FP_N_IGD_DIV_MASK) >>
 			     FP_N_DIV_SHIFT) - 1,
@@ -496,7 +496,7 @@ DEBUGSTRING(i830_debug_dpll)
 		}
 #endif
 	} else {
-		if (IS_IGD(devid)) {
+		if (IS_PINEVIEW(devid)) {
 			p1 = ffs((val & DPLL_FPA01_P1_POST_DIV_MASK_IGD) >>
 				 DPLL_FPA01_P1_POST_DIV_SHIFT_IGD);
 		} else {

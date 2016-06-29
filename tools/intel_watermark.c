@@ -909,7 +909,7 @@ int main(int argc, char *argv[])
 		g4x_wm_dump();
 	} else if (IS_GEN4(devid)) {
 		gen4_wm_dump();
-	} else if (IS_IGD(devid)) {
+	} else if (IS_PINEVIEW(devid)) {
 		pnv_wm_dump();
 	} else if (IS_GEN3(devid)) {
 		gen3_wm_dump();

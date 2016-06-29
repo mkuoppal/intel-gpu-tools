@@ -111,10 +111,6 @@ void intel_check_pch(void);
 #define PCI_CHIP_IGD_GM			0xA011
 #define PCI_CHIP_IGD_G			0xA001
 
-#define IS_IGDGM(devid)		((devid) == PCI_CHIP_IGD_GM)
-#define IS_IGDG(devid)		((devid) == PCI_CHIP_IGD_G)
-#define IS_IGD(devid)		(IS_IGDG(devid) || IS_IGDGM(devid))
-
 #define PCI_CHIP_I965_G			0x29A2
 #define PCI_CHIP_I965_Q			0x2992
 #define PCI_CHIP_I965_G_1		0x2982
@@ -292,10 +288,6 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_I945_GME || \
 				 IS_G33(devid))
 
-#define IS_G33(devid)		((devid) == PCI_CHIP_G33_G || \
-				 (devid) == PCI_CHIP_Q33_G || \
-				 (devid) == PCI_CHIP_Q35_G || IS_IGD(devid))
-
 #define IS_HSW_GT1(devid)	((devid) == PCI_CHIP_HASWELL_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_M_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_S_GT1 || \
@@ -403,6 +395,10 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_KABYLAKE_ULT_GT3_2)
 
 #define IS_KBL_GT4(devid)	((devid) == PCI_CHIP_KABYLAKE_HALO_GT4)
+
+#define IS_PINEVIEW(devid)	(intel_device_info(devid)->is_pineview)
+#define IS_G33(devid)		(intel_device_info(devid)->is_bearlake || \
+				 intel_device_info(devid)->is_pineview)
 
 #define IS_IRONLAKE(devid)	(intel_device_info(devid)->is_ironlake)
 #define IS_ARRANDALE(devid)	(intel_device_info(devid)->is_arrandale)
