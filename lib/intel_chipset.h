@@ -280,9 +280,6 @@ void intel_check_pch(void);
 #define IS_GM45(devid)		((devid) == PCI_CHIP_GM45_GM)
 #define IS_G4X(devid)		(IS_G45(devid) || IS_GM45(devid))
 
-#define IS_ILD(devid)		((devid) == PCI_CHIP_ILD_G)
-#define IS_ILM(devid)		((devid) == PCI_CHIP_ILM_G)
-
 #define IS_915(devid)		((devid) == PCI_CHIP_I915_G || \
 				 (devid) == PCI_CHIP_E7221_G || \
 				 (devid) == PCI_CHIP_I915_GM)
@@ -407,6 +404,8 @@ void intel_check_pch(void);
 
 #define IS_KBL_GT4(devid)	((devid) == PCI_CHIP_KABYLAKE_HALO_GT4)
 
+#define IS_IRONLAKE(devid)	(intel_device_info(devid)->is_ironlake)
+#define IS_ARRANDALE(devid)	(intel_device_info(devid)->is_arrandale)
 #define IS_IVYBRIDGE(devid)	(intel_device_info(devid)->is_ivybridge)
 #define IS_VALLEYVIEW(devid)	(intel_device_info(devid)->is_valleyview)
 #define IS_HASWELL(devid)	(intel_device_info(devid)->is_haswell)
