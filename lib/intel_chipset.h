@@ -453,13 +453,6 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_BROXTON_3 || \
 				 (devid) == PCI_CHIP_BROXTON_4)
 
-#define IS_965(devid)		(IS_GEN4(devid) || \
-				 IS_GEN5(devid) || \
-				 IS_GEN6(devid) || \
-				 IS_GEN7(devid) || \
-				 IS_GEN8(devid) || \
-				 IS_GEN9(devid))
-
 #define IS_BROADWATER(devid)	((devid) == PCI_CHIP_I946_GZ || \
 				 (devid) == PCI_CHIP_I965_G_1 || \
 				 (devid) == PCI_CHIP_I965_Q || \
@@ -481,6 +474,7 @@ void intel_check_pch(void);
 #define IS_GEN9(devid)		IS_GEN(devid, 9)
 
 #define IS_MOBILE(devid)	(intel_device_info(devid)->is_mobile)
+#define IS_965(devid)		AT_LEAST_GEN(devid, 4)
 
 #define HAS_BSD_RING(devid)	AT_LEAST_GEN(devid, 5)
 #define HAS_BLT_RING(devid)	AT_LEAST_GEN(devid, 6)
