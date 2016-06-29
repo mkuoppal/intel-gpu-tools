@@ -453,13 +453,8 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_BROXTON_3 || \
 				 (devid) == PCI_CHIP_BROXTON_4)
 
-#define IS_BROADWATER(devid)	((devid) == PCI_CHIP_I946_GZ || \
-				 (devid) == PCI_CHIP_I965_G_1 || \
-				 (devid) == PCI_CHIP_I965_Q || \
-				 (devid) == PCI_CHIP_I965_G)
-
-#define IS_CRESTLINE(devid)	((devid) == PCI_CHIP_I965_GM || \
-				 (devid) == PCI_CHIP_I965_GME)
+#define IS_BROADWATER(devid)	(intel_device_info(devid)->is_broadwater)
+#define IS_CRESTLINE(devid)	(intel_device_info(devid)->is_crestline)
 
 #define IS_GEN(devid, x)	(intel_device_info(devid)->gen & (1u << ((x)-1)))
 #define AT_LEAST_GEN(devid, x)	(intel_device_info(devid)->gen & -(1u << ((x)-1)))
