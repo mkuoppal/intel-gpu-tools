@@ -273,16 +273,6 @@ void intel_check_pch(void);
 
 #endif /* __GTK_DOC_IGNORE__ */
 
-#define IS_MOBILE(devid)	((devid) == PCI_CHIP_I855_GM || \
-				 (devid) == PCI_CHIP_I915_GM || \
-				 (devid) == PCI_CHIP_I945_GM || \
-				 (devid) == PCI_CHIP_I945_GME || \
-				 (devid) == PCI_CHIP_I965_GM || \
-				 (devid) == PCI_CHIP_I965_GME || \
-				 (devid) == PCI_CHIP_GM45_GM || IS_IGD(devid) || \
-				 (devid) == PCI_CHIP_IVYBRIDGE_M_GT1 || \
-				 (devid) == PCI_CHIP_IVYBRIDGE_M_GT2)
-
 #define IS_G45(devid)		((devid) == PCI_CHIP_IGD_E_G || \
 				 (devid) == PCI_CHIP_Q45_G || \
 				 (devid) == PCI_CHIP_G45_G || \
@@ -489,6 +479,8 @@ void intel_check_pch(void);
 #define IS_GEN7(devid)		IS_GEN(devid, 7)
 #define IS_GEN8(devid)		IS_GEN(devid, 8)
 #define IS_GEN9(devid)		IS_GEN(devid, 9)
+
+#define IS_MOBILE(devid)	(intel_device_info(devid)->is_mobile)
 
 #define HAS_BSD_RING(devid)	AT_LEAST_GEN(devid, 5)
 #define HAS_BLT_RING(devid)	AT_LEAST_GEN(devid, 6)
