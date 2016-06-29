@@ -286,3 +286,26 @@ unsigned intel_gen(uint16_t devid)
 {
 	return ffs(intel_device_info(devid)->gen);
 }
+
+/**
+ * intel_gt:
+ * @devid: pci device id
+ *
+ * Computes the Intel GFX GT size for the given device id.
+ *
+ * Returns:
+ * The GT size.
+ */
+unsigned intel_gt(uint16_t devid)
+{
+	unsigned mask = intel_gen(devid);
+
+	if (mask >= 8)
+		mask = 0xf;
+	else if (mask >= 6)
+		mask = 0x3;
+	else
+		mask = 0;
+
+	return (devid >> 4) & mask;
+}

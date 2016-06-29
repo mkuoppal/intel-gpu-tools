@@ -351,16 +351,14 @@ die(int reason) {
 
 static int
 identify_device(int devid) {
-	switch(devid) {
-	case PCI_CHIP_SANDYBRIDGE_GT1:
-	case PCI_CHIP_SANDYBRIDGE_M_GT1:
-	case PCI_CHIP_SANDYBRIDGE_S:
+	if (!IS_SANDYBRIDGE(devid))
+		return -ENODEV;
+
+	switch (intel_gt(devid)) {
+	case 0:
 		eu_info = &gt1;
 		break;
-	case PCI_CHIP_SANDYBRIDGE_GT2:
-	case PCI_CHIP_SANDYBRIDGE_GT2_PLUS:
-	case PCI_CHIP_SANDYBRIDGE_M_GT2:
-	case PCI_CHIP_SANDYBRIDGE_M_GT2_PLUS:
+	case 1:
 		eu_info = &gt2;
 		break;
 	default:

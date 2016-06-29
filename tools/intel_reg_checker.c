@@ -162,16 +162,17 @@ check_gt_mode(void)
 	if (gen == 6)
 		check_perf_bit(gt_mode, 8, "Full Rate Sampler Disable", false);
 
-	/* For DevSmallGT, this bit must be set, which means disable
-	 * hashing.
-	 */
-	if (devid == PCI_CHIP_SANDYBRIDGE_GT1 ||
-	    devid == PCI_CHIP_SANDYBRIDGE_M_GT1)
-		check_bit(gt_mode, 6, "WIZ Hashing disable", true);
-	else if (gen == 6)
-		check_perf_bit(gt_mode, 6, "WIZ Hashing disable", false);
-
 	if (gen == 6) {
+		/* For DevSmallGT, this bit must be set, which means disable
+		 * hashing.
+		 */
+		if (intel_gt(devid) == 0)
+			check_bit(gt_mode, 6,
+				  "WIZ Hashing disable", true);
+		else
+			check_perf_bit(gt_mode, 6,
+				       "WIZ Hashing disable", false);
+
 		check_perf_bit(gt_mode, 5, "TD Four Row Dispatch Disable",
 			       false);
 		check_perf_bit(gt_mode, 4, "Full Size URB Disable", false);

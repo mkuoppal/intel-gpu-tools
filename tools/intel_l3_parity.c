@@ -51,14 +51,11 @@ static unsigned int devid;
 /* L3 size is always a function of banks. The number of banks cannot be
  * determined by number of slices however */
 static inline int num_banks(void) {
-	if (IS_HSW_GT3(devid))
-		return 8; /* 4 per each slice */
-	else if (IS_HSW_GT1(devid) ||
-			devid == PCI_CHIP_IVYBRIDGE_GT1 ||
-			devid == PCI_CHIP_IVYBRIDGE_M_GT1)
-		return 2;
-	else
-		return 4;
+	switch (intel_gt(devid)) {
+	case 2: return 8;
+	case 1: return 4;
+	default: return 2;
+	}
 }
 #define NUM_SUBBANKS 8
 #define BYTES_PER_BANK (128 << 10)
@@ -68,7 +65,7 @@ static inline int num_banks(void) {
 #define MAX_ROW (1<<12)
 #define MAX_BANKS_PER_SLICE 4
 #define NUM_REGS (MAX_BANKS_PER_SLICE * NUM_SUBBANKS)
-#define MAX_SLICES (IS_HSW_GT3(devid) ? 2 : 1)
+#define MAX_SLICES (intel_gt(devid) > 1 ? 2 : 1)
 #define REAL_MAX_SLICES 2
 /* TODO support SLM config */
 #define L3_SIZE ((MAX_ROW * 4) * NUM_SUBBANKS *  num_banks())
