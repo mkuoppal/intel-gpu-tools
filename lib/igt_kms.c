@@ -167,13 +167,11 @@ static const char *igt_crtc_prop_names[IGT_NUM_CRTC_PROPS] = {
 	"DEGAMMA_LUT",
 	"CTM",
 	"GAMMA_LUT",
-	"MODE_ID",
-	"ACTIVE",
 };
 
 static const char *igt_connector_prop_names[IGT_NUM_CONNECTOR_PROPS] = {
 	"scaling mode",
-	"CRTC_ID",
+	"DPMS"
 };
 
 /*
@@ -212,10 +210,11 @@ igt_atomic_fill_plane_props(igt_display_t *display, igt_plane_t *plane,
 
 /*
  * Retrieve all the properies specified in props_name and store them into
- * config->atomic_props_connector.
+ * config->atomic_props_crtc and config->atomic_props_connector.
  */
 static void
-igt_atomic_fill_output_props(igt_display_t *display, igt_output_t *output,
+igt_atomic_fill_props(igt_display_t *display, igt_output_t *output,
+			int num_crtc_props, const char **crtc_prop_names,
 			int num_connector_props, const char **conn_prop_names)
 {
 	drmModeObjectPropertiesPtr props;
@@ -223,7 +222,27 @@ igt_atomic_fill_output_props(igt_display_t *display, igt_output_t *output,
 
 	fd = display->drm_fd;
 
-	props = drmModeObjectGetProperties(fd, output->id, DRM_MODE_OBJECT_CONNECTOR);
+	props = drmModeObjectGetProperties(fd, output->config.crtc->crtc_id, DRM_MODE_OBJECT_CRTC);
+	igt_assert(props);
+
+	for (i = 0; i < props->count_props; i++) {
+		drmModePropertyPtr prop =
+			drmModeGetProperty(fd, props->props[i]);
+
+		for (j = 0; j < num_crtc_props; j++) {
+			if (strcmp(prop->name, crtc_prop_names[j]) != 0)
+				continue;
+
+			output->config.atomic_props_crtc[j] = props->props[i];
+			break;
+		}
+
+		drmModeFreeProperty(prop);
+	}
+
+	drmModeFreeObjectProperties(props);
+	props = NULL;
+	props = drmModeObjectGetProperties(fd, output->config.connector->connector_id, DRM_MODE_OBJECT_CONNECTOR);
 	igt_assert(props);
 
 	for (i = 0; i < props->count_props; i++) {
@@ -243,53 +262,6 @@ igt_atomic_fill_output_props(igt_display_t *display, igt_output_t *output,
 
 	drmModeFreeObjectProperties(props);
 
-}
-
-static void
-igt_fill_pipe_props(igt_display_t *display, igt_pipe_t *pipe_obj,
-		    int num_crtc_props, const char **crtc_prop_names)
-{
-	drmModeObjectPropertiesPtr props;
-	int i, j, fd;
-	uint64_t prop_value = 0;
-
-	fd = display->drm_fd;
-
-	props = drmModeObjectGetProperties(fd, pipe_obj->crtc_id, DRM_MODE_OBJECT_CRTC);
-	igt_assert(props);
-
-	for (i = 0; i < props->count_props; i++) {
-		drmModePropertyPtr prop =
-			drmModeGetProperty(fd, props->props[i]);
-
-		for (j = 0; j < num_crtc_props; j++) {
-			if (strcmp(prop->name, crtc_prop_names[j]) != 0)
-				continue;
-
-			pipe_obj->atomic_props_crtc[j] = props->props[i];
-			break;
-		}
-
-		drmModeFreeProperty(prop);
-	}
-
-	igt_pipe_get_property(pipe_obj, "background_color",
-			      &pipe_obj->background_property, &prop_value, NULL);
-	pipe_obj->background = (uint32_t)prop_value;
-
-	igt_pipe_get_property(pipe_obj, "DEGAMMA_LUT", &pipe_obj->degamma_property, NULL, NULL);
-
-	igt_pipe_get_property(pipe_obj, "CTM", &pipe_obj->ctm_property, NULL, NULL);
-
-	igt_pipe_get_property(pipe_obj, "GAMMA_LUT", &pipe_obj->gamma_property, NULL, NULL);
-
-	igt_pipe_get_property(pipe_obj, "ACTIVE", NULL, &prop_value, NULL);
-	pipe_obj->active = (uint32_t)prop_value;
-
-	pipe_obj->mode_id = 0;
-	igt_pipe_get_property(pipe_obj, "MODE_ID", NULL, &pipe_obj->mode_id, NULL);
-
-	drmModeFreeObjectProperties(props);
 }
 
 const unsigned char* igt_kms_get_alt_edid(void)
@@ -783,33 +755,6 @@ bool kmstest_get_connector_default_mode(int drm_fd, drmModeConnector *connector,
 	return true;
 }
 
-static void
-_kmstest_connector_config_crtc_mask(int drm_fd,
-				    drmModeConnector *connector,
-				    struct kmstest_connector_config *config)
-{
-	int i;
-
-	config->valid_crtc_idx_mask = 0;
-
-	/* Now get a compatible encoder */
-	for (i = 0; i < connector->count_encoders; i++) {
-		drmModeEncoder *encoder = drmModeGetEncoder(drm_fd,
-							    connector->encoders[i]);
-
-		if (!encoder) {
-			igt_warn("could not get encoder %d: %s\n",
-				 connector->encoders[i],
-				 strerror(errno));
-
-			continue;
-		}
-
-		config->valid_crtc_idx_mask |= encoder->possible_crtcs;
-		drmModeFreeEncoder(encoder);
-	}
-}
-
 /**
  * _kmstest_connector_config:
  * @drm_fd: DRM fd
@@ -828,9 +773,8 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 {
 	drmModeRes *resources;
 	drmModeConnector *connector;
-	drmModeEncoder *found = NULL;
-	int i, pipe;
-	uint32_t valid_crtc_mask;
+	drmModeEncoder *encoder, *found = NULL;
+	int i, j, pipe;
 
 	resources = drmModeGetResources(drm_fd);
 	if (!resources) {
@@ -866,31 +810,32 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	 * In both cases find the first compatible encoder and skip the CRTC
 	 * if there is non such.
 	 */
-	_kmstest_connector_config_crtc_mask(drm_fd, connector, config);
-
-	valid_crtc_mask = config->valid_crtc_idx_mask & crtc_idx_mask;
-	if (!valid_crtc_mask)
-		goto err3;
-
-	pipe = ffs(valid_crtc_mask) - 1;
-
-	for (i = 0; i < connector->count_encoders; i++) {
-		drmModeEncoder *encoder = drmModeGetEncoder(drm_fd, connector->encoders[i]);
-
-		if (!encoder) {
-			igt_warn("could not get encoder %d: %s\n",
-				 connector->encoders[i],
-				 strerror(errno));
-
+	config->valid_crtc_idx_mask = 0;
+	for (i = 0; i < resources->count_crtcs; i++) {
+		if (!resources->crtcs[i])
 			continue;
-		}
 
-		if (!found && (encoder->possible_crtcs & (1 << pipe))) {
-			found = encoder;
-			break;
-		}
+		/* Now get a compatible encoder */
+		for (j = 0; j < connector->count_encoders; j++) {
+			encoder = drmModeGetEncoder(drm_fd,
+						    connector->encoders[j]);
 
-		drmModeFreeEncoder(encoder);
+			if (!encoder) {
+				igt_warn("could not get encoder %d: %s\n",
+					 resources->encoders[j],
+					 strerror(errno));
+
+				continue;
+			}
+
+			config->valid_crtc_idx_mask |= encoder->possible_crtcs;
+
+			if (!found && (crtc_idx_mask & encoder->possible_crtcs & (1 << i))) {
+				found = encoder;
+				pipe = i;
+			} else
+				drmModeFreeEncoder(encoder);
+		}
 	}
 
 	if (!found)
@@ -913,10 +858,7 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 err4:
 	drmModeFreeEncoder(found);
 err3:
-	config->connector = connector;
-	config->crtc = NULL;
-	config->encoder = NULL;
-	config->pipe = PIPE_ANY;
+	drmModeFreeConnector(connector);
 err2:
 	drmModeFreeResources(resources);
 err1:
@@ -1217,7 +1159,7 @@ static void igt_display_log_shift(igt_display_t *display, int shift)
 	igt_assert(display->log_shift >= 0);
 }
 
-static void igt_output_refresh(igt_output_t *output, bool from_init)
+static void igt_output_refresh(igt_output_t *output)
 {
 	igt_display_t *display = output->display;
 	bool ret;
@@ -1229,42 +1171,17 @@ static void igt_output_refresh(igt_output_t *output, bool from_init)
 	if (output->valid)
 		kmstest_free_connector_config(&output->config);
 
-	igt_atomic_fill_output_props(display, output, IGT_NUM_CONNECTOR_PROPS, igt_connector_prop_names);
+	ret = kmstest_get_connector_config(display->drm_fd,
+					   output->id,
+					   crtc_idx_mask,
+					   &output->config);
+	if (ret)
+		output->valid = true;
+	else
+		output->valid = false;
 
-	if (!from_init || !display->is_atomic) {
-		ret = kmstest_get_connector_config(display->drm_fd,
-						  output->id,
-						  crtc_idx_mask,
-						  &output->config);
-		if (ret)
-			output->valid = true;
-		else
-			output->valid = false;
-	} else {
-		uint64_t crtc_id = 0;
-
-		kmstest_get_property(display->drm_fd, output->id, DRM_MODE_OBJECT_CONNECTOR,
-				     "CRTC_ID", NULL, &crtc_id, NULL);
-
-		output->config.connector = drmModeGetConnectorCurrent(display->drm_fd, output->id);
-		output->valid = output->config.connector->connection == DRM_MODE_CONNECTED;
-		output->config.encoder = NULL;
-		output->config.crtc = NULL;
-		output->config.crtc_idx = crtc_id;
-
-		_kmstest_connector_config_crtc_mask(display->drm_fd, output->config.connector, &output->config);
-
-		if (output->valid)
-			kmstest_get_connector_default_mode(display->drm_fd, output->config.connector,
-							   &output->config.default_mode);
-
-		if (crtc_id) {
-			output->config.crtc = drmModeGetCrtc(display->drm_fd, crtc_id);
-
-			output->config.pipe = kmstest_get_pipe_from_crtc_id(display->drm_fd, crtc_id);
-		} else
-			output->config.pipe = PIPE_ANY;
-	}
+	if (!output->valid)
+		return;
 
 	if (output->use_override_mode)
 		output->config.default_mode = output->override_mode;
@@ -1276,22 +1193,12 @@ static void igt_output_refresh(igt_output_t *output, bool from_init)
 			       -1);
 	}
 
-	if (!output->valid) {
-		LOG(display, "%s: Disconnected\n", output->name);
-
-		return;
-	}
-
-	if (!output->config.crtc) {
-		LOG(display, "%s: Not connected to a pipe\n", output->name);
-
-		return;
-	}
-
 	LOG(display, "%s: Selecting pipe %s\n", output->name,
 	    kmstest_pipe_name(output->config.pipe));
 
 	display->pipes_in_use |= 1 << output->config.pipe;
+	igt_atomic_fill_props(display, output, IGT_NUM_CRTC_PROPS, igt_crtc_prop_names,
+		IGT_NUM_CONNECTOR_PROPS, igt_connector_prop_names);
 }
 
 static bool
@@ -1490,11 +1397,6 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 
 		/* make sure we don't overflow the plane array */
 		igt_assert(pipe->n_planes <= IGT_MAX_PLANES);
-
-		igt_fill_pipe_props(display, pipe, IGT_NUM_CRTC_PROPS, igt_crtc_prop_names);
-		igt_atomic_fill_plane_props(display, plane, IGT_NUM_PLANE_PROPS, igt_plane_prop_names);
-
-		LOG(display, "Pipe %s active %u mode_id %"PRIu64"\n", kmstest_pipe_name(i), pipe->active, pipe->mode_id);
 	}
 
 	/*
@@ -1507,6 +1409,7 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 	igt_assert(display->outputs);
 
 	for (i = 0; i < display->n_outputs; i++) {
+		int j;
 		igt_output_t *output = &display->outputs[i];
 
 		/*
@@ -1517,7 +1420,36 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		output->id = resources->connectors[i];
 		output->display = display;
 
-		igt_output_refresh(output, true);
+		igt_output_refresh(output);
+
+		for (j = 0; j < display->n_pipes; j++) {
+			uint64_t prop_value;
+			igt_pipe_t *pipe = &display->pipes[j];
+
+			if (output->config.crtc) {
+				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
+						   "background_color",
+						   &pipe->background_property,
+						   &prop_value,
+						   NULL);
+				pipe->background = (uint32_t)prop_value;
+				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
+						  "DEGAMMA_LUT",
+						  &pipe->degamma_property,
+						  NULL,
+						  NULL);
+				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
+						  "CTM",
+						  &pipe->ctm_property,
+						  NULL,
+						  NULL);
+				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
+						  "GAMMA_LUT",
+						  &pipe->gamma_property,
+						  NULL,
+						  NULL);
+			}
+		}
 	}
 
 	drmModeFreePlaneResources(plane_resources);
@@ -1613,7 +1545,7 @@ static void igt_display_refresh(igt_display_t *display)
 		if (output->pending_crtc_idx_mask == -1UL)
 			continue;
 
-		igt_output_refresh(output, false);
+		igt_output_refresh(output);
 	}
 	for (i = 0; i < display->n_outputs; i++) {
 		igt_output_t *output = &display->outputs[i];
@@ -1621,7 +1553,7 @@ static void igt_display_refresh(igt_display_t *display)
 		if (output->pending_crtc_idx_mask != -1UL)
 			continue;
 
-		igt_output_refresh(output, false);
+		igt_output_refresh(output);
 	}
 }
 
@@ -1704,12 +1636,12 @@ static uint32_t igt_plane_get_fb_gem_handle(igt_plane_t *plane)
  * Add position and fb changes of a plane to the atomic property set
  */
 static void
-igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
+igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_output_t *output,
 	drmModeAtomicReq *req)
 {
 
-	igt_display_t *display = pipe->display;
-	uint32_t fb_id, crtc_id = 0;
+	igt_display_t *display = output->display;
+	uint32_t fb_id, crtc_id;
 
 	igt_assert(plane->drm_plane);
 
@@ -1718,13 +1650,14 @@ igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
 			!plane->rotation_changed);
 
 	fb_id = igt_plane_get_fb_id(plane);
-	crtc_id = pipe->crtc_id;
+	crtc_id = output->config.crtc->crtc_id;
 
 	LOG(display,
-	    "populating plane data: %s.%d, fb %u, crtc %u\n",
-	    kmstest_pipe_name(pipe->pipe),
+	    "%s: populating plane data: %s.%d, fb %u\n",
+	    igt_output_name(output),
+	    kmstest_pipe_name(output->config.pipe),
 	    plane->index,
-	    fb_id, crtc_id);
+	    fb_id);
 
 	if (plane->fb_changed) {
 		igt_atomic_populate_plane_req(req, plane, IGT_PLANE_CRTC_ID, fb_id ? crtc_id : 0);
@@ -1761,6 +1694,11 @@ igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
 	if (plane->rotation_changed)
 		igt_atomic_populate_plane_req(req, plane,
 			IGT_PLANE_ROTATION, plane->rotation);
+
+	plane->fb_changed = false;
+	plane->position_changed = false;
+	plane->size_changed = false;
+	plane->rotation_changed = false;
 }
 
 
@@ -2046,6 +1984,8 @@ static int igt_output_commit(igt_output_t *output,
 	if (pipe->background_changed) {
 		igt_crtc_set_property(output, pipe->background_property,
 			pipe->background);
+
+		pipe->background_changed = false;
 	}
 
 	if (pipe->color_mgmt_changed) {
@@ -2055,6 +1995,8 @@ static int igt_output_commit(igt_output_t *output,
 				      pipe->ctm_blob);
 		igt_crtc_set_property(output, pipe->gamma_property,
 				      pipe->gamma_blob);
+
+		pipe->color_mgmt_changed = false;
 	}
 
 	for (i = 0; i < pipe->n_planes; i++) {
@@ -2082,27 +2024,18 @@ static int igt_output_commit(igt_output_t *output,
 /*
  * Add crtc property changes to the atomic property set
  */
-static void igt_atomic_prepare_crtc_commit(igt_pipe_t *pipe_obj, drmModeAtomicReq *req)
+static void igt_atomic_prepare_crtc_commit(igt_output_t *output, drmModeAtomicReq *req)
 {
-	LOG(pipe_obj->display,
-	    "populating crtc data: %s, active %u, mode id %"PRIu64", changed %u %u %u %u\n",
-	    kmstest_pipe_name(pipe_obj->pipe), !!pipe_obj->active,
-	    pipe_obj->mode_id, pipe_obj->active_changed, pipe_obj->mode_changed,
-	    pipe_obj->background_changed, pipe_obj->color_mgmt_changed);
 
-	if (pipe_obj->active_changed)
-		igt_atomic_populate_crtc_req(req, pipe_obj, IGT_CRTC_ACTIVE, pipe_obj->active);
-
-	if (pipe_obj->mode_changed)
-		igt_atomic_populate_crtc_req(req, pipe_obj, IGT_CRTC_MODE_ID, pipe_obj->mode_id);
+	igt_pipe_t *pipe_obj = igt_output_get_driving_pipe(output);
 
 	if (pipe_obj->background_changed)
-		igt_atomic_populate_crtc_req(req, pipe_obj, IGT_CRTC_BACKGROUND, pipe_obj->background);
+		igt_atomic_populate_crtc_req(req, output, IGT_CRTC_BACKGROUND, pipe_obj->background);
 
 	if (pipe_obj->color_mgmt_changed) {
-		igt_atomic_populate_crtc_req(req, pipe_obj, IGT_CRTC_DEGAMMA_LUT, pipe_obj->degamma_blob);
-		igt_atomic_populate_crtc_req(req, pipe_obj, IGT_CRTC_CTM, pipe_obj->ctm_blob);
-		igt_atomic_populate_crtc_req(req, pipe_obj, IGT_CRTC_GAMMA_LUT, pipe_obj->gamma_blob);
+		igt_atomic_populate_crtc_req(req, output, IGT_CRTC_DEGAMMA_LUT, pipe_obj->degamma_blob);
+		igt_atomic_populate_crtc_req(req, output, IGT_CRTC_CTM, pipe_obj->ctm_blob);
+		igt_atomic_populate_crtc_req(req, output, IGT_CRTC_GAMMA_LUT, pipe_obj->gamma_blob);
 	}
 
 	/*
@@ -2115,17 +2048,18 @@ static void igt_atomic_prepare_crtc_commit(igt_pipe_t *pipe_obj, drmModeAtomicRe
  */
 static void igt_atomic_prepare_connector_commit(igt_output_t *output, drmModeAtomicReq *req)
 {
+
 	struct kmstest_connector_config *config = &output->config;
 
 	if (config->connector_scaling_mode_changed)
 		igt_atomic_populate_connector_req(req, output, IGT_CONNECTOR_SCALING_MODE, config->connector_scaling_mode);
 
+	if (config->connector_dpms_changed)
+		igt_atomic_populate_connector_req(req, output, IGT_CONNECTOR_DPMS, config->connector_dpms);
 	/*
 	 *	TODO: Add all other connector level properties here
 	 */
 
-	if (config->crtc_changed)
-		igt_atomic_populate_connector_req(req, output, IGT_CONNECTOR_CRTC_ID, config->crtc_idx);
 }
 
 /*
@@ -2134,7 +2068,7 @@ static void igt_atomic_prepare_connector_commit(igt_output_t *output, drmModeAto
  */
 static int igt_atomic_commit(igt_display_t *display)
 {
-	enum pipe pipe;
+
 	int ret = 0;
 	drmModeAtomicReq *req;
 	igt_output_t *output;
@@ -2143,28 +2077,33 @@ static int igt_atomic_commit(igt_display_t *display)
 	req = drmModeAtomicAlloc();
 	drmModeAtomicSetCursor(req, 0);
 
-	for_each_output(display, output) {
-		/*
-		 * Add Connector Properties to the property set
-		 */
-		igt_atomic_prepare_connector_commit(output, req);
-	}
-
-	for_each_pipe(display, pipe) {
-		igt_pipe_t *pipe_obj = &display->pipes[pipe];
+	for_each_connected_output(display, output) {
+		igt_pipe_t *pipe_obj;
 		igt_plane_t *plane;
+		enum pipe pipe;
 
 		/*
 		 * Add CRTC Properties to the property set
 		 */
+		igt_atomic_prepare_crtc_commit(output, req);
 
-		igt_atomic_prepare_crtc_commit(pipe_obj, req);
+		/*
+		 * Add Connector Properties to the property set
+		 */
+		igt_atomic_prepare_connector_commit(output, req);
 
-		for_each_plane_on_pipe(display, pipe, plane)
-			igt_atomic_prepare_plane_commit(plane, pipe_obj, req);
+
+		pipe_obj = igt_output_get_driving_pipe(output);
+
+		pipe = pipe_obj->pipe;
+
+		for_each_plane_on_pipe(display, pipe, plane) {
+			igt_atomic_prepare_plane_commit(plane, output, req);
+		}
+
 	}
 
-	ret = drmModeAtomicCommit(display->drm_fd, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	ret = drmModeAtomicCommit(display->drm_fd, req, 0, NULL);
 	drmModeAtomicFree(req);
 	return ret;
 
@@ -2182,55 +2121,36 @@ static int do_display_commit(igt_display_t *display,
 			     enum igt_commit_style s,
 			     bool fail_on_error)
 {
-	int ret;
+	int i, ret;
 	int valid_outs = 0;
-	igt_output_t *output;
-	enum pipe pipe;
 
 	LOG_INDENT(display, "commit");
 
-	if (s == COMMIT_ATOMIC) {
-		ret = igt_atomic_commit(display);
-		CHECK_RETURN(ret, fail_on_error);
-
-		valid_outs = 1;
-		goto done;
-	}
-
 	igt_display_refresh(display);
 
-	for_each_connected_output(display, output) {
+	if (s == COMMIT_ATOMIC) {
+
+		ret = igt_atomic_commit(display);
+		CHECK_RETURN(ret, fail_on_error);
+		return 0;
+
+	}
+
+	for (i = 0; i < display->n_outputs; i++) {
+		igt_output_t *output = &display->outputs[i];
+
+		if (!output->valid)
+			continue;
+
 		valid_outs++;
 		ret = igt_output_commit(output, s, fail_on_error);
 		CHECK_RETURN(ret, fail_on_error);
 	}
 
-done:
 	LOG_UNINDENT(display);
 
 	if (valid_outs == 0)
 		return -1;
-
-	for_each_pipe(display, pipe) {
-		igt_pipe_t *pipe_obj = &display->pipes[pipe];
-		igt_plane_t *plane;
-
-		pipe_obj->background_changed = 0;
-		pipe_obj->mode_changed = 0;
-		pipe_obj->active_changed = 0;
-		pipe_obj->color_mgmt_changed = 0;
-
-		for_each_plane_on_pipe(display, pipe, plane) {
-			plane->fb_changed = 0;
-			plane->position_changed = 0;
-			plane->panning_changed = 0;
-			plane->rotation_changed = 0;
-			plane->size_changed = 0;
-		}
-	}
-
-	for_each_output(display, output)
-		output->config.crtc_changed = 0;
 
 	igt_debug_wait_for_keypress("modeset");
 
@@ -2327,114 +2247,6 @@ void igt_output_override_mode(igt_output_t *output, drmModeModeInfo *mode)
 	output->use_override_mode = true;
 }
 
-static void
-igt_pipe_replace_blob(igt_pipe_t *pipe, uint64_t *blob, void *ptr, size_t length)
-{
-	igt_display_t *display = pipe->display;
-	uint32_t blob_id = 0;
-
-	if (*blob != 0) {
-		int ret = drmModeDestroyPropertyBlob(display->drm_fd, *blob);
-
-		/* Destroying blobs originating from the kernel
-		 * will fail with -EPERM, ignore it. */
-		igt_assert(ret == 0 || ret == -EPERM);
-	}
-
-	if (length > 0)
-		igt_assert(drmModeCreatePropertyBlob(display->drm_fd,
-						     ptr, length, &blob_id) == 0);
-
-	*blob = blob_id;
-}
-
-static void
-igt_output_unset_pipe_atomic(igt_output_t *output)
-{
-	igt_display_t *display = output->display;
-	enum pipe old_pipe = output->config.pipe;
-
-	if (old_pipe != PIPE_ANY) {
-		igt_pipe_t *pipe_obj = &display->pipes[old_pipe];
-		int i;
-
-		for (i = 0; i < display->n_outputs; i++)
-			if (output == &display->outputs[i])
-				break;
-
-		pipe_obj->atomic_connector_mask &= ~(1 << i);
-
-		if (!pipe_obj->atomic_connector_mask) {
-			pipe_obj->active = 0;
-			pipe_obj->active_changed = 1;
-
-			pipe_obj->mode_changed = 1;
-			igt_pipe_replace_blob(pipe_obj, &pipe_obj->mode_id, NULL, 0);
-			LOG(pipe_obj->display, "%s was last active, disabling %s\n",
-			    igt_output_name(output), kmstest_pipe_name(old_pipe));
-		} else
-			LOG(pipe_obj->display, "%s Connector mask on %s is now %x\n",
-			    igt_output_name(output), kmstest_pipe_name(old_pipe), pipe_obj->atomic_connector_mask);
-	}
-
-	kmstest_free_connector_config(&output->config);
-	output->config.connector = drmModeGetConnectorCurrent(display->drm_fd, output->id);
-	output->config.encoder = NULL;
-	output->config.crtc = NULL;
-	output->config.pipe = PIPE_ANY;
-	output->config.crtc_idx = 0;
-	output->config.crtc_changed = 1;
-}
-
-static void
-igt_output_set_pipe_atomic(igt_output_t *output, enum pipe pipe)
-{
-	igt_display_t *display = output->display;
-	igt_output_t *iter;
-	int i;
-
-	for (i = 0; i < display->n_outputs; i++)
-		if (output == &display->outputs[i])
-			break;
-
-	if (pipe != PIPE_ANY) {
-		for_each_output(display, iter)
-			if (iter->pending_crtc_idx_mask == -1ULL && iter->config.pipe == pipe)
-				igt_output_unset_pipe_atomic(iter);
-	}
-
-	igt_output_unset_pipe_atomic(output);
-
-	if (pipe != PIPE_ANY) {
-		igt_pipe_t *pipe_obj = &display->pipes[pipe];
-
-		output->config.pipe = pipe;
-		output->config.crtc_idx = pipe_obj->crtc_id;
-		output->config.crtc = drmModeGetCrtc(display->drm_fd, pipe_obj->crtc_id);
-
-		if (!pipe_obj->atomic_connector_mask) {
-			drmModeModeInfo *mode;
-
-			LOG(pipe_obj->display, "First active connector enabling %s\n",
-			    kmstest_pipe_name(pipe));
-
-			pipe_obj->active = 1;
-			pipe_obj->active_changed = 1;
-			pipe_obj->mode_changed = 1;
-
-			mode = igt_output_get_mode(output);
-			if (output->use_override_mode)
-				mode = &output->override_mode;
-
-			igt_pipe_replace_blob(pipe_obj, &pipe_obj->mode_id, mode, sizeof(*mode));
-		} else
-			LOG(pipe_obj->display, "Connector mask on %s was %x\n",
-			    kmstest_pipe_name(pipe), pipe_obj->atomic_connector_mask);
-
-		pipe_obj->atomic_connector_mask |= 1 << i;
-	}
-}
-
 void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 {
 	igt_display_t *display = output->display;
@@ -2447,8 +2259,6 @@ void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 		    kmstest_pipe_name(pipe));
 		output->pending_crtc_idx_mask = 1 << pipe;
 	}
-
-	igt_output_set_pipe_atomic(output, pipe);
 }
 
 igt_plane_t *igt_output_get_plane(igt_output_t *output, enum igt_plane plane)
@@ -2620,6 +2430,23 @@ void igt_plane_set_rotation(igt_plane_t *plane, igt_rotation_t rotation)
 	plane->rotation = rotation;
 
 	plane->rotation_changed = true;
+}
+
+static void
+igt_pipe_replace_blob(igt_pipe_t *pipe, uint64_t *blob, void *ptr, size_t length)
+{
+	igt_display_t *display = pipe->display;
+	uint32_t blob_id = 0;
+
+	if (*blob != 0)
+		igt_assert(drmModeDestroyPropertyBlob(display->drm_fd,
+						      *blob) == 0);
+
+	if (length > 0)
+		igt_assert(drmModeCreatePropertyBlob(display->drm_fd,
+						     ptr, length, &blob_id) == 0);
+
+	*blob = blob_id;
 }
 
 void
