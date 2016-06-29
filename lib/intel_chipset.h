@@ -306,11 +306,6 @@ void intel_check_pch(void);
 				 (devid) == PCI_CHIP_IVYBRIDGE_S || \
 				 (devid) == PCI_CHIP_IVYBRIDGE_S_GT2)
 
-#define IS_VALLEYVIEW(devid)	((devid) == PCI_CHIP_VALLEYVIEW_PO || \
-				 (devid) == PCI_CHIP_VALLEYVIEW_1 || \
-				 (devid) == PCI_CHIP_VALLEYVIEW_2 || \
-				 (devid) == PCI_CHIP_VALLEYVIEW_3)
-
 #define IS_HSW_GT1(devid)	((devid) == PCI_CHIP_HASWELL_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_M_GT1 || \
 				 (devid) == PCI_CHIP_HASWELL_S_GT1 || \
@@ -419,6 +414,7 @@ void intel_check_pch(void);
 
 #define IS_KBL_GT4(devid)	((devid) == PCI_CHIP_KABYLAKE_HALO_GT4)
 
+#define IS_VALLEYVIEW(devid)	(intel_device_info(devid)->is_valleyview)
 #define IS_HASWELL(devid)	(intel_device_info(devid)->is_haswell)
 #define IS_BROADWELL(devid)	(intel_device_info(devid)->is_broadwell)
 #define IS_CHERRYVIEW(devid)	(intel_device_info(devid)->is_cherryview)
