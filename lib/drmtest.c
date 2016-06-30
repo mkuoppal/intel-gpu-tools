@@ -263,7 +263,7 @@ int __drm_open_driver(int chipset)
 		close(fd);
 	}
 
-	igt_skip("No intel gpu found\n");
+	igt_skip("No known gpu found\n");
 	return -1;
 }
 
