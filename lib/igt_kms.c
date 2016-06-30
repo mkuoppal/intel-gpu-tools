@@ -1727,11 +1727,6 @@ igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_pipe_t *pipe,
 	if (plane->rotation_changed)
 		igt_atomic_populate_plane_req(req, plane,
 			IGT_PLANE_ROTATION, plane->rotation);
-
-	plane->fb_changed = false;
-	plane->position_changed = false;
-	plane->size_changed = false;
-	plane->rotation_changed = false;
 }
 
 
@@ -1819,15 +1814,10 @@ static int igt_drm_plane_commit(igt_plane_t *plane,
 		CHECK_RETURN(ret, fail_on_error);
 	}
 
-	plane->fb_changed = false;
-	plane->position_changed = false;
-	plane->size_changed = false;
-
 	if (plane->rotation_changed) {
 		ret = igt_plane_set_property(plane, plane->rotation_property,
 				       plane->rotation);
 
-		plane->rotation_changed = false;
 		CHECK_RETURN(ret, fail_on_error);
 	}
 
@@ -1872,8 +1862,6 @@ static int igt_cursor_commit_legacy(igt_plane_t *cursor,
 		}
 
 		CHECK_RETURN(ret, fail_on_error);
-
-		cursor->fb_changed = false;
 	}
 
 	if (cursor->position_changed) {
@@ -1887,8 +1875,6 @@ static int igt_cursor_commit_legacy(igt_plane_t *cursor,
 
 		ret = drmModeMoveCursor(display->drm_fd, crtc_id, x, y);
 		CHECK_RETURN(ret, fail_on_error);
-
-		cursor->position_changed = false;
 	}
 
 	return 0;
@@ -1915,7 +1901,7 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 	igt_assert(!primary->rotation_changed);
 
 	if (!primary->fb_changed && !primary->position_changed &&
-		!primary->size_changed)
+	    !primary->size_changed)
 		return 0;
 
 	crtc_id = pipe->crtc_id;
@@ -1959,9 +1945,6 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 	CHECK_RETURN(ret, fail_on_error);
 
 	primary->pipe->enabled = (fb_id != 0);
-	primary->fb_changed = false;
-	primary->position_changed = false;
-	primary->size_changed = false;
 
 	return 0;
 }
@@ -1982,7 +1965,7 @@ static int igt_plane_commit(igt_plane_t *plane,
 		return igt_primary_plane_commit_legacy(plane, pipe,
 						       fail_on_error);
 	} else {
-			return igt_drm_plane_commit(plane, pipe, fail_on_error);
+		return igt_drm_plane_commit(plane, pipe, fail_on_error);
 	}
 }
 
@@ -2008,8 +1991,6 @@ static int igt_pipe_commit(igt_pipe_t *pipe,
 	if (pipe->background_changed) {
 		igt_crtc_set_property(pipe, pipe->background_property,
 			pipe->background);
-
-		pipe->background_changed = false;
 	}
 
 	if (pipe->color_mgmt_changed) {
@@ -2019,8 +2000,6 @@ static int igt_pipe_commit(igt_pipe_t *pipe,
 				      pipe->ctm_blob);
 		igt_crtc_set_property(pipe, pipe->gamma_property,
 				      pipe->gamma_blob);
-
-		pipe->color_mgmt_changed = false;
 	}
 
 	for (i = 0; i < pipe->n_planes; i++) {
@@ -2140,35 +2119,66 @@ static int do_display_commit(igt_display_t *display,
 			     bool fail_on_error)
 {
 	int i, ret;
-	int valid_outs = 0;
-
+	enum pipe pipe;
 	LOG_INDENT(display, "commit");
 
 	igt_display_refresh(display);
 
 	if (s == COMMIT_ATOMIC) {
-
 		ret = igt_atomic_commit(display);
+
 		CHECK_RETURN(ret, fail_on_error);
-		return 0;
+	} else {
+		int valid_outs = 0;
 
-	}
+		for_each_pipe(display, pipe) {
+			igt_pipe_t *pipe_obj = &display->pipes[pipe];
+			igt_output_t *output = igt_pipe_get_output(pipe_obj);
 
-	for_each_pipe(display, i) {
-		igt_pipe_t *pipe_obj = &display->pipes[i];
-		igt_output_t *output = igt_pipe_get_output(pipe_obj);
+			if (output && output->valid)
+				valid_outs++;
 
-		if (output && output->valid)
-			valid_outs++;
+			ret = igt_pipe_commit(pipe_obj, s, fail_on_error);
+			CHECK_RETURN(ret, fail_on_error);
+		}
 
-		ret = igt_pipe_commit(pipe_obj, s, fail_on_error);
 		CHECK_RETURN(ret, fail_on_error);
+
+		if (valid_outs == 0) {
+			LOG_UNINDENT(display);
+
+			return -1;
+		}
 	}
 
 	LOG_UNINDENT(display);
 
-	if (valid_outs == 0)
-		return -1;
+	if (ret)
+		return ret;
+
+	for_each_pipe(display, pipe) {
+		igt_pipe_t *pipe_obj = &display->pipes[pipe];
+		igt_plane_t *plane;
+
+		pipe_obj->color_mgmt_changed = false;
+		pipe_obj->background_changed = false;
+
+		for_each_plane_on_pipe(display, pipe, plane) {
+			plane->fb_changed = false;
+			plane->position_changed = false;
+			plane->size_changed = false;
+
+			if (s != COMMIT_LEGACY || !(plane->is_primary || plane->is_cursor))
+				plane->rotation_changed = false;
+		}
+	}
+
+	for (i = 0; i < display->n_outputs && s == COMMIT_ATOMIC; i++) {
+		igt_output_t *output = &display->outputs[i];
+
+		output->config.connector_dpms_changed = false;
+		output->config.connector_scaling_mode_changed = false;
+	}
 
 	igt_debug_wait_for_keypress("modeset");
 
