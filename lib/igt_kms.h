@@ -40,7 +40,8 @@
 /* Low-level helpers with kmstest_ prefix */
 
 enum pipe {
-        PIPE_ANY = -1,
+        PIPE_NONE = -1,
+        PIPE_ANY = PIPE_NONE,
         PIPE_A = 0,
         PIPE_B,
         PIPE_C,
