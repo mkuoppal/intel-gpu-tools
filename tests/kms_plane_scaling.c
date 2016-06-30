@@ -98,7 +98,7 @@ static void prepare_crtc(data_t *data, igt_output_t *output, enum pipe pipe,
 		ret = drmModeSetCrtc(data->drm_fd,
 				plane->pipe->crtc_id,
 				data->fb_id1,
-				plane->pan_x, plane->pan_y,
+				plane->src_x, plane->src_y,
 				&output->id,
 				1,
 				mode);

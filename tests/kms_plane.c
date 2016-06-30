@@ -321,11 +321,9 @@ test_plane_panning_with_output(data_t *data,
 	igt_plane_set_fb(primary, &primary_fb);
 
 	if (flags & TEST_PANNING_TOP_LEFT)
-		igt_plane_set_panning(primary, 0, 0);
+		igt_fb_set_position(&primary_fb, primary, 0, 0);
 	else
-		igt_plane_set_panning(primary, mode->hdisplay, mode->vdisplay);
-
-	igt_plane_set_position(primary, 0, 0);
+		igt_fb_set_position(&primary_fb, primary, mode->hdisplay, mode->vdisplay);
 
 	igt_display_commit(&data->display);
 
@@ -343,7 +341,7 @@ test_plane_panning_with_output(data_t *data,
 
 	/* reset states to neutral values, assumed by other tests */
 	igt_output_set_pipe(output, PIPE_ANY);
-	igt_plane_set_panning(primary, 0, 0);
+	igt_fb_set_position(&primary_fb, primary, 0, 0);
 
 	test_fini(data);
 }

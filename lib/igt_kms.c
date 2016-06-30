@@ -1915,7 +1915,7 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 	igt_assert(!primary->rotation_changed);
 
 	if (!primary->fb_changed && !primary->position_changed &&
-		!primary->size_changed && !primary->panning_changed)
+		!primary->size_changed)
 		return 0;
 
 	crtc_id = pipe->crtc_id;
@@ -1927,18 +1927,18 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 
 	if (fb_id) {
 		LOG(display,
-		    "%s: SetCrtc pipe %s, fb %u, panning (%d, %d), "
+		    "%s: SetCrtc pipe %s, fb %u, src (%d, %d), "
 		    "mode %dx%d\n",
 		    igt_output_name(output),
 		    kmstest_pipe_name(pipe->pipe),
 		    fb_id,
-		    primary->pan_x, primary->pan_y,
+		    primary->src_x, primary->src_x,
 		    mode->hdisplay, mode->vdisplay);
 
 		ret = drmModeSetCrtc(display->drm_fd,
 				     crtc_id,
 				     fb_id,
-				     primary->pan_x, primary->pan_y,
+				     primary->src_x, primary->src_x,
 				     &output->id,
 				     1,
 				     mode);
@@ -1962,7 +1962,6 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 	primary->fb_changed = false;
 	primary->position_changed = false;
 	primary->size_changed = false;
-	primary->panning_changed = false;
 
 	return 0;
 }
@@ -2406,21 +2405,6 @@ void igt_fb_set_size(struct igt_fb *fb, igt_plane_t *plane,
 	plane->src_h = h;
 
 	plane->fb_changed = true;
-}
-
-void igt_plane_set_panning(igt_plane_t *plane, int x, int y)
-{
-	igt_pipe_t *pipe = plane->pipe;
-	igt_display_t *display = pipe->display;
-
-	LOG(display, "%s.%d: plane_set_panning(%d,%d)\n",
-	    kmstest_pipe_name(pipe->pipe),
-	    plane->index, x, y);
-
-	plane->pan_x = x;
-	plane->pan_y = y;
-
-	plane->panning_changed = true;
 }
 
 static const char *rotation_name(igt_rotation_t rotation)

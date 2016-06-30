@@ -220,7 +220,6 @@ typedef struct {
 	/* state tracking */
 	unsigned int fb_changed       : 1;
 	unsigned int position_changed : 1;
-	unsigned int panning_changed  : 1;
 	unsigned int rotation_changed : 1;
 	unsigned int size_changed     : 1;
 	/*
@@ -244,8 +243,6 @@ typedef struct {
 	uint32_t src_w;
 	uint32_t src_h;
 
-	/* panning offset within the fb */
-	unsigned int pan_x, pan_y;
 	igt_rotation_t rotation;
 	uint32_t atomic_props_plane[IGT_NUM_PLANE_PROPS];
 } igt_plane_t;
@@ -326,7 +323,6 @@ void igt_pipe_set_gamma_lut(igt_pipe_t *pipe, void *ptr, size_t length);
 void igt_plane_set_fb(igt_plane_t *plane, struct igt_fb *fb);
 void igt_plane_set_position(igt_plane_t *plane, int x, int y);
 void igt_plane_set_size(igt_plane_t *plane, int w, int h);
-void igt_plane_set_panning(igt_plane_t *plane, int x, int y);
 void igt_plane_set_rotation(igt_plane_t *plane, igt_rotation_t rotation);
 void igt_crtc_set_background(igt_pipe_t *pipe, uint64_t background);
 void igt_fb_set_position(struct igt_fb *fb, igt_plane_t *plane,
