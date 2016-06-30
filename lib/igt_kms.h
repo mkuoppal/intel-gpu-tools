@@ -117,7 +117,6 @@ struct kmstest_connector_config {
 	bool connector_scaling_mode_changed;
 	uint64_t connector_dpms;
 	bool connector_dpms_changed;
-	uint32_t atomic_props_crtc[IGT_NUM_CRTC_PROPS];
 	uint32_t atomic_props_connector[IGT_NUM_CONNECTOR_PROPS];
 	int pipe;
 	unsigned valid_crtc_idx_mask;
@@ -257,6 +256,9 @@ struct igt_pipe {
 	bool enabled;
 	int n_planes;
 	igt_plane_t planes[IGT_MAX_PLANES];
+
+	uint32_t atomic_props_crtc[IGT_NUM_CRTC_PROPS];
+
 	uint64_t background; /* Background color MSB BGR 16bpc LSB */
 	uint32_t background_changed : 1;
 	uint32_t background_property;
@@ -395,13 +397,13 @@ static inline bool igt_pipe_connector_valid(enum pipe pipe,
 /**
  * igt_atomic_populate_crtc_req:
  * @req: A pointer to drmModeAtomicReq
- * @output: A pointer igt_output_t
+ * @pipe: A pointer igt_pipe_t
  * @prop: one of igt_atomic_crtc_properties
  * @value: the value to add
  */
-#define igt_atomic_populate_crtc_req(req, output, prop, value) \
-	igt_assert_lt(0, drmModeAtomicAddProperty(req, output->config.crtc->crtc_id,\
-						  output->config.atomic_props_crtc[prop], value))
+#define igt_atomic_populate_crtc_req(req, pipe, prop, value) \
+	igt_assert_lt(0, drmModeAtomicAddProperty(req, pipe->crtc_id,\
+						  pipe->atomic_props_crtc[prop], value))
 /**
  * igt_atomic_populate_connector_req:
  * @req: A pointer to drmModeAtomicReq
