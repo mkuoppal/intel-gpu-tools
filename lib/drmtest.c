@@ -115,6 +115,11 @@ static bool is_vgem_device(int fd)
 	return __is_device(fd, "vgem");
 }
 
+static bool is_virtio_device(int fd)
+{
+	return __is_device(fd, "virt");
+}
+
 static bool has_known_intel_chipset(int fd)
 {
 	struct drm_i915_getparam gp;
@@ -258,6 +263,10 @@ int __drm_open_driver(int chipset)
 
 		if (chipset & DRIVER_VGEM &&
 		    is_vgem_device(fd))
+			return fd;
+
+		if (chipset & DRIVER_VIRTIO &&
+		    is_virtio_device(fd))
 			return fd;
 
 		close(fd);

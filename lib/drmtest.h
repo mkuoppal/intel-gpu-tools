@@ -41,6 +41,7 @@
 #define DRIVER_INTEL	(1 << 0)
 #define DRIVER_VC4	(1 << 1)
 #define DRIVER_VGEM	(1 << 2)
+#define DRIVER_VIRTIO	(1 << 3)
 #define DRIVER_ANY 	~(DRIVER_VGEM)
 
 #ifdef ANDROID
