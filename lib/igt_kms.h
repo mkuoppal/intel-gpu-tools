@@ -99,12 +99,14 @@ enum igt_atomic_crtc_properties {
        IGT_CRTC_CTM,
        IGT_CRTC_DEGAMMA_LUT,
        IGT_CRTC_GAMMA_LUT,
+       IGT_CRTC_MODE_ID,
+       IGT_CRTC_ACTIVE,
        IGT_NUM_CRTC_PROPS
 };
 
 enum igt_atomic_connector_properties {
        IGT_CONNECTOR_SCALING_MODE = 0,
-       IGT_CONNECTOR_DPMS,
+       IGT_CONNECTOR_CRTC_ID,
        IGT_NUM_CONNECTOR_PROPS
 };
 
@@ -115,8 +117,7 @@ struct kmstest_connector_config {
 	drmModeModeInfo default_mode;
 	uint64_t connector_scaling_mode;
 	bool connector_scaling_mode_changed;
-	uint64_t connector_dpms;
-	bool connector_dpms_changed;
+	bool pipe_changed;
 	uint32_t atomic_props_connector[IGT_NUM_CONNECTOR_PROPS];
 	int pipe;
 	unsigned valid_crtc_idx_mask;
@@ -269,6 +270,9 @@ struct igt_pipe {
 	uint32_t color_mgmt_changed : 1;
 
 	uint32_t crtc_id;
+
+	uint64_t mode_blob;
+	bool mode_changed;
 };
 
 typedef struct {
