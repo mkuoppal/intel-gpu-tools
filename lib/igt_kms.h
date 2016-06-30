@@ -118,7 +118,6 @@ struct kmstest_connector_config {
 	bool connector_dpms_changed;
 	uint32_t atomic_props_crtc[IGT_NUM_CRTC_PROPS];
 	uint32_t atomic_props_connector[IGT_NUM_CONNECTOR_PROPS];
-	int crtc_idx;
 	int pipe;
 	unsigned valid_crtc_idx_mask;
 };

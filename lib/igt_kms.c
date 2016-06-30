@@ -854,9 +854,7 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	config->connector = connector;
 	config->encoder = found;
 	config->crtc = drmModeGetCrtc(drm_fd, resources->crtcs[pipe]);
-	config->crtc_idx = pipe;
-	config->pipe = kmstest_get_pipe_from_crtc_id(drm_fd,
-						     config->crtc->crtc_id);
+	config->pipe = pipe;
 
 	drmModeFreeResources(resources);
 
