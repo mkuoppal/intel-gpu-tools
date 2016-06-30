@@ -761,6 +761,59 @@ bool kmstest_get_connector_default_mode(int drm_fd, drmModeConnector *connector,
 	return true;
 }
 
+static void
+_kmstest_connector_config_crtc_mask(int drm_fd,
+				    drmModeConnector *connector,
+				    struct kmstest_connector_config *config)
+{
+	int i;
+
+	config->valid_crtc_idx_mask = 0;
+
+	/* Now get a compatible encoder */
+	for (i = 0; i < connector->count_encoders; i++) {
+		drmModeEncoder *encoder = drmModeGetEncoder(drm_fd,
+							    connector->encoders[i]);
+
+		if (!encoder) {
+			igt_warn("could not get encoder %d: %s\n",
+				 connector->encoders[i],
+				 strerror(errno));
+
+			continue;
+		}
+
+		config->valid_crtc_idx_mask |= encoder->possible_crtcs;
+		drmModeFreeEncoder(encoder);
+	}
+}
+
+static drmModeEncoder *
+_kmstest_connector_config_find_encoder(int drm_fd, drmModeConnector *connector, enum pipe pipe)
+{
+	int i;
+
+	for (i = 0; i < connector->count_encoders; i++) {
+		drmModeEncoder *encoder = drmModeGetEncoder(drm_fd, connector->encoders[i]);
+
+		if (!encoder) {
+			igt_warn("could not get encoder %d: %s\n",
+				 connector->encoders[i],
+				 strerror(errno));
+
+			continue;
+		}
+
+		if (encoder->possible_crtcs & (1 << pipe))
+			return encoder;
+
+		drmModeFreeEncoder(encoder);
+	}
+
+	igt_assert(false);
+	return NULL;
+}
+
 /**
  * _kmstest_connector_config:
  * @drm_fd: DRM fd
@@ -779,8 +832,6 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 {
 	drmModeRes *resources;
 	drmModeConnector *connector;
-	drmModeEncoder *encoder, *found = NULL;
-	int i, j, pipe;
 
 	resources = drmModeGetResources(drm_fd);
 	if (!resources) {
@@ -816,51 +867,25 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	 * In both cases find the first compatible encoder and skip the CRTC
 	 * if there is non such.
 	 */
-	config->valid_crtc_idx_mask = 0;
-	for (i = 0; i < resources->count_crtcs; i++) {
-		if (!resources->crtcs[i])
-			continue;
+	_kmstest_connector_config_crtc_mask(drm_fd, connector, config);
 
-		/* Now get a compatible encoder */
-		for (j = 0; j < connector->count_encoders; j++) {
-			encoder = drmModeGetEncoder(drm_fd,
-						    connector->encoders[j]);
-
-			if (!encoder) {
-				igt_warn("could not get encoder %d: %s\n",
-					 resources->encoders[j],
-					 strerror(errno));
-
-				continue;
-			}
-
-			config->valid_crtc_idx_mask |= encoder->possible_crtcs;
-
-			if (!found && (crtc_idx_mask & encoder->possible_crtcs & (1 << i))) {
-				found = encoder;
-				pipe = i;
-			} else
-				drmModeFreeEncoder(encoder);
-		}
-	}
-
-	if (!found)
+	crtc_idx_mask &= config->valid_crtc_idx_mask;
+	if (!crtc_idx_mask)
 		goto err3;
+
+	config->pipe = ffs(crtc_idx_mask) - 1;
 
 	if (!kmstest_get_connector_default_mode(drm_fd, connector,
 						&config->default_mode))
-		goto err4;
+		goto err3;
 
+	config->encoder = _kmstest_connector_config_find_encoder(drm_fd, connector, config->pipe);
 	config->connector = connector;
-	config->encoder = found;
-	config->crtc = drmModeGetCrtc(drm_fd, resources->crtcs[pipe]);
-	config->pipe = pipe;
+	config->crtc = drmModeGetCrtc(drm_fd, resources->crtcs[config->pipe]);
 
 	drmModeFreeResources(resources);
 
 	return true;
-err4:
-	drmModeFreeEncoder(found);
 err3:
 	drmModeFreeConnector(connector);
 err2:
