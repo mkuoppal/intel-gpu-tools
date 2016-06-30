@@ -334,17 +334,31 @@ void igt_fb_set_size(struct igt_fb *fb, igt_plane_t *plane,
 
 void igt_wait_for_vblank(int drm_fd, enum pipe pipe);
 
+static inline bool igt_output_is_connected(igt_output_t *output)
+{
+	/* Something went wrong during probe? */
+	if (!output->config.connector)
+		return false;
+
+	if (output->config.connector->connection == DRM_MODE_CONNECTED)
+		return true;
+
+	return false;
+}
+
 static inline bool igt_pipe_connector_valid(enum pipe pipe,
 					    igt_output_t *output)
 {
-	return output->valid && (output->config.valid_crtc_idx_mask & (1 << pipe));
+	return igt_output_is_connected(output) &&
+	       (output->config.valid_crtc_idx_mask & (1 << pipe));
 }
 
 #define for_each_if(condition) if (!(condition)) {} else
 
 #define for_each_connected_output(display, output)		\
 	for (int i__ = 0;  i__ < (display)->n_outputs; i__++)	\
-		for_each_if (((output = &(display)->outputs[i__]), output->valid))
+		for_each_if (((output = &(display)->outputs[i__]), \
+			      igt_output_is_connected(output)))
 
 #define for_each_pipe(display, pipe)					\
 	for (pipe = 0; pipe < igt_display_get_n_pipes(display); pipe++)	\

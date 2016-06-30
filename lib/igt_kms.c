@@ -869,18 +869,20 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	 */
 	_kmstest_connector_config_crtc_mask(drm_fd, connector, config);
 
-	crtc_idx_mask &= config->valid_crtc_idx_mask;
-	if (!crtc_idx_mask)
-		goto err3;
-
-	config->pipe = ffs(crtc_idx_mask) - 1;
-
 	if (!kmstest_get_connector_default_mode(drm_fd, connector,
 						&config->default_mode))
 		goto err3;
 
-	config->encoder = _kmstest_connector_config_find_encoder(drm_fd, connector, config->pipe);
 	config->connector = connector;
+
+	crtc_idx_mask &= config->valid_crtc_idx_mask;
+	if (!crtc_idx_mask)
+		/* Keep config->connector */
+		goto err2;
+
+	config->pipe = ffs(crtc_idx_mask) - 1;
+
+	config->encoder = _kmstest_connector_config_find_encoder(drm_fd, connector, config->pipe);
 	config->crtc = drmModeGetCrtc(drm_fd, resources->crtcs[config->pipe]);
 
 	drmModeFreeResources(resources);
@@ -940,8 +942,13 @@ bool kmstest_probe_connector_config(int drm_fd, uint32_t connector_id,
 void kmstest_free_connector_config(struct kmstest_connector_config *config)
 {
 	drmModeFreeCrtc(config->crtc);
+	config->crtc = NULL;
+
 	drmModeFreeEncoder(config->encoder);
+	config->encoder = NULL;
+
 	drmModeFreeConnector(config->connector);
+	config->connector = NULL;
 }
 
 /**
@@ -1197,8 +1204,7 @@ static void igt_output_refresh(igt_output_t *output)
 	/* we mask out the pipes already in use */
 	crtc_idx_mask = output->pending_crtc_idx_mask & ~display->pipes_in_use;
 
-	if (output->valid)
-		kmstest_free_connector_config(&output->config);
+	kmstest_free_connector_config(&output->config);
 
 	ret = kmstest_get_connector_config(display->drm_fd,
 					   output->id,
@@ -1209,18 +1215,18 @@ static void igt_output_refresh(igt_output_t *output)
 	else
 		output->valid = false;
 
-	if (!output->valid)
-		return;
-
-	if (output->use_override_mode)
-		output->config.default_mode = output->override_mode;
-
-	if (!output->name) {
+	if (!output->name && output->config.connector) {
 		drmModeConnector *c = output->config.connector;
 
 		igt_assert_neq(asprintf(&output->name, "%s-%d", kmstest_connector_type_str(c->connector_type), c->connector_type_id),
 			       -1);
 	}
+
+	if (!output->valid)
+		return;
+
+	if (output->use_override_mode)
+		output->config.default_mode = output->override_mode;
 
 	LOG(display, "%s: Selecting pipe %s\n", output->name,
 	    kmstest_pipe_name(output->config.pipe));
@@ -1465,10 +1471,10 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		igt_output_t *output = &display->outputs[i];
 
 		/*
-		 * We're free to select any pipe to drive that output until
-		 * a constraint is set with igt_output_set_pipe().
+		 * We don't assign each output a pipe unless
+		 * a pipe is set with igt_output_set_pipe().
 		 */
-		output->pending_crtc_idx_mask = -1UL;
+		output->pending_crtc_idx_mask = 0;
 		output->id = resources->connectors[i];
 		output->display = display;
 
@@ -1537,16 +1543,13 @@ static void igt_display_refresh(igt_display_t *display)
         for (i = 0; i < display->n_outputs; i++) {
                 igt_output_t *a = &display->outputs[i];
 
-                if (a->pending_crtc_idx_mask == -1UL)
+                if (!a->pending_crtc_idx_mask)
                         continue;
 
                 for (j = 0; j < display->n_outputs; j++) {
                         igt_output_t *b = &display->outputs[j];
 
                         if (i == j)
-                                continue;
-
-                        if (b->pending_crtc_idx_mask == -1UL)
                                 continue;
 
                         igt_assert_f(a->pending_crtc_idx_mask !=
@@ -1557,24 +1560,8 @@ static void igt_display_refresh(igt_display_t *display)
                 }
         }
 
-	/*
-	 * The pipe allocation has to be done in two phases:
-	 *   - first, try to satisfy the outputs where a pipe has been specified
-	 *   - then, allocate the outputs with PIPE_ANY
-	 */
 	for (i = 0; i < display->n_outputs; i++) {
 		igt_output_t *output = &display->outputs[i];
-
-		if (output->pending_crtc_idx_mask == -1UL)
-			continue;
-
-		igt_output_refresh(output);
-	}
-	for (i = 0; i < display->n_outputs; i++) {
-		igt_output_t *output = &display->outputs[i];
-
-		if (output->pending_crtc_idx_mask != -1UL)
-			continue;
 
 		igt_output_refresh(output);
 	}
@@ -1585,12 +1572,11 @@ static igt_pipe_t *igt_output_get_driving_pipe(igt_output_t *output)
 	igt_display_t *display = output->display;
 	enum pipe pipe;
 
-	if (output->pending_crtc_idx_mask == -1UL) {
+	if (!output->pending_crtc_idx_mask) {
 		/*
-		 * The user hasn't specified a pipe to use, take the one
-		 * configured by the last refresh()
+		 * The user hasn't specified a pipe to use, return none.
 		 */
-		pipe = output->config.pipe;
+		return NULL;
 	} else {
 		/*
 		 * Otherwise, return the pending pipe (ie the pipe that should
@@ -1623,11 +1609,14 @@ static igt_plane_t *igt_pipe_get_plane(igt_pipe_t *pipe, enum igt_plane plane)
 static igt_output_t *igt_pipe_get_output(igt_pipe_t *pipe)
 {
 	igt_display_t *display = pipe->display;
-	igt_output_t *output;
+	int i;
 
-	for_each_connected_output(display, output)
-		if (output->config.pipe == pipe->pipe)
+	for (i = 0; i < display->n_outputs; i++) {
+		igt_output_t *output = &display->outputs[i];
+
+		if (output->pending_crtc_idx_mask == (1 << pipe->pipe))
 			return output;
+	}
 
 	return NULL;
 }
@@ -2283,9 +2272,9 @@ void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 {
 	igt_display_t *display = output->display;
 
-	if (pipe == PIPE_ANY) {
+	if (pipe == PIPE_NONE) {
 		LOG(display, "%s: set_pipe(any)\n", igt_output_name(output));
-		output->pending_crtc_idx_mask = -1UL;
+		output->pending_crtc_idx_mask = 0;
 	} else {
 		LOG(display, "%s: set_pipe(%s)\n", igt_output_name(output),
 		    kmstest_pipe_name(pipe));
