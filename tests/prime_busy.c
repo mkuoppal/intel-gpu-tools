@@ -189,7 +189,9 @@ igt_main
 
 		for (e = intel_execution_engines; e->name; e++) {
 			for (const struct mode *m = modes; m->name; m++) {
-				igt_subtest_f("%s-%s", m->name, e->name) {
+				igt_subtest_f("%s%s-%s",
+					      e->exec_id == 0 ? "basic-" : "",
+					      m->name, e->name) {
 					gem_require_ring(fd, e->exec_id | e->flags);
 					igt_skip_on_f(gen == 6 &&
 							e->exec_id == I915_EXEC_BSD,
