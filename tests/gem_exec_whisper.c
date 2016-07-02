@@ -117,6 +117,7 @@ static bool ignore_engine(int gen, unsigned engine)
 
 static void whisper(int fd, unsigned engine, unsigned flags)
 {
+	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	struct drm_i915_gem_exec_object2 batches[1024];
 	struct drm_i915_gem_relocation_entry inter[1024];
@@ -169,8 +170,6 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 	reloc.write_domain = I915_GEM_DOMAIN_INSTRUCTION;
 
 	{
-		uint32_t bbe = MI_BATCH_BUFFER_END;
-
 		tmp[0] = scratch;
 		tmp[1] = store;
 		gem_write(fd, store.handle, 0, &bbe, sizeof(bbe));
@@ -217,13 +216,34 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 	memset(batches, 0, sizeof(batches));
 	for (n = 0; n < 1024; n++) {
 		batches[n].handle = gem_create(fd, 4096);
-		batches[n].offset = store.offset;
+		gem_write(fd, batches[n].handle, 0, &bbe, sizeof(bbe));
+	}
+	execbuf.buffers_ptr = (uintptr_t)batches;
+	execbuf.buffer_count = 1024;
+	gem_execbuf(fd, &execbuf);
+
+	execbuf.buffers_ptr = (uintptr_t)tmp;
+	execbuf.buffer_count = 2;
+
+	old_offset = store.offset;
+	for (n = 0; n < 1024; n++) {
+		if (gen >= 8) {
+			batch[1] = old_offset + loc;
+			batch[2] = (old_offset + loc) >> 32;
+		} else if (gen >= 4) {
+			batch[2] = old_offset + loc;
+		} else {
+			batch[1] = old_offset + loc;
+		}
+
 		inter[n] = reloc;
-		inter[n].presumed_offset = store.offset;
+		inter[n].presumed_offset = old_offset;
 		inter[n].delta = loc;
 		batches[n].relocs_ptr = (uintptr_t)&inter[n];
 		batches[n].relocation_count = 1;
 		gem_write(fd, batches[n].handle, 0, batch, sizeof(batch));
+
+		old_offset = batches[n].offset;
 	}
 
 	intel_detect_and_clear_missed_interrupts(fd);
