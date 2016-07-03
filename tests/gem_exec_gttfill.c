@@ -22,6 +22,7 @@
  */
 
 #include "igt.h"
+#include "igt_rand.h"
 
 IGT_TEST_DESCRIPTION("Fill the GTT with batches.");
 
@@ -60,52 +61,59 @@ static void submit(int fd, int gen,
 		   uint32_t *handles, unsigned count)
 {
 	struct drm_i915_gem_exec_object2 obj;
+	uint32_t batch[16];
+	unsigned n;
+
+	memset(&obj, 0, sizeof(obj));
+	obj.relocs_ptr = (uintptr_t)reloc;
+	obj.relocation_count = 2;
+
+	memset(reloc, 0, 2*sizeof(*reloc));
+	reloc[0].offset = eb->batch_start_offset;
+	reloc[0].offset += sizeof(uint32_t);
+	reloc[0].delta = BATCH_SIZE - eb->batch_start_offset - 8;
+	reloc[0].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+	reloc[1].offset = eb->batch_start_offset;
+	reloc[1].offset += 3*sizeof(uint32_t);
+	reloc[1].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+
+	n = 0;
+	batch[n] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
+	if (gen >= 8) {
+		batch[n] |= 1 << 21;
+		batch[n]++;
+		batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+		batch[++n] = 0; /* upper_32_bits(address) */
+	} else if (gen >= 4) {
+		batch[++n] = 0;
+		batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+		reloc[0].offset += sizeof(uint32_t);
+	} else {
+		batch[n]--;
+		batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
+		reloc[1].offset -= sizeof(uint32_t);
+	}
+	batch[++n] = 0; /* lower_32_bits(value) */
+	batch[++n] = 0; /* upper_32_bits(value) / nop */
+	batch[++n] = MI_BATCH_BUFFER_END;
 
 	eb->buffers_ptr = (uintptr_t)&obj;
 	for (unsigned i = 0; i < count; i++) {
-		uint32_t batch[16];
-		unsigned n;
-
-		memset(&obj, 0, sizeof(obj));
 		obj.handle = handles[i];
-		obj.relocs_ptr = (uintptr_t)reloc;
-		obj.relocation_count = 2;
-
-		memset(reloc, 0, 2*sizeof(*reloc));
 		reloc[0].target_handle = obj.handle;
-		reloc[0].offset = eb->batch_start_offset;
-		reloc[0].offset += sizeof(uint32_t);
-		reloc[0].delta = BATCH_SIZE - eb->batch_start_offset - 8;
-		reloc[0].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
 		reloc[1].target_handle = obj.handle;
-		reloc[1].offset = eb->batch_start_offset;
-		reloc[1].offset += 3*sizeof(uint32_t);
-		reloc[1].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
 
-		n = 0;
-		batch[n] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
-		if (gen >= 8) {
-			batch[n] |= 1 << 21;
-			batch[n]++;
-			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
-			batch[++n] = 0; /* upper_32_bits(address) */
-		} else if (gen >= 4) {
-			batch[++n] = 0;
-			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
-			reloc[0].offset += sizeof(uint32_t);
-		} else {
-			batch[n]--;
-			batch[++n] = reloc[0].delta;/* lower_32_bits(address) */
-			reloc[1].offset -= sizeof(uint32_t);
-		}
-		batch[++n] = 0; /* lower_32_bits(value) */
-		batch[++n] = 0; /* upper_32_bits(value) / nop */
-		batch[++n] = MI_BATCH_BUFFER_END;
+		obj.offset = 0;
+		reloc[0].presumed_offset = obj.offset;
+		reloc[1].presumed_offset = obj.offset;
+
 		gem_write(fd, obj.handle, eb->batch_start_offset,
 			  batch, sizeof(batch));
 
 		gem_execbuf(fd, eb);
 	}
+	/* As we have been lying about the write_domain, we need to do a sync */
+	gem_sync(fd, obj.handle);
 }
 
 static void fillgtt(int fd, unsigned ring, int timeout)
@@ -113,12 +121,16 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_relocation_entry reloc[2];
+	volatile uint64_t *shared;
 	unsigned *handles;
 	unsigned engines[16];
 	unsigned nengine;
 	unsigned engine;
 	uint64_t size;
 	unsigned count;
+
+	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(shared != MAP_FAILED);
 
 	nengine = 0;
 	if (ring == 0) {
@@ -164,6 +176,8 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 	submit(fd, gen, &execbuf, reloc, handles, count);
 
 	igt_fork(child, nengine) {
+		uint64_t cycles = 0;
+		hars_petruska_f54_1_random_perturb(child);
 		igt_permute_array(handles, count, xchg_u32);
 		execbuf.batch_start_offset = child*64;
 		execbuf.flags |= engines[child];
@@ -177,12 +191,20 @@ static void fillgtt(int fd, unsigned ring, int timeout)
 				gem_read(fd, handle, reloc[0].delta, &buf[1], sizeof(buf[1]));
 				igt_assert_eq_u64(buf[0], buf[1]);
 			}
+			cycles++;
 		}
+		shared[child] = cycles;
+		igt_info("engine[%d]: %llu cycles\n", child, (long long)cycles);
 	}
 	igt_waitchildren();
 
 	for (unsigned i = 0; i < count; i++)
 		gem_close(fd, handles[i]);
+
+	shared[nengine] = 0;
+	for (unsigned i = 0; i < nengine; i++)
+		shared[nengine] += shared[i];
+	igt_info("Total: %llu cycles\n", (long long)shared[nengine]);
 
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }

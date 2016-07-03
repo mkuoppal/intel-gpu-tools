@@ -26,6 +26,7 @@
 #include <sched.h>
 
 #include "igt.h"
+#include "igt_rand.h"
 #include "igt_stats.h"
 
 #if defined(__x86_64__) || defined(__i386__)
@@ -40,16 +41,6 @@ struct data {
 	int fd;
 	drmModeRes *resources;
 };
-
-static uint32_t state = 0x12345678;
-
-static uint32_t
-hars_petruska_f54_1_random (void)
-{
-#define rol(x,k) ((x << k) | (x >> (32-k)))
-    return state = (state ^ rol (state, 5) ^ rol (state, 24)) + 0x37798849;
-#undef rol
-}
 
 static void stress(struct data *data,
 		   uint32_t *crtc_id, unsigned num_crtcs,
@@ -94,9 +85,9 @@ static void stress(struct data *data,
 		CPU_SET(child, &allowed);
 		sched_setaffinity(getpid(), sizeof(cpu_set_t), &allowed);
 
-		state ^= child;
+		hars_petruska_f54_1_random_perturb(child);
 		igt_until_timeout(timeout) {
-			arg.crtc_id = crtc_id[hars_petruska_f54_1_random() % num_crtcs];
+			arg.crtc_id = crtc_id[hars_petruska_f54_1_random_unsafe() % num_crtcs];
 			do_ioctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 			count++;
 		}

@@ -16,6 +16,8 @@ libintel_tools_la_SOURCES = 	\
 	igt_gt.h		\
 	igt_gvt.c		\
 	igt_gvt.h		\
+	igt_rand.c		\
+	igt_rand.h		\
 	igt_stats.c		\
 	igt_stats.h		\
 	igt_sysfs.c		\

@@ -57,6 +57,7 @@
 #include "igt_aux.h"
 #include "igt_debugfs.h"
 #include "igt_gt.h"
+#include "igt_rand.h"
 #include "config.h"
 #include "intel_reg.h"
 #include "ioctl_wrappers.h"
@@ -484,15 +485,6 @@ void igt_exchange_int(void *array, unsigned i, unsigned j)
 	tmp = int_arr[i];
 	int_arr[i] = int_arr[j];
 	int_arr[j] = tmp;
-}
-
-static uint32_t
-hars_petruska_f54_1_random_unsafe(void)
-{
-	static uint32_t state = 0x12345678;
-#define rol(x,k) ((x << k) | (x >> (32-k)))
-	return state = (state ^ rol (state, 5) ^ rol (state, 24)) + 0x37798849;
-#undef rol
 }
 
 /**
@@ -1206,19 +1198,9 @@ static struct igt_siglatency {
 	int sig;
 } igt_siglatency;
 
-static uint32_t
-__hars_petruska_f54_1_random (void)
-{
-	static uint32_t state = 0x12345678;
-
-#define rol(x,k) ((x << k) | (x >> (32-k)))
-	return state = (state ^ rol (state, 5) ^ rol (state, 24)) + 0x37798849;
-#undef rol
-}
-
 static long delay(void)
 {
-	return __hars_petruska_f54_1_random() % (NSEC_PER_SEC / 1000);
+	return hars_petruska_f54_1_random_unsafe() % (NSEC_PER_SEC / 1000);
 }
 
 static double elapsed(const struct timespec *now, const struct timespec *last)
