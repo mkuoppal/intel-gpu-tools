@@ -8,7 +8,6 @@ AM_CFLAGS = $(DRM_CFLAGS) $(PCIACCESS_CFLAGS) $(CWARNFLAGS) \
 LDADD = $(DRM_LIBS) $(PCIACCESS_LIBS) $(CAIRO_LIBS) $(OVERLAY_LIBS)
 
 intel_gpu_overlay_SOURCES = \
-	i915_pciids.h \
 	chart.h \
 	chart.c \
 	config.c \
