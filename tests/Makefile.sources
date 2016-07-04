@@ -84,6 +84,7 @@ TESTS_progs_M = \
 	gvt_basic \
 	kms_addfb_basic \
 	kms_atomic \
+	kms_atomic_transition \
 	kms_chv_cursor_fail \
 	kms_cursor_crc \
 	kms_cursor_legacy \
