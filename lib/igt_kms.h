@@ -402,6 +402,8 @@ static inline bool igt_pipe_connector_valid(enum pipe pipe,
 void igt_enable_connectors(void);
 void igt_reset_connectors(void);
 
+uint32_t kmstest_get_vbl_flag(uint32_t pipe_id);
+
 #define EDID_LENGTH 128
 const unsigned char* igt_kms_get_base_edid(void);
 const unsigned char* igt_kms_get_alt_edid(void);

@@ -2570,3 +2570,22 @@ void igt_reset_connectors(void)
 			      forced_connectors[i],
 			      "detect");
 }
+
+/**
+ * kmstest_get_vbl_flag:
+ *
+ * Convert a pipe id into the flag representation
+ * expected in DRM while processing DRM_IOCTL_WAIT_VBLANK.
+ */
+uint32_t kmstest_get_vbl_flag(uint32_t pipe_id)
+{
+	if (pipe_id == 0)
+		return 0;
+	else if (pipe_id == 1)
+		return _DRM_VBLANK_SECONDARY;
+	else {
+		uint32_t pipe_flag = pipe_id << 1;
+		igt_assert(!(pipe_flag & ~DRM_VBLANK_HIGH_CRTC_MASK));
+		return pipe_flag;
+	}
+}
