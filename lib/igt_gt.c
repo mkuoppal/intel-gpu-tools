@@ -38,9 +38,7 @@
 #include "intel_reg.h"
 #include "intel_chipset.h"
 
-#if NEW_CONTEXT_PARAM_NO_ERROR_CAPTURE_API
 #define LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE 0x4
-#endif
 
 /**
  * SECTION:igt_gt
@@ -150,7 +148,6 @@ igt_hang_ring_t igt_hang_ctx(int fd,
 	param.size = 0;
 
 	if ((flags & HANG_ALLOW_CAPTURE) == 0) {
-#if NEW_CONTEXT_PARAM_NO_ERROR_CAPTURE_API
 		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
 		param.value = 1;
 		/* Older kernels may not have NO_ERROR_CAPTURE, in which case
@@ -158,7 +155,6 @@ igt_hang_ring_t igt_hang_ctx(int fd,
 		 * the right one).
 		 */
 		__gem_context_set_param(fd, &param);
-#endif
 	}
 
 	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
@@ -277,14 +273,10 @@ void igt_post_hang_ring(int fd, struct igt_hang_ring arg)
 	gem_context_set_param(fd, &param);
 
 	if ((arg.flags & HANG_ALLOW_CAPTURE) == 0) {
-#if NEW_CONTEXT_PARAM_NO_ERROR_CAPTURE_API
 		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
 		param.value = 0;
 		if (__gem_context_set_param(fd, &param))
 			eat_error_state();
-#else
-		eat_error_state();
-#endif
 	}
 }
 
