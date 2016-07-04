@@ -35,6 +35,8 @@ igt_main
 		fd = drm_open_driver(DRIVER_INTEL);
 	}
 
+	igt_subtest_f("invalid-placeholder-test");
+
 	igt_fixture {
 		close(fd);
 		igt_gvt_unload_module();
