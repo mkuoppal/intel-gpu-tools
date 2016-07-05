@@ -867,7 +867,9 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 		goto err3;
 
 	if (!connector->count_modes) {
-		igt_warn("connector %d has no modes\n", connector_id);
+		igt_warn("connector %d/%s-%d has no modes\n", connector_id,
+			 kmstest_connector_type_str(connector->connector_type),
+			 connector->connector_type_id);
 		goto err3;
 	}
 
@@ -2125,7 +2127,7 @@ static void igt_atomic_prepare_connector_commit(igt_output_t *output, drmModeAto
  * Commit all the changes of all the planes,crtcs, connectors
  * atomically using drmModeAtomicCommit()
  */
-static int igt_atomic_commit(igt_display_t *display)
+static int igt_atomic_commit(igt_display_t *display, uint32_t flags, void *user_data)
 {
 
 	int ret = 0, i;
@@ -2166,61 +2168,17 @@ static int igt_atomic_commit(igt_display_t *display)
 		igt_atomic_prepare_connector_commit(output, req);
 	}
 
-	ret = drmModeAtomicCommit(display->drm_fd, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+	ret = drmModeAtomicCommit(display->drm_fd, req, flags, user_data);
 	drmModeAtomicFree(req);
 	return ret;
 
 }
-/*
- * Commit all plane changes across all outputs of the display.
- *
- * If @fail_on_error is true, any failure to commit plane state will lead
- * to subtest failure in the specific function where the failure occurs.
- * Otherwise, the first error code encountered will be returned and no
- * further programming will take place, which may result in some changes
- * taking effect and others not taking effect.
- */
-static int do_display_commit(igt_display_t *display,
-			     enum igt_commit_style s,
-			     bool fail_on_error)
+
+static void
+display_commit_changed(igt_display_t *display, enum igt_commit_style s)
 {
-	int i, ret;
+	int i;
 	enum pipe pipe;
-	LOG_INDENT(display, "commit");
-
-	igt_display_refresh(display);
-
-	if (s == COMMIT_ATOMIC) {
-		ret = igt_atomic_commit(display);
-
-		CHECK_RETURN(ret, fail_on_error);
-	} else {
-		int valid_outs = 0;
-
-		for_each_pipe(display, pipe) {
-			igt_pipe_t *pipe_obj = &display->pipes[pipe];
-			igt_output_t *output = igt_pipe_get_output(pipe_obj);
-
-			if (output && output->valid)
-				valid_outs++;
-
-			ret = igt_pipe_commit(pipe_obj, s, fail_on_error);
-			CHECK_RETURN(ret, fail_on_error);
-		}
-
-		CHECK_RETURN(ret, fail_on_error);
-
-		if (valid_outs == 0) {
-			LOG_UNINDENT(display);
-
-			return -1;
-		}
-	}
-
-	LOG_UNINDENT(display);
-
-	if (ret)
-		return ret;
 
 	for_each_pipe(display, pipe) {
 		igt_pipe_t *pipe_obj = &display->pipes[pipe];
@@ -2251,10 +2209,93 @@ static int do_display_commit(igt_display_t *display,
 		if (s == COMMIT_ATOMIC)
 			output->config.connector_scaling_mode_changed = false;
 	}
+}
+
+/*
+ * Commit all plane changes across all outputs of the display.
+ *
+ * If @fail_on_error is true, any failure to commit plane state will lead
+ * to subtest failure in the specific function where the failure occurs.
+ * Otherwise, the first error code encountered will be returned and no
+ * further programming will take place, which may result in some changes
+ * taking effect and others not taking effect.
+ */
+static int do_display_commit(igt_display_t *display,
+			     enum igt_commit_style s,
+			     bool fail_on_error)
+{
+	int ret;
+	enum pipe pipe;
+	LOG_INDENT(display, "commit");
+
+	igt_display_refresh(display);
+
+	if (s == COMMIT_ATOMIC) {
+		ret = igt_atomic_commit(display, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+
+		CHECK_RETURN(ret, fail_on_error);
+	} else {
+		int valid_outs = 0;
+
+		for_each_pipe(display, pipe) {
+			igt_pipe_t *pipe_obj = &display->pipes[pipe];
+			igt_output_t *output = igt_pipe_get_output(pipe_obj);
+
+			if (output && output->valid)
+				valid_outs++;
+
+			ret = igt_pipe_commit(pipe_obj, s, fail_on_error);
+			CHECK_RETURN(ret, fail_on_error);
+		}
+
+		CHECK_RETURN(ret, fail_on_error);
+
+		if (valid_outs == 0) {
+			LOG_UNINDENT(display);
+
+			return -1;
+		}
+	}
+
+	LOG_UNINDENT(display);
+
+	if (ret)
+		return ret;
+
+	display_commit_changed(display, s);
 
 	igt_debug_wait_for_keypress("modeset");
 
 	return 0;
+}
+
+int igt_display_try_commit_atomic(igt_display_t *display, uint32_t flags, void *user_data)
+{
+	int ret;
+
+	LOG_INDENT(display, "commit");
+
+	igt_display_refresh(display);
+
+	ret = igt_atomic_commit(display, flags, user_data);
+
+	LOG_UNINDENT(display);
+
+	if (ret || (flags & DRM_MODE_ATOMIC_TEST_ONLY))
+		return ret;
+
+	display_commit_changed(display, COMMIT_ATOMIC);
+
+	igt_debug_wait_for_keypress("modeset");
+
+	return 0;
+}
+
+void igt_display_commit_atomic(igt_display_t *display, uint32_t flags, void *user_data)
+{
+	int ret = igt_display_try_commit_atomic(display, flags, user_data);
+
+	igt_assert_eq(ret, 0);
 }
 
 /**
@@ -2378,6 +2419,15 @@ void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 		output->config.pipe_changed = true;
 }
 
+void igt_output_set_scaling_mode(igt_output_t *output, uint64_t scaling_mode)
+{
+	output->config.connector_scaling_mode_changed = true;
+
+	output->config.connector_scaling_mode = scaling_mode;
+
+	igt_require(output->config.atomic_props_connector[IGT_CONNECTOR_SCALING_MODE]);
+}
+
 igt_plane_t *igt_output_get_plane(igt_output_t *output, enum igt_plane plane)
 {
 	igt_pipe_t *pipe;
@@ -2409,6 +2459,11 @@ void igt_plane_set_fb(igt_plane_t *plane, struct igt_fb *fb)
 		plane->src_w = fb->width;
 		plane->src_h = fb->height;
 	} else {
+		plane->src_x = 0;
+		plane->src_y = 0;
+		plane->src_w = 0;
+		plane->src_h = 0;
+
 		plane->crtc_w = 0;
 		plane->crtc_h = 0;
 	}
