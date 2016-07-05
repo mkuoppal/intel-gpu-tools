@@ -24,7 +24,7 @@
 
 #include "igt.h"
 #include <math.h>
-
+#include <sys/stat.h>
 
 IGT_TEST_DESCRIPTION("Test display panel fitting");
 
@@ -214,16 +214,103 @@ static void test_panel_fitting(data_t *d)
 	igt_require_f(valid_tests, "no valid crtc/connector combinations found\n");
 }
 
-igt_simple_main
+static void
+test_panel_fitting_fastset(igt_display_t *display, const enum pipe pipe, igt_output_t *output)
+{
+	igt_plane_t *primary, *sprite;
+	drmModeModeInfo mode;
+	igt_crc_t topleft, cur_crc;
+	igt_pipe_crc_t *pipe_crc;
+
+	struct igt_fb black, red;
+
+	igt_assert(kmstest_get_connector_default_mode(display->drm_fd, output->config.connector, &mode));
+
+	igt_output_override_mode(output, &mode);
+	igt_output_set_pipe(output, pipe);
+
+	primary = igt_output_get_plane(output, IGT_PLANE_PRIMARY);
+	sprite = igt_output_get_plane(output, IGT_PLANE_2);
+
+	igt_create_color_fb(display->drm_fd, mode.hdisplay, mode.vdisplay,
+			    DRM_FORMAT_XRGB8888, LOCAL_DRM_FORMAT_MOD_NONE,
+			    0.f, 0.f, 0.f, &black);
+
+	igt_create_color_fb(display->drm_fd, 640, 480,
+			    DRM_FORMAT_XRGB8888, LOCAL_DRM_FORMAT_MOD_NONE,
+			    1.f, 0.f, 0.f, &red);
+
+	igt_plane_set_fb(primary, &black);
+	igt_plane_set_fb(sprite, &red);
+
+	igt_display_commit2(display, COMMIT_ATOMIC);
+
+	pipe_crc = igt_pipe_crc_new(pipe, INTEL_PIPE_CRC_SOURCE_AUTO);
+	igt_pipe_crc_collect_crc(pipe_crc, &topleft);
+
+	mode.hdisplay = 640;
+	mode.vdisplay = 480;
+	igt_output_override_mode(output, &mode);
+
+	igt_plane_set_fb(sprite, NULL);
+	igt_plane_set_fb(primary, &red);
+
+	/* Don't pass ALLOW_MODESET with overridden mode, force fastset. */
+	igt_display_commit_atomic(display, 0, NULL);
+
+	igt_pipe_crc_collect_crc(pipe_crc, &cur_crc);
+
+	igt_assert(!igt_crc_equal(&topleft, &cur_crc));
+
+	igt_plane_set_fb(primary, NULL);
+	igt_output_set_pipe(output, PIPE_NONE);
+	igt_output_override_mode(output, NULL);
+
+	igt_pipe_crc_free(pipe_crc);
+}
+
+static void test_atomic_fastset(igt_display_t *display)
+{
+	igt_output_t *output;
+	enum pipe pipe;
+	int valid_tests = 0;
+	struct stat sb;
+
+	/* Until this is force enabled, force modeset evasion. */
+	if (stat("/sys/module/i915/parameters/fastboot", &sb) == 0)
+		igt_set_module_param_int("fastboot", 1);
+
+	igt_require_pipe_crc();
+	igt_require(display->is_atomic);
+	igt_require(intel_gen(intel_get_drm_devid(display->drm_fd)) >= 5);
+
+	for_each_pipe_with_valid_output(display, pipe, output) {
+		if (!output->config.atomic_props_connector[IGT_CONNECTOR_SCALING_MODE])
+			continue;
+
+		test_panel_fitting_fastset(display, pipe, output);
+		valid_tests++;
+	}
+	igt_require_f(valid_tests, "no valid crtc/connector combinations found\n");
+}
+
+igt_main
 {
 	data_t data = {};
 
-	igt_skip_on_simulation();
+	igt_fixture {
+		igt_skip_on_simulation();
 
-	data.drm_fd = drm_open_driver(DRIVER_ANY);
-	igt_display_init(&data.display, data.drm_fd);
+		data.drm_fd = drm_open_driver(DRIVER_ANY);
+		igt_display_init(&data.display, data.drm_fd);
+	}
 
-	test_panel_fitting(&data);
+	igt_subtest("legacy")
+		test_panel_fitting(&data);
 
-	igt_display_fini(&data.display);
+	igt_subtest("atomic-fastset")
+		test_atomic_fastset(&data.display);
+
+	igt_fixture
+		igt_display_fini(&data.display);
 }
