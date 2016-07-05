@@ -22,6 +22,7 @@
  */
 
 #include <time.h>
+#include <pthread.h>
 
 #include "igt.h"
 
@@ -187,6 +188,7 @@ store_ring(int fd, unsigned ring, int num_children)
 		num_children *= num_engines;
 	} else {
 		gem_require_ring(fd, ring);
+		igt_require(can_mi_store_dword(gen, ring));
 		names[num_engines] = NULL;
 		engines[num_engines++] = ring;
 	}
@@ -279,6 +281,229 @@ store_ring(int fd, unsigned ring, int num_children)
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
+static void xchg(void *array, unsigned i, unsigned j)
+{
+	uint32_t *u32 = array;
+	uint32_t tmp = u32[i];
+	u32[i] = u32[j];
+	u32[j] = tmp;
+}
+
+struct waiter {
+	pthread_t thread;
+	pthread_mutex_t mutex;
+	pthread_cond_t cond;
+
+	int ready;
+	volatile int *done;
+
+	int fd;
+	struct drm_i915_gem_exec_object2 object;
+	uint32_t handles[64];
+};
+
+static void *waiter(void *arg)
+{
+	struct waiter *w = arg;
+
+	do {
+		pthread_mutex_lock(&w->mutex);
+		w->ready = 0;
+		pthread_cond_signal(&w->cond);
+		while (!w->ready)
+			pthread_cond_wait(&w->cond, &w->mutex);
+		pthread_mutex_unlock(&w->mutex);
+		if (*w->done < 0)
+			return NULL;
+
+		gem_sync(w->fd, w->object.handle);
+		for (int n = 0;  n < ARRAY_SIZE(w->handles); n++)
+			gem_sync(w->fd, w->handles[n]);
+	} while (1);
+}
+
+static void
+__store_many(int fd, unsigned ring, int timeout, unsigned long *cycles)
+{
+	const int gen = intel_gen(intel_get_drm_devid(fd));
+	const uint32_t bbe = MI_BATCH_BUFFER_END;
+	struct drm_i915_gem_exec_object2 object[2];
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_relocation_entry reloc[1024];
+	struct waiter threads[64];
+	int order[64];
+	uint32_t *batch, *b;
+	int done;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)object;
+	execbuf.flags = ring;
+	execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
+	execbuf.flags |= LOCAL_I915_EXEC_HANDLE_LUT;
+	if (gen < 6)
+		execbuf.flags |= I915_EXEC_SECURE;
+
+	memset(object, 0, sizeof(object));
+	object[0].handle = gem_create(fd, 4096);
+	gem_write(fd, object[0].handle, 0, &bbe, sizeof(bbe));
+	execbuf.buffer_count = 1;
+	gem_execbuf(fd, &execbuf);
+	object[0].flags |= EXEC_OBJECT_WRITE;
+
+	object[1].relocs_ptr = (uintptr_t)reloc;
+	object[1].relocation_count = 1024;
+	execbuf.buffer_count = 2;
+
+	memset(reloc, 0, sizeof(reloc));
+	b = batch = malloc(20*1024);
+	for (int i = 0; i < 1024; i++) {
+		uint64_t offset;
+
+		reloc[i].presumed_offset = object[0].offset;
+		reloc[i].offset = (b - batch + 1) * sizeof(*batch);
+		reloc[i].delta = i * sizeof(uint32_t);
+		reloc[i].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+		reloc[i].write_domain = I915_GEM_DOMAIN_INSTRUCTION;
+
+		offset = object[0].offset + reloc[i].delta;
+		*b++ = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
+		if (gen >= 8) {
+			*b++ = offset;
+			*b++ = offset >> 32;
+		} else if (gen >= 4) {
+			*b++ = 0;
+			*b++ = offset;
+			reloc[i].offset += sizeof(*batch);
+		} else {
+			b[-1] -= 1;
+			*b++ = offset;
+		}
+		*b++ = i;
+	}
+	*b++ = MI_BATCH_BUFFER_END;
+	igt_assert((b - batch)*sizeof(uint32_t) < 20*1024);
+
+	done = 0;
+	for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+		threads[i].fd = fd;
+		threads[i].object = object[1];
+		threads[i].object.handle = gem_create(fd, 20*1024);
+		gem_write(fd, threads[i].object.handle, 0, batch, 20*1024);
+
+		pthread_cond_init(&threads[i].cond, NULL);
+		pthread_mutex_init(&threads[i].mutex, NULL);
+		threads[i].done = &done;
+		threads[i].ready = 0;
+
+		pthread_create(&threads[i].thread, NULL, waiter, &threads[i]);
+		order[i] = i;
+	}
+	free(batch);
+
+	for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+		for (int j = 0; j < ARRAY_SIZE(threads); j++)
+			threads[i].handles[j] = threads[j].object.handle;
+	}
+
+	igt_until_timeout(timeout) {
+		for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+			pthread_mutex_lock(&threads[i].mutex);
+			while (threads[i].ready)
+				pthread_cond_wait(&threads[i].cond,
+						  &threads[i].mutex);
+			pthread_mutex_unlock(&threads[i].mutex);
+			igt_permute_array(threads[i].handles,
+					  ARRAY_SIZE(threads[i].handles),
+					  xchg);
+		}
+
+		igt_permute_array(order, ARRAY_SIZE(threads), xchg);
+		for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+			object[1] = threads[i].object;
+			gem_execbuf(fd, &execbuf);
+			threads[i].object = object[1];
+		}
+		++*cycles;
+
+		for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+			struct waiter *w = &threads[order[i]];
+
+			w->ready = 1;
+			pthread_cond_signal(&w->cond);
+		}
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+		pthread_mutex_lock(&threads[i].mutex);
+		while (threads[i].ready)
+			pthread_cond_wait(&threads[i].cond, &threads[i].mutex);
+		pthread_mutex_unlock(&threads[i].mutex);
+	}
+	done = -1;
+	for (int i = 0; i < ARRAY_SIZE(threads); i++) {
+		threads[i].ready = 1;
+		pthread_cond_signal(&threads[i].cond);
+		pthread_join(threads[i].thread, NULL);
+		gem_close(fd, threads[i].object.handle);
+	}
+
+	gem_close(fd, object[0].handle);
+}
+
+static void
+store_many(int fd, unsigned ring, int timeout)
+{
+	const int gen = intel_gen(intel_get_drm_devid(fd));
+	unsigned long *shared;
+	const char *names[16];
+	int n;
+
+	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(shared != MAP_FAILED);
+
+	intel_detect_and_clear_missed_interrupts(fd);
+
+	if (ring == ~0u) {
+		const struct intel_execution_engine *e;
+
+		for (e = intel_execution_engines; e->name; e++) {
+			if (e->exec_id == 0)
+				continue;
+
+			if (!gem_has_ring(fd, e->exec_id | e->flags))
+				continue;
+
+			if (!can_mi_store_dword(gen, e->exec_id))
+				continue;
+
+			if (e->exec_id == I915_EXEC_BSD) {
+				int is_bsd2 = e->flags != 0;
+				if (gem_has_bsd2(fd) != is_bsd2)
+					continue;
+			}
+
+			igt_fork(child, 1)
+				__store_many(fd,
+					     e->exec_id | e->flags,
+					     timeout,
+					     &shared[n]);
+
+			names[n++] = e->name;
+		}
+		igt_waitchildren();
+	} else {
+		gem_require_ring(fd, ring);
+		igt_require(can_mi_store_dword(gen, ring));
+		__store_many(fd, ring, timeout, &shared[n++]);
+	}
+
+	for (int i = 0; i < n; i++) {
+		igt_info("%s%sompleted %ld cycles\n",
+			 names[i] ?: "", names[i] ? " c" : "C", shared[i]);
+	}
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
+}
+
 static void
 sync_all(int fd, int num_children)
 {
@@ -340,14 +565,6 @@ sync_all(int fd, int num_children)
 	}
 	igt_waitchildren_timeout(20, NULL);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
-}
-
-static void xchg(void *array, unsigned i, unsigned j)
-{
-	uint32_t *u32 = array;
-	uint32_t tmp = u32[i];
-	u32[i] = u32[j];
-	u32[j] = tmp;
 }
 
 static void
@@ -489,6 +706,8 @@ igt_main
 			sync_ring(fd, e->exec_id | e->flags, 1);
 		igt_subtest_f("store-%s", e->name)
 			store_ring(fd, e->exec_id | e->flags, 1);
+		igt_subtest_f("many-%s", e->name)
+			store_many(fd, e->exec_id | e->flags, 20);
 		igt_subtest_f("forked-%s", e->name)
 			sync_ring(fd, e->exec_id | e->flags, ncpus);
 		igt_subtest_f("forked-store-%s", e->name)
@@ -499,6 +718,8 @@ igt_main
 		sync_ring(fd, ~0u, 1);
 	igt_subtest("basic-store-each")
 		store_ring(fd, ~0u, 1);
+	igt_subtest("basic-many-each")
+		store_many(fd, ~0u, 10);
 	igt_subtest("forked-each")
 		sync_ring(fd, ~0u, ncpus);
 	igt_subtest("forked-store-each")
