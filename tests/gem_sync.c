@@ -494,7 +494,8 @@ store_many(int fd, unsigned ring, int timeout)
 	} else {
 		gem_require_ring(fd, ring);
 		igt_require(can_mi_store_dword(gen, ring));
-		__store_many(fd, ring, timeout, &shared[n++]);
+		__store_many(fd, ring, timeout, &shared[n]);
+		names[n++] = NULL;
 	}
 
 	for (int i = 0; i < n; i++) {
@@ -502,6 +503,7 @@ store_many(int fd, unsigned ring, int timeout)
 			 names[i] ?: "", names[i] ? " c" : "C", shared[i]);
 	}
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
+	munmap(shared, 4096);
 }
 
 static void
