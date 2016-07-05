@@ -133,10 +133,9 @@ static void test_crtc_background(data_t *data)
 
 	igt_require(data->display.has_universal_planes);
 
-	for_each_connected_output(display, output) {
+	for_each_pipe_with_valid_output(display, pipe, output) {
 		igt_plane_t *plane;
 
-		pipe = output->config.pipe;
 		igt_output_set_pipe(output, pipe);
 
 		plane = igt_output_get_plane(output, IGT_PLANE_PRIMARY);

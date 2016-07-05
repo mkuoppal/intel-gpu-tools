@@ -80,16 +80,15 @@ static void wait_for_pageflip(int fd)
 }
 
 static void
-test_flip_tiling(data_t *data, igt_output_t *output, uint64_t tiling[2])
+test_flip_tiling(data_t *data, enum pipe pipe, igt_output_t *output, uint64_t tiling[2])
 {
 	drmModeModeInfo *mode;
 	igt_plane_t *primary;
 	struct igt_fb fb[2];
 	igt_pipe_crc_t *pipe_crc;
 	igt_crc_t reference_crc, crc;
-	int fb_id, pipe, ret, width;
+	int fb_id, ret, width;
 
-	pipe = output->config.pipe;
 	pipe_crc = pipe_crc_new(pipe);
 	igt_output_set_pipe(output, pipe);
 
@@ -184,31 +183,34 @@ igt_main
 	igt_subtest_f("flip-changes-tiling") {
 		uint64_t tiling[2] = { LOCAL_I915_FORMAT_MOD_X_TILED,
 				       LOCAL_DRM_FORMAT_MOD_NONE };
+		enum pipe pipe;
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_subtest_f("flip-changes-tiling-Y") {
 		uint64_t tiling[2] = { LOCAL_I915_FORMAT_MOD_Y_TILED,
 				       LOCAL_DRM_FORMAT_MOD_NONE };
+		enum pipe pipe;
 
 		igt_require_fb_modifiers(data.drm_fd);
 		igt_require(data.gen >= 9);
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_subtest_f("flip-changes-tiling-Yf") {
 		uint64_t tiling[2] = { LOCAL_I915_FORMAT_MOD_Yf_TILED,
 				       LOCAL_DRM_FORMAT_MOD_NONE };
+		enum pipe pipe;
 
 		igt_require_fb_modifiers(data.drm_fd);
 		igt_require(data.gen >= 9);
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	/*
@@ -222,31 +224,34 @@ igt_main
 	igt_subtest_f("flip-X-tiled") {
 		uint64_t tiling[2] = { LOCAL_I915_FORMAT_MOD_X_TILED,
 				       LOCAL_I915_FORMAT_MOD_X_TILED };
+		enum pipe pipe;
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_subtest_f("flip-Y-tiled") {
 		uint64_t tiling[2] = { LOCAL_I915_FORMAT_MOD_Y_TILED,
 				       LOCAL_I915_FORMAT_MOD_Y_TILED };
+		enum pipe pipe;
 
 		igt_require_fb_modifiers(data.drm_fd);
 		igt_require(data.gen >= 9);
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_subtest_f("flip-Yf-tiled") {
 		uint64_t tiling[2] = { LOCAL_I915_FORMAT_MOD_Yf_TILED,
 				       LOCAL_I915_FORMAT_MOD_Yf_TILED };
+		enum pipe pipe;
 
 		igt_require_fb_modifiers(data.drm_fd);
 		igt_require(data.gen >= 9);
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	/*
@@ -260,31 +265,34 @@ igt_main
 	igt_subtest_f("flip-to-X-tiled") {
 		uint64_t tiling[2] = { LOCAL_DRM_FORMAT_MOD_NONE,
 				       LOCAL_I915_FORMAT_MOD_X_TILED };
+		enum pipe pipe;
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_subtest_f("flip-to-Y-tiled") {
 		uint64_t tiling[2] = { LOCAL_DRM_FORMAT_MOD_NONE,
 				       LOCAL_I915_FORMAT_MOD_Y_TILED };
+		enum pipe pipe;
 
 		igt_require_fb_modifiers(data.drm_fd);
 		igt_require(data.gen >= 9);
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_subtest_f("flip-to-Yf-tiled") {
 		uint64_t tiling[2] = { LOCAL_DRM_FORMAT_MOD_NONE,
 				       LOCAL_I915_FORMAT_MOD_Yf_TILED };
+		enum pipe pipe;
 
 		igt_require_fb_modifiers(data.drm_fd);
 		igt_require(data.gen >= 9);
 
-		for_each_connected_output(&data.display, output)
-			test_flip_tiling(&data, output, tiling);
+		for_each_pipe_with_valid_output(&data.display, pipe, output)
+			test_flip_tiling(&data, pipe, output, tiling);
 	}
 
 	igt_fixture {

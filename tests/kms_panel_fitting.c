@@ -87,7 +87,7 @@ static void prepare_crtc(data_t *data, igt_output_t *output, enum pipe pipe,
 	if (s == COMMIT_LEGACY) {
 		int ret;
 		ret = drmModeSetCrtc(data->drm_fd,
-				output->config.crtc->crtc_id,
+				plane->pipe->crtc_id,
 				data->fb_id1,
 				plane->pan_x, plane->pan_y,
 				&output->id,
@@ -137,7 +137,7 @@ static void test_panel_fitting(data_t *d)
 	enum pipe pipe;
 	int valid_tests = 0;
 
-	for_each_connected_output(display, output) {
+	for_each_pipe_with_valid_output(display, pipe, output) {
 		drmModeModeInfo *mode, native_mode;
 		bool scaling_mode_set;
 
@@ -153,7 +153,6 @@ static void test_panel_fitting(data_t *d)
 		if (!scaling_mode_set)
 			continue;
 
-		pipe = output->config.pipe;
 		igt_output_set_pipe(output, pipe);
 
 		mode = igt_output_get_mode(output);
