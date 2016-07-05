@@ -2376,7 +2376,7 @@ drmModeModeInfo *igt_output_get_mode(igt_output_t *output)
 /**
  * igt_output_override_mode:
  * @output: Output of which the mode will be overridden
- * @mode: New mode
+ * @mode: New mode, or NULL to disable override.
  *
  * Overrides the output's mode with @mode, so that it is used instead of the
  * mode obtained with get connectors. Note that the mode is used without
@@ -2386,8 +2386,14 @@ void igt_output_override_mode(igt_output_t *output, drmModeModeInfo *mode)
 {
 	igt_pipe_t *pipe = igt_output_get_driving_pipe(output);
 
-	output->override_mode = *mode;
-	output->use_override_mode = true;
+	if (mode)
+		output->override_mode = *mode;
+	else /* restore default_mode, may have been overwritten in igt_output_refresh */
+		kmstest_get_connector_default_mode(output->display->drm_fd,
+						   output->config.connector,
+						   &output->config.default_mode);
+
+	output->use_override_mode = !!mode;
 
 	if (pipe)
 		pipe->mode_changed = true;
