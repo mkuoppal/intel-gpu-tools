@@ -456,7 +456,7 @@ store_many(int fd, unsigned ring, int timeout)
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	unsigned long *shared;
 	const char *names[16];
-	int n;
+	int n = 0;
 
 	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(shared != MAP_FAILED);
