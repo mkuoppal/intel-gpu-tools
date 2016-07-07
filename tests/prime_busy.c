@@ -35,8 +35,10 @@ static bool prime_busy(struct pollfd *pfd, bool excl)
 
 #define BEFORE 0x1
 #define AFTER 0x2
+#define HANG 0x4
+#define POLL 0x8
 
-static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
+static void busy(int fd, unsigned ring, unsigned flags)
 {
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	struct drm_i915_gem_exec_object2 obj[2];
@@ -48,12 +50,12 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	unsigned size = ALIGN(ARRAY_SIZE(store)*16 + 4, 4096);
 	struct timespec tv;
 	uint32_t *batch, *bbe;
-	int i, count;
+	int i, count, timeout;
 
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 2;
-	execbuf.flags = ring | flags;
+	execbuf.flags = ring;
 	if (gen < 6)
 		execbuf.flags |= I915_EXEC_SECURE;
 
@@ -65,7 +67,7 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	obj[BATCH].relocation_count = ARRAY_SIZE(store);
 	memset(store, 0, sizeof(store));
 
-	if (test_flags & BEFORE) {
+	if (flags & BEFORE) {
 		memset(pfd, 0, sizeof(pfd));
 		pfd[SCRATCH].fd = prime_handle_to_fd(fd, obj[SCRATCH].handle);
 		pfd[BATCH].fd = prime_handle_to_fd(fd, obj[BATCH].handle);
@@ -127,7 +129,7 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	igt_assert(i < size/sizeof(*batch));
 	igt_require(__gem_execbuf(fd, &execbuf) == 0);
 
-	if (test_flags & AFTER) {
+	if (flags & AFTER) {
 		memset(pfd, 0, sizeof(pfd));
 		pfd[SCRATCH].fd = prime_handle_to_fd(fd, obj[SCRATCH].handle);
 		pfd[BATCH].fd = prime_handle_to_fd(fd, obj[BATCH].handle);
@@ -139,13 +141,22 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	igt_assert(!prime_busy(&pfd[BATCH], false));
 	igt_assert(prime_busy(&pfd[BATCH], true));
 
-	*bbe = MI_BATCH_BUFFER_END;
-	__sync_synchronize();
+	timeout = 120;
+	if ((flags & HANG) == 0) {
+		*bbe = MI_BATCH_BUFFER_END;
+		__sync_synchronize();
+		timeout = 1;
+	}
 
 	/* Calling busy in a loop should be enough to flush the rendering */
-	memset(&tv, 0, sizeof(tv));
-	while (prime_busy(&pfd[BATCH], true))
-		igt_assert(igt_seconds_elapsed(&tv) < 10);
+	if (flags & POLL) {
+		pfd[BATCH].events = POLLOUT;
+		igt_assert(poll(pfd, 1, timeout * 1000) == 1);
+	} else {
+		memset(&tv, 0, sizeof(tv));
+		while (prime_busy(&pfd[BATCH], true))
+			igt_assert(igt_seconds_elapsed(&tv) < timeout);
+	}
 	igt_assert(!prime_busy(&pfd[SCRATCH], true));
 
 	munmap(batch, size);
@@ -159,6 +170,58 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 
 	close(pfd[BATCH].fd);
 	close(pfd[SCRATCH].fd);
+}
+
+static void run_busy(int fd,
+		     const struct intel_execution_engine *e,
+		     const char *name, unsigned flags)
+{
+	igt_fixture {
+		gem_require_ring(fd, e->exec_id | e->flags);
+		igt_skip_on_f(intel_gen(intel_get_drm_devid(fd)) == 6 &&
+			      e->exec_id == I915_EXEC_BSD,
+			      "MI_STORE_DATA broken on gen6 bsd\n");
+		gem_quiescent_gpu(fd);
+		if ((flags & HANG) == 0)
+			igt_fork_hang_detector(fd);
+	}
+
+	igt_subtest_f("%s%s-%s",
+		      !e->exec_id && !(flags & HANG) ? "basic-" : "",
+		      name, e->name)
+		busy(fd, e->exec_id | e->flags, flags);
+
+	igt_fixture {
+		if ((flags & HANG) == 0)
+			igt_stop_hang_detector();
+		gem_quiescent_gpu(fd);
+	}
+}
+
+static void run_poll(int fd,
+		     const struct intel_execution_engine *e,
+		     const char *name, unsigned flags)
+{
+	igt_fixture {
+		gem_require_ring(fd, e->exec_id | e->flags);
+		igt_skip_on_f(intel_gen(intel_get_drm_devid(fd)) == 6 &&
+			      e->exec_id == I915_EXEC_BSD,
+			      "MI_STORE_DATA broken on gen6 bsd\n");
+		gem_quiescent_gpu(fd);
+		if ((flags & HANG) == 0)
+			igt_fork_hang_detector(fd);
+	}
+
+	igt_subtest_f("%swait-%s-%s",
+		      !e->exec_id && !(flags & HANG) ? "basic-" : "",
+		      name, e->name)
+		busy(fd, e->exec_id | e->flags, flags | POLL);
+
+	igt_fixture {
+		if ((flags & HANG) == 0)
+			igt_stop_hang_detector();
+		gem_quiescent_gpu(fd);
+	}
 }
 
 igt_main
@@ -178,28 +241,19 @@ igt_main
 		} modes[] = {
 			{ "before", BEFORE },
 			{ "after", AFTER },
+			{ "hang", BEFORE | HANG },
 			{ NULL },
 		};
-		int gen = 0;
 
-		igt_fixture {
+		igt_fixture
 			gem_require_mmap_wc(fd);
-			gen = intel_gen(intel_get_drm_devid(fd));
-		}
 
 		for (e = intel_execution_engines; e->name; e++) {
-			for (const struct mode *m = modes; m->name; m++) {
-				igt_subtest_f("%s%s-%s",
-					      e->exec_id == 0 ? "basic-" : "",
-					      m->name, e->name) {
-					gem_require_ring(fd, e->exec_id | e->flags);
-					igt_skip_on_f(gen == 6 &&
-							e->exec_id == I915_EXEC_BSD,
-							"MI_STORE_DATA broken on gen6 bsd\n");
-					gem_quiescent_gpu(fd);
-					one(fd, e->exec_id, e->flags, m->flags);
+			for (const struct mode *m = modes; m->name; m++)
+				igt_subtest_group {
+					run_busy(fd, e, m->name, m->flags);
+					run_poll(fd, e, m->name, m->flags);
 				}
-			}
 		}
 	}
 
