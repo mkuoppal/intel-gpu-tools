@@ -356,8 +356,12 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 		obj = &exec_objects[i];
 		bo = get_bo(obj->handle);
 
-		bo->offset = offset;
-		offset = align_u32(offset + bo->size + 4095, 4096);
+		if (obj->flags & EXEC_OBJECT_PINNED) {
+			bo->offset = obj->offset;
+		} else {
+			bo->offset = offset;
+			offset = align_u32(offset + bo->size + 4095, 4096);
+		}
 
 		if (bo->map == NULL)
 			bo->map = gem_mmap(fd, obj->handle, 0, bo->size);
