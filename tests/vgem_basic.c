@@ -184,6 +184,7 @@ static void test_debugfs_read(int fd)
 	DIR *dirp = fdopendir(dir);
 	struct dirent *de;
 
+	igt_assert(dirp);
 	while ((de = readdir(dirp))) {
 		struct stat st;
 

@@ -817,6 +817,7 @@ int igt_debugfs_dir(int fd)
 	if (fstat(fd, &st) || !S_ISCHR(st.st_mode))
 		return -1;
 
-	sprintf(path, "%s/%d", __debugfs_mount(), (int)(st.st_rdev & 0xff));
+	sprintf(path, "%s/dri/%d", __debugfs_mount(), (int)(st.st_rdev & 0xff));
+	igt_debug("Opening debugfs dir %s\n", path);
 	return open(path, O_RDONLY);
 }
