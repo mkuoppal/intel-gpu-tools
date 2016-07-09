@@ -647,7 +647,7 @@ static void setup_pc8(void)
 		return;
 
 	/* Make sure our Kernel supports MSR and the module is loaded. */
-	igt_assert(system("modprobe -q msr > /dev/null 2>&1") != -1);
+	igt_require(system("modprobe -s msr") == 0);
 
 	msr_fd = open("/dev/cpu/0/msr", O_RDONLY);
 	igt_assert_f(msr_fd >= 0,
@@ -793,7 +793,7 @@ static void i2c_subtest_check_environment(void)
 	struct dirent *dirent;
 
 	/* Make sure the /dev/i2c-* files exist. */
-	igt_assert(system("modprobe -q i2c-dev > /dev/null 2>&1") != -1);
+	igt_require(system("modprobe -s i2c-dev") == 0);
 
 	dev_dir = opendir("/dev");
 	igt_assert(dev_dir);
