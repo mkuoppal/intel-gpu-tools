@@ -597,6 +597,7 @@ static void __attribute__ ((destructor))
 fini(void)
 {
 	free(filename);
-	fclose(file);
+	if (file)
+		fclose(file);
 	free(bos);
 }
