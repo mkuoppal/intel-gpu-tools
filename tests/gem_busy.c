@@ -223,6 +223,7 @@ static void semaphore(int fd, unsigned ring, uint32_t flags)
 }
 
 #define PARALLEL 1
+#define HANG 2
 static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 {
 	const int gen = intel_gen(intel_get_drm_devid(fd));
@@ -235,7 +236,7 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	uint32_t read[2], write[2];
 	struct timespec tv;
 	uint32_t *batch, *bbe;
-	int i, count;
+	int i, count, timeout;
 
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffers_ptr = (uintptr_t)obj;
@@ -329,8 +330,12 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 		}
 	}
 
-	*bbe = MI_BATCH_BUFFER_END;
-	__sync_synchronize();
+	timeout = 120;
+	if ((test_flags & HANG) == 0) {
+		*bbe = MI_BATCH_BUFFER_END;
+		__sync_synchronize();
+		timeout = 1;
+	}
 
 	igt_assert_eq(write[SCRATCH], ring);
 	igt_assert_eq_u32(read[SCRATCH], 1 << ring);
@@ -341,7 +346,7 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	/* Calling busy in a loop should be enough to flush the rendering */
 	memset(&tv, 0, sizeof(tv));
 	while (gem_busy(fd, obj[BATCH].handle))
-		igt_assert(igt_seconds_elapsed(&tv) < 10);
+		igt_assert(igt_seconds_elapsed(&tv) < timeout);
 	igt_assert(!gem_busy(fd, obj[SCRATCH].handle));
 
 	munmap(batch, size);
@@ -401,6 +406,16 @@ igt_main
 					      "MI_STORE_DATA broken on gen6 bsd\n");
 				gem_quiescent_gpu(fd);
 				one(fd, e->exec_id, e->flags, 0);
+				gem_quiescent_gpu(fd);
+			}
+
+			igt_subtest_f("hang-%s", e->name) {
+				gem_require_ring(fd, e->exec_id | e->flags);
+				igt_skip_on_f(gen == 6 &&
+					      e->exec_id == I915_EXEC_BSD,
+					      "MI_STORE_DATA broken on gen6 bsd\n");
+				gem_quiescent_gpu(fd);
+				one(fd, e->exec_id, e->flags, HANG);
 				gem_quiescent_gpu(fd);
 			}
 		}
