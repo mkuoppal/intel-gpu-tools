@@ -27,6 +27,7 @@
  */
 
 #include "igt.h"
+#include "igt_x86.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -49,11 +50,46 @@ static double elapsed(const struct timeval *start,
 	return (1e6*(end->tv_sec - start->tv_sec) + (end->tv_usec - start->tv_usec))/loop;
 }
 
+#if defined(__x86_64__)
+#include <smmintrin.h>
+__attribute__((noinline))
+__attribute__((target("sse4.1")))
+static void streaming_load(void *src, int len)
+{
+	__m128i tmp, *s = src;
+
+	igt_assert((len & 15) == 0);
+	igt_assert((((uintptr_t)src) & 15) == 0);
+
+	while (len >= 16) {
+		tmp += _mm_stream_load_si128(s++);
+		len -= 16;
+
+	}
+
+	*(volatile __m128i *)src = tmp;
+}
+static inline unsigned x86_64_features(void)
+{
+	return igt_x86_features();
+}
+#else
+static inline unsigned x86_64_features(void)
+{
+	return 0;
+}
+static void streaming_load(void *src, int len)
+{
+	igt_assert(!"reached");
+}
+#endif
+
 int main(int argc, char **argv)
 {
 	struct timeval start, end;
 	uint8_t *buf;
 	uint32_t handle;
+	unsigned cpu = x86_64_features();
 	int size = OBJECT_SIZE;
 	int loop, i, tiling;
 	int fd;
@@ -67,6 +103,12 @@ int main(int argc, char **argv)
 	if (size == 0) {
 		igt_warn("Invalid object size specified\n");
 		return 1;
+	}
+
+	if (cpu) {
+		char str[1024];
+		igt_info("Detected cpu faatures: %s\n",
+			 igt_x86_features_to_string(cpu, str));
 	}
 
 	buf = malloc(size);
@@ -96,7 +138,7 @@ int main(int argc, char **argv)
 				for (i = 0; i < size/sizeof(*ptr); i++)
 					x += ptr[i];
 
-				/* force overtly clever gcc to actually compute x */
+				/* force overly clever gcc to actually compute x */
 				ptr[0] = x;
 
 				munmap(base, size);
@@ -113,7 +155,7 @@ int main(int argc, char **argv)
 					for (i = 0; i < size/sizeof(*ptr); i++)
 						x += ptr[i];
 
-					/* force overtly clever gcc to actually compute x */
+					/* force overly clever gcc to actually compute x */
 					ptr[0] = x;
 
 					munmap(base, size);
@@ -121,6 +163,27 @@ int main(int argc, char **argv)
 				gettimeofday(&end, NULL);
 				igt_info("Time to read %dk through a CPU map:		%7.3fµs\n",
 					 size/1024, elapsed(&start, &end, loop));
+				{
+					base = gem_mmap__cpu(fd, handle, 0,
+							     size,
+							     PROT_READ | PROT_WRITE);
+					gettimeofday(&start, NULL);
+					for (loop = 0; loop < 1000; loop++) {
+						ptr = base;
+						x = 0;
+
+						for (i = 0; i < size/sizeof(*ptr); i++)
+							x += ptr[i];
+
+						/* force overly clever gcc to actually compute x */
+						ptr[0] = x;
+
+					}
+					gettimeofday(&end, NULL);
+					munmap(base, size);
+					igt_info("Time to read %dk through a cached CPU map:	%7.3fµs\n",
+						 size/1024, elapsed(&start, &end, loop));
+				}
 
 				/* mmap write */
 				gettimeofday(&start, NULL);
@@ -188,7 +251,7 @@ int main(int argc, char **argv)
 			for (i = 0; i < size/sizeof(*ptr); i++)
 				x += ptr[i];
 
-			/* force overtly clever gcc to actually compute x */
+			/* force overly clever gcc to actually compute x */
 			ptr[0] = x;
 
 			munmap(base, size);
@@ -203,7 +266,7 @@ int main(int argc, char **argv)
 			for (i = 0; i < size/sizeof(*ptr); i++)
 				x += ptr[i];
 
-			/* force overtly clever gcc to actually compute x */
+			/* force overly clever gcc to actually compute x */
 			ptr[0] = x;
 
 			munmap(base, size);
@@ -222,7 +285,7 @@ int main(int argc, char **argv)
 				for (i = 0; i < size/sizeof(*ptr); i++)
 					x += ptr[i];
 
-				/* force overtly clever gcc to actually compute x */
+				/* force overly clever gcc to actually compute x */
 				ptr[0] = x;
 
 				munmap(base, size);
@@ -230,6 +293,51 @@ int main(int argc, char **argv)
 			gettimeofday(&end, NULL);
 			igt_info("Time to read %dk through a WC map:		%7.3fµs\n",
 					size/1024, elapsed(&start, &end, loop));
+
+			{
+				uint32_t *base = gem_mmap__wc(fd, handle, 0, size, PROT_READ | PROT_WRITE);
+				gettimeofday(&start, NULL);
+				for (loop = 0; loop < 1000; loop++) {
+					volatile uint32_t *ptr = base;
+					int x = 0;
+
+					for (i = 0; i < size/sizeof(*ptr); i++)
+						x += ptr[i];
+
+					/* force overly clever gcc to actually compute x */
+					ptr[0] = x;
+
+				}
+				gettimeofday(&end, NULL);
+				munmap(base, size);
+			}
+			igt_info("Time to read %dk through a cached WC map:	%7.3fµs\n",
+				 size/1024, elapsed(&start, &end, loop));
+
+			/* Check streaming loads from WC */
+			if (cpu & SSE4_1) {
+				gettimeofday(&start, NULL);
+				for (loop = 0; loop < 1000; loop++) {
+					uint32_t *base = gem_mmap__wc(fd, handle, 0, size, PROT_READ | PROT_WRITE);
+					streaming_load(base, size);
+
+					munmap(base, size);
+				}
+				gettimeofday(&end, NULL);
+				igt_info("Time to stream %dk from a WC map:		%7.3fµs\n",
+					 size/1024, elapsed(&start, &end, loop));
+
+				{
+					uint32_t *base = gem_mmap__wc(fd, handle, 0, size, PROT_READ | PROT_WRITE);
+					gettimeofday(&start, NULL);
+					for (loop = 0; loop < 1000; loop++)
+						streaming_load(base, size);
+					gettimeofday(&end, NULL);
+					munmap(base, size);
+				}
+				igt_info("Time to stream %dk from a cached WC map:	%7.3fµs\n",
+					 size/1024, elapsed(&start, &end, loop));
+			}
 		}
 
 
@@ -319,7 +427,7 @@ int main(int argc, char **argv)
 			for (i = 0; i < size/sizeof(*ptr); i++)
 				x += ptr[i];
 
-			/* force overtly clever gcc to actually compute x */
+			/* force overly clever gcc to actually compute x */
 			ptr[0] = x;
 
 			munmap(base, size);
