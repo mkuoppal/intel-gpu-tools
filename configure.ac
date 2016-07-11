@@ -80,6 +80,25 @@ AC_CHECK_FUNCS(timer_create, [], [
 ])
 AC_SUBST(TIMER_LIBS)
 
+dnl Check for CPUID
+cpuid="yes"
+AC_TRY_LINK([
+	#include <cpuid.h>
+	#include <stddef.h>
+	],
+	[
+	int eax, ebx, ecx, edx;
+	if (__get_cpuid_max(0, NULL) < 4)
+		return 0;
+	__cpuid_count(4, 0, eax, ebx, ecx, edx);
+	],
+	[cpuid="yes"],
+	[cpuid="no"]
+)
+if test "x$cpuid" = "xyes"; then
+	AC_DEFINE(HAVE_CPUID_H, 1, [Found a useable cpuid.h])
+fi
+
 # Initialize libtool
 AC_DISABLE_STATIC
 AC_PROG_LIBTOOL

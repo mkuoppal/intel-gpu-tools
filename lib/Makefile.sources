@@ -22,6 +22,8 @@ libintel_tools_la_SOURCES = 	\
 	igt_stats.h		\
 	igt_sysfs.c		\
 	igt_sysfs.h		\
+	igt_x86.h		\
+	igt_x86.c		\
 	igt_vgem.c		\
 	igt_vgem.h		\
 	instdone.c		\
