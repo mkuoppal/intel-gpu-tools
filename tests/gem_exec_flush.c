@@ -24,6 +24,7 @@
 #include <time.h>
 
 #include "igt.h"
+#include "igt_x86.h"
 
 IGT_TEST_DESCRIPTION("Basic check of flushing after batches");
 
@@ -37,6 +38,43 @@ IGT_TEST_DESCRIPTION("Basic check of flushing after batches");
 #define INTERRUPTIBLE 64
 #define CMDPARSER 128
 #define BASIC 256
+#define MOVNT 512
+
+#if defined(__x86_64__)
+#include <smmintrin.h>
+__attribute__((noinline))
+__attribute__((target("sse4.1")))
+static uint32_t movnt(uint32_t *map, int i)
+{
+	__m128i tmp;
+
+	tmp = _mm_stream_load_si128((__m128i *)map + i/4);
+	switch (i%4) { /* gcc! */
+	default:
+	case 0:
+		return _mm_extract_epi32(tmp, 0);
+	case 1:
+		return _mm_extract_epi32(tmp, 1);
+	case 2:
+		return _mm_extract_epi32(tmp, 2);
+	case 3:
+		return _mm_extract_epi32(tmp, 3);
+	}
+}
+static inline unsigned x86_64_features(void)
+{
+	return igt_x86_features();
+}
+#else
+static inline unsigned x86_64_features(void)
+{
+	return 0;
+}
+static uint32_t movnt(uint32_t *map, int i)
+{
+	igt_assert(!"reached");
+}
+#endif
 
 static void run(int fd, unsigned ring, int nchild, int timeout,
 		unsigned flags)
@@ -248,6 +286,20 @@ overwrite:
 							  i*sizeof(uint32_t),
 							  &val, sizeof(val));
 				}
+			} else if (flags & MOVNT) {
+				uint32_t x;
+
+				igt_while_interruptible(flags & INTERRUPTIBLE)
+					gem_sync(fd, obj[0].handle);
+
+				x = movnt(map, i);
+				if (xor)
+					igt_assert_eq_u32(x, i ^ 0xffffffff);
+				else
+					igt_assert_eq_u32(x, i);
+
+				if (flags & WRITE)
+					map[i] = 0xdeadbeef;
 			} else {
 				igt_while_interruptible(flags & INTERRUPTIBLE)
 					gem_sync(fd, obj[0].handle);
@@ -508,6 +560,7 @@ igt_main
 		{ "set", BASIC | SET_DOMAIN | WRITE },
 		{ NULL }
 	};
+	unsigned cpu = x86_64_features();
 	int gen = -1;
 	int fd = -1;
 
@@ -519,6 +572,13 @@ igt_main
 		gem_require_mmap_wc(fd);
 		gen = intel_gen(intel_get_drm_devid(fd));
 		igt_info("Has LLC? %s\n", yesno(gem_has_llc(fd)));
+
+		if (cpu) {
+			char str[1024];
+
+			igt_info("CPU features: %s\n",
+				 igt_x86_features_to_string(cpu, str));
+		}
 
 		igt_fork_hang_detector(fd);
 	}
@@ -590,6 +650,22 @@ igt_main
 				      e->name)
 				run(fd, ring, ncpus, timeout,
 				    COHERENT | WC | m->flags | INTERRUPTIBLE);
+
+			igt_subtest_f("stream-%s-%s",
+				      m->name,
+				      e->name) {
+				igt_require(cpu & SSE4_1);
+				run(fd, ring, ncpus, timeout,
+				    MOVNT | COHERENT | WC | m->flags);
+			}
+
+			igt_subtest_f("stream-%s-%s-interruptible",
+				      m->name,
+				      e->name) {
+				igt_require(cpu & SSE4_1);
+				run(fd, ring, ncpus, timeout,
+				    MOVNT | COHERENT | WC | m->flags | INTERRUPTIBLE);
+			}
 		}
 	}
 
