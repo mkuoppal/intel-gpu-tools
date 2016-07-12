@@ -155,16 +155,6 @@ static void checkit(const int *freqs)
 	igt_assert_neq(freqs[RP1], 0);
 }
 
-static void matchit(const int *freqs1, const int *freqs2)
-{
-	igt_assert_eq(freqs1[CUR], freqs2[CUR]);
-	igt_assert_eq(freqs1[MIN], freqs2[MIN]);
-	igt_assert_eq(freqs1[MAX], freqs2[MAX]);
-	igt_assert_eq(freqs1[RP0], freqs2[RP0]);
-	igt_assert_eq(freqs1[RP1], freqs2[RP1]);
-	igt_assert_eq(freqs1[RPn], freqs2[RPn]);
-}
-
 static void dump(const int *freqs)
 {
 	int i;
@@ -251,19 +241,45 @@ static void load_helper_run(enum load load)
 	lh.load = load;
 
 	igt_fork_helper(&lh.igt_proc) {
+		const uint32_t bbe = MI_BATCH_BUFFER_END;
+		struct drm_i915_gem_exec_object2 object;
+		struct drm_i915_gem_execbuffer2 execbuf;
+		uint32_t fences[3];
 		uint32_t val = 0;
 
 		signal(SIGUSR1, load_helper_signal_handler);
 		signal(SIGUSR2, load_helper_signal_handler);
 
+		fences[0] = gem_create(drm_fd, 4096);
+		gem_write(drm_fd, fences[0], 0,  &bbe, sizeof(bbe));
+		fences[1] = gem_create(drm_fd, 4096);
+		gem_write(drm_fd, fences[1], 0,  &bbe, sizeof(bbe));
+		fences[2] = gem_create(drm_fd, 4096);
+		gem_write(drm_fd, fences[2], 0,  &bbe, sizeof(bbe));
+
+		memset(&execbuf, 0, sizeof(execbuf));
+		execbuf.buffers_ptr = (uintptr_t)&object;
+		execbuf.buffer_count = 1;
+		if (intel_gen(lh.devid) >= 6)
+			execbuf.flags = I915_EXEC_BLT;
+
 		while (!lh.exit) {
+			memset(&object, 0, sizeof(object));
+			object.handle = fences[val%3];
+
+			while (gem_bo_busy(drm_fd, object.handle))
+				usleep(100);
+
 			if (lh.load == HIGH)
 				intel_copy_bo(lh.batch, lh.dst, lh.src,
 					      LOAD_HELPER_BO_SIZE);
 
 			emit_store_dword_imm(val);
-			intel_batchbuffer_flush_on_ring(lh.batch, 0);
+			intel_batchbuffer_flush_on_ring(lh.batch,
+                                                        I915_EXEC_BLT);
 			val++;
+
+			gem_execbuf(drm_fd, &execbuf);
 
 			/* Lower the load by pausing after every submitted
 			 * write. */
@@ -271,11 +287,15 @@ static void load_helper_run(enum load load)
 				usleep(LOAD_HELPER_PAUSE_USEC);
 		}
 
-		/* Map buffer to stall for write completion */
-		drm_intel_bo_map(lh.target_buffer, 0);
-		drm_intel_bo_unmap(lh.target_buffer);
+		/* Wait for completion without boosting */
+		usleep(1000);
+		while (gem_bo_busy(drm_fd, lh.target_buffer->handle))
+			usleep(1000);
 
 		igt_debug("load helper sent %u dword writes\n", val);
+		gem_close(drm_fd, fences[0]);
+		gem_close(drm_fd, fences[1]);
+		gem_close(drm_fd, fences[2]);
 	}
 }
 
@@ -463,8 +483,8 @@ static void basic_check(void)
 	checkit(freqs);
 }
 
-#define IDLE_WAIT_TIMESTEP_MSEC 100
-#define IDLE_WAIT_TIMEOUT_MSEC 15000
+#define IDLE_WAIT_TIMESTEP_MSEC 250
+#define IDLE_WAIT_TIMEOUT_MSEC 2500
 static void idle_check(void)
 {
 	int freqs[NUMFREQ];
@@ -509,16 +529,24 @@ static void loaded_check(void)
 	igt_debug("Required %d msec to reach cur=max\n", wait);
 }
 
-#define STABILIZE_WAIT_TIMESTEP_MSEC 100
+#define STABILIZE_WAIT_TIMESTEP_MSEC 250
 #define STABILIZE_WAIT_TIMEOUT_MSEC 15000
-static void stabilize_check(int *freqs)
+static void stabilize_check(int *out)
 {
+	int freqs[NUMFREQ];
 	int wait = 0;
 
+	read_freqs(freqs);
+	dump(freqs);
+	usleep(1000 * STABILIZE_WAIT_TIMESTEP_MSEC);
 	do {
-		read_freqs(freqs);
-		dump(freqs);
-		usleep(1000 * STABILIZE_WAIT_TIMESTEP_MSEC);
+		read_freqs(out);
+		dump(out);
+
+		if (memcmp(freqs, out, sizeof(freqs)) == 0)
+			break;
+
+		memcpy(freqs, out, sizeof(freqs));
 		wait += STABILIZE_WAIT_TIMESTEP_MSEC;
 	} while (wait < STABILIZE_WAIT_TIMEOUT_MSEC);
 
@@ -532,118 +560,62 @@ static void reset_gpu(void)
 	close(fd);
 }
 
-/*
- * reset - test that turbo works across a ring stop
- *
- * METHOD
- *   Apply a low GPU load, collect the resulting frequencies, then stop
- *   the GPU by stopping the rings.  Apply alternating high and low loads
- *   following the restart, comparing against the previous low load freqs
- *   and whether the GPU ramped to max freq successfully.  Finally check
- *   that we return to idle at the end.
- *
- * EXPECTED RESULTS
- *   Low load freqs match, high load freqs reach max, and GPU returns to
- *   idle at the end.
- *
- * FAILURES
- *    Failures here could indicate turbo doesn't work across a ring stop
- *    or that load generation routines don't successfully generate stable
- *    or maximal GPU loads.  It could also indicate a thermal limit if the
- *    GPU isn't able to reach its maximum frequency.
- */
-static void reset(void)
+static void waitboost(bool reset)
 {
+	const uint32_t bbe = MI_BATCH_BUFFER_END;
+	struct drm_i915_gem_exec_object2 object;
+	struct drm_i915_gem_execbuffer2 execbuf;
 	int pre_freqs[NUMFREQ];
-	int post_freqs[NUMFREQ];
-
-	/*
-	 * quiescent_gpu upsets the gpu and makes it get pegged to max somehow.
-	 * Don't ask.
-	 */
-	sleep(10);
-
-	igt_debug("Apply low load...\n");
-	load_helper_run(LOW);
-	stabilize_check(pre_freqs);
-
-	igt_debug("Reset gpu...\n");
-	reset_gpu();
-
-	igt_debug("Apply high load...\n");
-	load_helper_set_load(HIGH);
-	loaded_check();
-
-	igt_debug("Apply low load...\n");
-	load_helper_set_load(LOW);
-	stabilize_check(post_freqs);
-	matchit(pre_freqs, post_freqs);
-
-	igt_debug("Apply high load...\n");
-	load_helper_set_load(HIGH);
-	loaded_check();
-
-	igt_debug("Removing load...\n");
-	load_helper_stop();
-	idle_check();
-}
-
-/*
- * blocking - test that GPU returns to idle after a forced blocking boost
- *   and a low GPU load.  Frequencies resulting from the low load are also
- *   expected to match.o
- *
- * METHOD
- *   Collect frequencies resulting from a low GPU load and compare with
- *   frequencies collected after a quiesce and a second low load, then
- *   verify idle.
- *
- * EXPECTED RESULTS
- *   Frequencies match and GPU successfully returns to idle afterward.
- *
- * FAILURES
- *   Failures in this test could be due to several possible bugs:
- *     - load generation creates unstable frequencies, though stabilize_check()
- *       is supposed to catch this
- *     - quiescent_gpu() call does not boost GPU to max freq
- *     - frequency ramp down is too slow, causing second set of collected
- *       frequencies to be higher than the first
- */
-static void blocking(void)
-{
-	int pre_freqs[NUMFREQ];
+	int boost_freqs[NUMFREQ];
 	int post_freqs[NUMFREQ];
 
 	int fd = drm_open_driver(DRIVER_INTEL);
-	igt_assert_lte(0, fd);
 
-	/*
-	 * quiescent_gpu upsets the gpu and makes it get pegged to max somehow.
-	 * Don't ask.
+	/* When we wait upon the GPU, we want to temporarily boost it
+	 * to maximum.
 	 */
-	sleep(10);
+
+	load_helper_run(LOW);
 
 	igt_debug("Apply low load...\n");
-	load_helper_run(LOW);
+	sleep(1);
 	stabilize_check(pre_freqs);
-	load_helper_stop();
 
-	sleep(5);
+	if (reset) {
+		igt_debug("Reset gpu...\n");
+		reset_gpu();
+		sleep(1);
+	}
 
-	igt_debug("Kick gpu hard ...\n");
-	/* This relies on the blocking waits in quiescent_gpu and the kernel
-	 * boost logic to ramp the gpu to full load. */
-	gem_quiescent_gpu(fd);
-	gem_quiescent_gpu(fd);
+	igt_debug("Wait for gpu...\n");
+	memset(&object, 0, sizeof(object));
+	object.handle = gem_create(fd, 4096);
+	gem_write(fd, object.handle, 0, &bbe, sizeof(bbe));
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&object;
+	execbuf.buffer_count = 1;
+	do {
+		for (int i = 0; i < 64; i++)
+			gem_execbuf(fd, &execbuf);
+	} while (!gem_bo_busy(fd, object.handle));
+	gem_sync(fd, object.handle);
+	read_freqs(boost_freqs);
+	dump(boost_freqs);
+	gem_close(fd, object.handle);
 
 	igt_debug("Apply low load again...\n");
-	load_helper_run(LOW);
+	sleep(1);
 	stabilize_check(post_freqs);
-	load_helper_stop();
-	matchit(pre_freqs, post_freqs);
 
 	igt_debug("Removing load...\n");
+	load_helper_stop();
 	idle_check();
+
+	igt_assert_lt(pre_freqs[CUR], pre_freqs[MAX]);
+	igt_assert_eq(boost_freqs[CUR], boost_freqs[MAX]);
+	igt_assert_lt(post_freqs[CUR], post_freqs[MAX]);
+
+	close(fd);
 }
 
 static void pm_rps_exit_handler(int sig)
@@ -705,9 +677,10 @@ igt_main
 		load_helper_stop();
 	}
 
-	igt_subtest("reset")
-		reset();
+	igt_subtest("waitboost")
+		waitboost(false);
 
-	igt_subtest("blocking")
-		blocking();
+	igt_subtest("reset")
+		waitboost(true);
+
 }
