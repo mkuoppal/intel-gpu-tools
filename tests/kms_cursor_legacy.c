@@ -437,10 +437,12 @@ igt_main
 
 		data.resources = drmModeGetResources(data.fd);
 		igt_assert(data.resources);
+
+		igt_require(data.resources->count_crtcs > 0);
 	}
 
 	igt_subtest_group {
-		for (int n = 0; n < 26; n++) {
+		for (int n = 0; n < I915_MAX_PIPES; n++) {
 			uint32_t *crtcs = NULL;
 
 			errno = 0;
@@ -449,62 +451,66 @@ igt_main
 				crtcs = &data.resources->crtcs[n];
 			}
 
-			igt_subtest_f("single-%c-bo", 'A' + n)
+			igt_subtest_f("pipe-%s-single-bo", kmstest_pipe_name(n))
 				stress(&data, crtcs, 1, 1, DRM_MODE_CURSOR_BO, 20);
-			igt_subtest_f("single-%c-move", 'A' + n)
+			igt_subtest_f("pipe-%s-single-move", kmstest_pipe_name(n))
 				stress(&data, crtcs, 1, 1, DRM_MODE_CURSOR_MOVE, 20);
 
-			igt_subtest_f("forked-%c-bo", 'A' + n)
+			igt_subtest_f("pipe-%s-forked-bo", kmstest_pipe_name(n))
 				stress(&data, crtcs, 1, ncpus, DRM_MODE_CURSOR_BO, 20);
-			igt_subtest_f("forked-%c-move", 'A' + n)
+			igt_subtest_f("pipe-%s-forked-move", kmstest_pipe_name(n))
 				stress(&data, crtcs, 1, ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
-			igt_subtest_f("torture-%c-bo", 'A' + n)
+			igt_subtest_f("pipe-%s-torture-bo", kmstest_pipe_name(n))
 				stress(&data, crtcs, 1, -ncpus, DRM_MODE_CURSOR_BO, 20);
-			igt_subtest_f("torture-%c-move", 'A' + n)
+			igt_subtest_f("pipe-%s-torture-move", kmstest_pipe_name(n))
 				stress(&data, crtcs, 1, -ncpus, DRM_MODE_CURSOR_MOVE, 20);
 		}
 	}
 
-	igt_subtest("single-all-bo")
+	igt_subtest("all-pipes-single-bo")
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       1, DRM_MODE_CURSOR_BO, 20);
-	igt_subtest("single-all-move")
+	igt_subtest("all-pipes-single-move")
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       1, DRM_MODE_CURSOR_MOVE, 20);
 
-	igt_subtest("forked-all-bo")
+	igt_subtest("all-pipes-forked-bo")
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       ncpus, DRM_MODE_CURSOR_BO, 20);
-	igt_subtest("forked-all-move")
+	igt_subtest("all-pipes-forked-move")
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
-	igt_subtest("torture-all-bo")
+	igt_subtest("all-pipes-torture-bo")
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       -ncpus, DRM_MODE_CURSOR_BO, 20);
-	igt_subtest("torture-all-move")
+	igt_subtest("all-pipes-torture-move")
 		stress(&data,
 		       data.resources->crtcs, data.resources->count_crtcs,
 		       -ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
-	igt_subtest_group {
-		igt_subtest("basic-flip-vs-cursor")
-			basic_flip_vs_cursor(&data, 1);
-		igt_subtest("long-flip-vs-cursor")
-			basic_flip_vs_cursor(&data, 150);
-		igt_subtest("basic-cursor-vs-flip")
-			basic_cursor_vs_flip(&data, 1);
-		igt_subtest("long-cursor-vs-flip")
-			basic_cursor_vs_flip(&data, 150);
+	igt_subtest("basic-flip-vs-cursor")
+		basic_flip_vs_cursor(&data, 1);
+	igt_subtest("long-flip-vs-cursor")
+		basic_flip_vs_cursor(&data, 150);
+	igt_subtest("basic-cursor-vs-flip")
+		basic_cursor_vs_flip(&data, 1);
+	igt_subtest("long-cursor-vs-flip")
+		basic_cursor_vs_flip(&data, 150);
 
-		igt_subtest("cursorA-vs-flipA")
-			flip(&data, 0, 0, 10);
+	igt_subtest("cursorA-vs-flipA")
+		flip(&data, 0, 0, 10);
+
+	igt_subtest_group {
+		igt_fixture
+			igt_skip_on(data.resources->count_crtcs < 2);
+
 		igt_subtest("cursorA-vs-flipB")
 			flip(&data, 0, 1, 10);
 		igt_subtest("cursorB-vs-flipA")
