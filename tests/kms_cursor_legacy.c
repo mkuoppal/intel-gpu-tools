@@ -66,7 +66,7 @@ static void stress(struct data *data,
 	arg.crtc_id = 0;
 	arg.width = 64;
 	arg.height = 64;
-	arg.handle = gem_create(data->fd, 4*64*64);
+	arg.handle = kmstest_dumb_create(data->fd, 64, 64, 32, NULL, NULL);
 
 	for (n = 0; n < num_crtcs; n++) {
 		arg.crtc_id = crtc_id[n];
@@ -207,7 +207,7 @@ static void flip(struct data *data,
 	arg.crtc_id = data->resources->crtcs[cursor_pipe];
 	arg.width = 64;
 	arg.height = 64;
-	arg.handle = gem_create(data->fd, 4*64*64);
+	arg.handle = kmstest_dumb_create(data->fd, 64, 64, 32, NULL, NULL);
 
 	drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 
@@ -287,7 +287,7 @@ static void basic_flip_vs_cursor(struct data *data, int nloops)
 	arg.crtc_id = data->resources->crtcs[0];
 	arg.width = 64;
 	arg.height = 64;
-	arg.handle = gem_create(data->fd, 4*64*64);
+	arg.handle = kmstest_dumb_create(data->fd, 64, 64, 32, NULL, NULL);
 
 	drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 	arg.flags = DRM_MODE_CURSOR_MOVE;
@@ -359,7 +359,7 @@ static void basic_cursor_vs_flip(struct data *data, int nloops)
 	arg.crtc_id = data->resources->crtcs[0];
 	arg.width = 64;
 	arg.height = 64;
-	arg.handle = gem_create(data->fd, 4*64*64);
+	arg.handle = kmstest_dumb_create(data->fd, 64, 64, 32, NULL, NULL);
 
 	drmIoctl(data->fd, DRM_IOCTL_MODE_CURSOR, &arg);
 	arg.flags = DRM_MODE_CURSOR_MOVE;
@@ -432,7 +432,7 @@ igt_main
 	igt_skip_on_simulation();
 
 	igt_fixture {
-		data.fd = drm_open_driver_master(DRIVER_INTEL);
+		data.fd = drm_open_driver_master(DRIVER_ANY);
 		kmstest_set_vt_graphics_mode();
 
 		data.resources = drmModeGetResources(data.fd);
