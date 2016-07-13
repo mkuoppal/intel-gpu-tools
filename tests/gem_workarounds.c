@@ -122,6 +122,8 @@ static void check_workarounds(enum operation op)
 igt_main
 {
 	igt_fixture {
+		int fd = drm_open_driver_master(DRIVER_INTEL);
+		const int gen = intel_gen(intel_get_drm_devid(fd));
 		struct pci_device *pci_dev;
 		FILE *file;
 		char *line = NULL;
@@ -138,11 +140,12 @@ igt_main
 		igt_debug("i915_wa_registers: %s", line);
 		sscanf(line, "Workarounds applied: %d", &num_wa_regs);
 
-		if (IS_BROADWELL(pci_dev->device_id) ||
-		    IS_CHERRYVIEW(pci_dev->device_id))
-			igt_assert(num_wa_regs > 0);
+		/* For newer gens, the lri wa list has always something.
+		 * If it doesn't, go and add one. */
+		if (gen >= 8)
+			igt_assert_lt(0, num_wa_regs);
 		else
-			igt_assert(num_wa_regs >= 0);
+			igt_assert_lte(0, num_wa_regs);
 
 		wa_regs = malloc(num_wa_regs * sizeof(*wa_regs));
 		igt_assert(wa_regs);
@@ -162,7 +165,7 @@ igt_main
 		fclose(file);
 	}
 
-	igt_subtest("read")
+	igt_subtest("basic-read")
 		check_workarounds(SIMPLE_READ);
 
 	igt_subtest("reset")
