@@ -57,7 +57,7 @@ static const struct intel_device_info intel_i945m_info = {
 	.gen = BIT(2),
 	.is_mobile = true,
 	.is_calistoga = true,
-	.codename = "calistoga"
+	.codename = "callistoga"
 };
 
 static const struct intel_device_info intel_g33_info = {
@@ -88,7 +88,7 @@ static const struct intel_device_info intel_i965m_info = {
 static const struct intel_device_info intel_g45_info = {
 	.gen = BIT(3),
 	.is_eaglelake = true,
-	.codename = "aaglelake"
+	.codename = "eaglelake"
 };
 static const struct intel_device_info intel_gm45_info = {
 	.gen = BIT(3),
@@ -100,7 +100,7 @@ static const struct intel_device_info intel_gm45_info = {
 static const struct intel_device_info intel_ironlake_info = {
 	.gen = BIT(4),
 	.is_ironlake = true,
-	.codename = "ironlake"
+	.codename = "ironlake" /* clarkdale? */
 };
 static const struct intel_device_info intel_ironlake_m_info = {
 	.gen = BIT(4),
