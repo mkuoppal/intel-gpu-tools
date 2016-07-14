@@ -57,7 +57,7 @@ static const struct intel_device_info intel_i945m_info = {
 	.gen = BIT(2),
 	.is_mobile = true,
 	.is_calistoga = true,
-	.codename = "callistoga"
+	.codename = "calistoga"
 };
 
 static const struct intel_device_info intel_g33_info = {
