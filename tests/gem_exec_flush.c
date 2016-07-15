@@ -41,9 +41,10 @@ IGT_TEST_DESCRIPTION("Basic check of flushing after batches");
 #define MOVNT 512
 
 #if defined(__x86_64__)
+#pragma GCC push_options
+#pragma GCC target("sse4.1")
 #include <smmintrin.h>
 __attribute__((noinline))
-__attribute__((target("sse4.1")))
 static uint32_t movnt(uint32_t *map, int i)
 {
 	__m128i tmp;
@@ -51,20 +52,17 @@ static uint32_t movnt(uint32_t *map, int i)
 	tmp = _mm_stream_load_si128((__m128i *)map + i/4);
 	switch (i%4) { /* gcc! */
 	default:
-	case 0:
-		return _mm_extract_epi32(tmp, 0);
-	case 1:
-		return _mm_extract_epi32(tmp, 1);
-	case 2:
-		return _mm_extract_epi32(tmp, 2);
-	case 3:
-		return _mm_extract_epi32(tmp, 3);
+	case 0: return _mm_extract_epi32(tmp, 0);
+	case 1: return _mm_extract_epi32(tmp, 1);
+	case 2: return _mm_extract_epi32(tmp, 2);
+	case 3: return _mm_extract_epi32(tmp, 3);
 	}
 }
 static inline unsigned x86_64_features(void)
 {
 	return igt_x86_features();
 }
+#pragma GCC pop_options
 #else
 static inline unsigned x86_64_features(void)
 {

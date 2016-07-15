@@ -51,9 +51,10 @@ static double elapsed(const struct timeval *start,
 }
 
 #if defined(__x86_64__)
+#pragma GCC push_options
+#pragma GCC target("sse4.1")
 #include <smmintrin.h>
 __attribute__((noinline))
-__attribute__((target("sse4.1")))
 static void streaming_load(void *src, int len)
 {
 	__m128i tmp, *s = src;
@@ -73,6 +74,7 @@ static inline unsigned x86_64_features(void)
 {
 	return igt_x86_features();
 }
+#pragma GCC pop_options
 #else
 static inline unsigned x86_64_features(void)
 {
