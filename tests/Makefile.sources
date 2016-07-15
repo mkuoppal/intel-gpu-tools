@@ -124,6 +124,7 @@ TESTS_progs_M = \
 	prime_vgem \
 	template \
 	vgem_basic \
+	vgem_slow \
 	$(NULL)
 
 TESTS_progs_XM = \

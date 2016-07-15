@@ -338,7 +338,7 @@ static void test_fence_wait(int i915, int vgem, unsigned ring, unsigned flags)
 	vgem_create(vgem, &scratch);
 
 	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
-	fence = vgem_fence_attach(vgem, &scratch, true);
+	fence = vgem_fence_attach(vgem, &scratch, VGEM_FENCE_WRITE);
 	igt_assert(prime_busy(dmabuf, false));
 	gem_close(vgem, scratch.handle);
 
@@ -369,7 +369,7 @@ static void test_fence_wait(int i915, int vgem, unsigned ring, unsigned flags)
 	munmap(ptr, scratch.size);
 }
 
-static void test_fence_hang(int i915, int vgem, bool write)
+static void test_fence_hang(int i915, int vgem, unsigned flags)
 {
 	struct vgem_bo scratch;
 	uint32_t *ptr;
@@ -381,7 +381,7 @@ static void test_fence_hang(int i915, int vgem, bool write)
 	scratch.bpp = 32;
 	vgem_create(vgem, &scratch);
 	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
-	vgem_fence_attach(vgem, &scratch, write);
+	vgem_fence_attach(vgem, &scratch, flags | WIP_VGEM_FENCE_NOTIMEOUT);
 
 	ptr = mmap(NULL, scratch.size, PROT_READ, MAP_SHARED, dmabuf, 0);
 	igt_assert(ptr != MAP_FAILED);
@@ -499,7 +499,7 @@ static unsigned get_vblank(int fd, int pipe, unsigned flags)
 	return vbl.reply.sequence;
 }
 
-static void test_flip(int i915, int vgem, bool hang)
+static void test_flip(int i915, int vgem, unsigned hang)
 {
 	struct drm_event_vblank vbl;
 	uint32_t fb_id, crtc_id;
@@ -524,7 +524,7 @@ static void test_flip(int i915, int vgem, bool hang)
 	igt_require((crtc_id = set_fb_on_crtc(i915, 0, &bo, fb_id)));
 
 	/* Schedule a flip to wait upon vgem being written */
-	fence = vgem_fence_attach(vgem, &bo, true);
+	fence = vgem_fence_attach(vgem, &bo, VGEM_FENCE_WRITE | hang);
 	do_or_die(drmModePageFlip(i915, crtc_id, fb_id,
 				  DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
 
@@ -638,15 +638,22 @@ igt_main
 			}
 		}
 
-		igt_subtest("fence-read-hang")
-			test_fence_hang(i915, vgem, false);
-		igt_subtest("fence-write-hang")
-			test_fence_hang(i915, vgem, true);
-
 		igt_subtest("basic-fence-flip")
-			test_flip(i915, vgem, false);
-		igt_subtest("fence-flip-hang")
-			test_flip(i915, vgem, true);
+			test_flip(i915, vgem, 0);
+
+		igt_subtest_group {
+			igt_fixture {
+				igt_require(vgem_fence_has_flag(vgem, WIP_VGEM_FENCE_NOTIMEOUT));
+			}
+
+			igt_subtest("fence-read-hang")
+				test_fence_hang(i915, vgem, 0);
+			igt_subtest("fence-write-hang")
+				test_fence_hang(i915, vgem, VGEM_FENCE_WRITE);
+
+			igt_subtest("fence-flip-hang")
+				test_flip(i915, vgem, WIP_VGEM_FENCE_NOTIMEOUT);
+		}
 	}
 
 	igt_fixture {

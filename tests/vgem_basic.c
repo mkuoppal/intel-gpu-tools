@@ -172,7 +172,7 @@ static void test_dmabuf_fence(int fd)
 
 	dmabuf = prime_handle_to_fd(fd, bo.handle);
 
-	fence = vgem_fence_attach(fd, &bo, false);
+	fence = vgem_fence_attach(fd, &bo, 0);
 	igt_assert(!prime_busy(dmabuf, false));
 	igt_assert(prime_busy(dmabuf, true));
 
@@ -180,7 +180,7 @@ static void test_dmabuf_fence(int fd)
 	igt_assert(!prime_busy(dmabuf, false));
 	igt_assert(!prime_busy(dmabuf, true));
 
-	fence = vgem_fence_attach(fd, &bo, true);
+	fence = vgem_fence_attach(fd, &bo, VGEM_FENCE_WRITE);
 	igt_assert(prime_busy(dmabuf, false));
 	igt_assert(prime_busy(dmabuf, true));
 
@@ -202,7 +202,7 @@ static void test_dmabuf_fence_before(int fd)
 	bo.bpp = 32;
 	vgem_create(fd, &bo);
 
-	fence = vgem_fence_attach(fd, &bo, false);
+	fence = vgem_fence_attach(fd, &bo, 0);
 	dmabuf = prime_handle_to_fd(fd, bo.handle);
 
 	igt_assert(!prime_busy(dmabuf, false));
@@ -215,7 +215,7 @@ static void test_dmabuf_fence_before(int fd)
 	gem_close(fd, bo.handle);
 	vgem_create(fd, &bo);
 
-	fence = vgem_fence_attach(fd, &bo, true);
+	fence = vgem_fence_attach(fd, &bo, VGEM_FENCE_WRITE);
 	dmabuf = prime_handle_to_fd(fd, bo.handle);
 	igt_assert(prime_busy(dmabuf, false));
 	igt_assert(prime_busy(dmabuf, true));

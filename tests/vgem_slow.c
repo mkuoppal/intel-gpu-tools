@@ -21,29 +21,70 @@
  * IN THE SOFTWARE.
  */
 
-#ifndef IGT_VGEM_H
-#define IGT_VGEM_H
+#include "igt.h"
+#include "igt_vgem.h"
+#include "igt_debugfs.h"
+#include "igt_sysfs.h"
 
-#include <stdint.h>
+#include <sys/mman.h>
+#include <sys/poll.h>
+#include <sys/stat.h>
+#include <dirent.h>
 
-struct vgem_bo {
-	uint32_t handle;
-	uint32_t width, height;
-	uint32_t bpp, pitch;
-	uint64_t size;
-};
+IGT_TEST_DESCRIPTION("Extended sanity check of Virtual GEM module (vGEM).");
 
-int __vgem_create(int fd, struct vgem_bo *bo);
-void vgem_create(int fd, struct vgem_bo *bo);
+static bool has_prime_export(int fd)
+{
+	uint64_t value;
 
-void *__vgem_mmap(int fd, struct vgem_bo *bo, unsigned prot);
-void *vgem_mmap(int fd, struct vgem_bo *bo, unsigned prot);
+	if (drmGetCap(fd, DRM_CAP_PRIME, &value))
+		return false;
 
-bool vgem_has_fences(int fd);
-bool vgem_fence_has_flag(int fd, unsigned flags);
-uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, unsigned flags);
-#define VGEM_FENCE_WRITE 0x1
-#define WIP_VGEM_FENCE_NOTIMEOUT 0x2
-void vgem_fence_signal(int fd, uint32_t fence);
+	return value & DRM_PRIME_CAP_EXPORT;
+}
 
-#endif /* IGT_VGEM_H */
+
+static void test_nohang(int fd)
+{
+	struct vgem_bo bo;
+	uint32_t fence;
+	struct pollfd pfd;
+
+	/* A vGEM fence must expire automatically to prevent driver hangs */
+
+	igt_require(has_prime_export(fd));
+	igt_require(vgem_has_fences(fd));
+
+	bo.width = 1;
+	bo.height = 1;
+	bo.bpp = 32;
+	vgem_create(fd, &bo);
+
+	pfd.fd = prime_handle_to_fd(fd, bo.handle);
+	pfd.events = POLLOUT;
+
+	fence = vgem_fence_attach(fd, &bo, 0);
+
+	igt_assert(poll(&pfd, 1, 0) == 0);
+	igt_assert(poll(&pfd, 1, 60*1000) == 1);
+
+	vgem_fence_signal(fd, fence);
+	close(pfd.fd);
+	gem_close(fd, bo.handle);
+}
+
+igt_main
+{
+	int fd = -1;
+
+	igt_fixture {
+		fd = drm_open_driver(DRIVER_VGEM);
+	}
+
+	igt_subtest_f("nohang")
+		test_nohang(fd);
+
+	igt_fixture {
+		close(fd);
+	}
+}

@@ -89,7 +89,6 @@ void *vgem_mmap(int fd, struct vgem_bo *bo, unsigned prot)
 struct local_vgem_fence_attach {
 	uint32_t handle;
 	uint32_t flags;
-#define VGEM_FENCE_WRITE 0x1
 	uint32_t out_fence;
 	uint32_t pad;
 };
@@ -121,14 +120,37 @@ static int __vgem_fence_attach(int fd, struct local_vgem_fence_attach *arg)
 	return err;
 }
 
-uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, bool write)
+bool vgem_fence_has_flag(int fd, unsigned flags)
+{
+	struct local_vgem_fence_attach arg;
+	struct vgem_bo bo;
+	bool ret = false;
+
+	memset(&bo, 0, sizeof(bo));
+	bo.width = 1;
+	bo.height = 1;
+	bo.bpp = 32;
+	vgem_create(fd, &bo);
+
+	memset(&arg, 0, sizeof(arg));
+	arg.handle = bo.handle;
+	arg.flags = flags;
+	if (__vgem_fence_attach(fd, &arg) == 0) {
+		vgem_fence_signal(fd, arg.out_fence);
+		ret = true;
+	}
+	gem_close(fd, bo.handle);
+
+	return ret;
+}
+
+uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, unsigned flags)
 {
 	struct local_vgem_fence_attach arg;
 
 	memset(&arg, 0, sizeof(arg));
 	arg.handle = bo->handle;
-	if (write)
-		arg.flags |= VGEM_FENCE_WRITE;
+	arg.flags = flags;
 	igt_assert_eq(__vgem_fence_attach(fd, &arg), 0);
 	return arg.out_fence;
 }
