@@ -67,12 +67,12 @@ static void stress(igt_display_t *display,
 		num_crtcs = display->n_pipes;
 		for_each_pipe(display, n) {
 			arg.crtc_id = crtc_id[n] = display->pipes[n].crtc_id;
-			drmIoctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
 		}
 	} else {
 		num_crtcs = 1;
 		arg.crtc_id = crtc_id[0] = display->pipes[pipe].crtc_id;
-		drmIoctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
+		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
 	}
 
 	arg.flags = mode;
@@ -139,37 +139,76 @@ static void stress(igt_display_t *display,
 	munmap(results, 4096);
 }
 
-static bool set_fb_on_crtc(igt_display_t *display, int pipe, struct igt_fb *fb_info)
+static uint32_t set_fb_on_crtc(igt_display_t *display, int pipe, struct igt_fb *fb_info)
 {
-	drmModeModeInfoPtr modes;
 	igt_output_t *output;
+	uint32_t fb_id;
 
 	for_each_valid_output_on_pipe(display, pipe, output) {
-		struct drm_mode_crtc set;
-		int m;
+		drmModeModeInfoPtr mode;
+		igt_plane_t *primary;
 
-		modes = output->config.connector->modes;
-
-		for (m = 0; m < output->config.connector->count_modes; m++) {
-			if (modes[m].hdisplay == fb_info->width &&
-			    modes[m].vdisplay == fb_info->height)
-				break;
-		}
-		if (m == output->config.connector->count_modes)
+		if (output->pending_crtc_idx_mask)
 			continue;
 
-		memset(&set, 0, sizeof(set));
-		set.crtc_id = display->pipes[pipe].crtc_id;
-		set.fb_id = fb_info->fb_id;
-		set.set_connectors_ptr = (uintptr_t)&output->id;
-		set.count_connectors = 1;
-		memcpy(&set.mode, &modes[m], sizeof(set.mode));
-		set.mode_valid = 1;
-		if (drmIoctl(display->drm_fd, DRM_IOCTL_MODE_SETCRTC, &set) == 0)
-			return true;
+		igt_output_set_pipe(output, pipe);
+		mode = igt_output_get_mode(output);
+
+		fb_id = igt_create_pattern_fb(display->drm_fd,
+			      mode->hdisplay, mode->vdisplay,
+			      DRM_FORMAT_XRGB8888, I915_TILING_NONE, fb_info);
+
+		primary = igt_output_get_plane(output, IGT_PLANE_PRIMARY);
+		igt_plane_set_fb(primary, fb_info);
+
+		return fb_id;
 	}
 
-	return false;
+	return 0;
+}
+
+static void set_cursor_on_pipe(igt_display_t *display, enum pipe pipe, struct igt_fb *fb)
+{
+	igt_plane_t *plane, *cursor = NULL;
+
+	for_each_plane_on_pipe(display, pipe, plane) {
+		if (!plane->is_cursor)
+			continue;
+
+		cursor = plane;
+		break;
+	}
+
+	igt_require(cursor);
+	igt_plane_set_fb(cursor, fb);
+}
+
+static void populate_cursor_args(igt_display_t *display, enum pipe pipe,
+				 struct drm_mode_cursor *arg, struct igt_fb *fb)
+{
+	arg->crtc_id = display->pipes[pipe].crtc_id;
+	arg->flags = DRM_MODE_CURSOR_MOVE;
+	arg->x = 128;
+	arg->y = 128;
+	arg->width = fb->width;
+	arg->height = fb->height;
+	arg->handle = fb->gem_handle;
+}
+
+static void do_cleanup_display(igt_display_t *display)
+{
+	enum pipe pipe;
+	igt_output_t *output;
+	igt_plane_t *plane;
+
+	for_each_pipe(display, pipe)
+		for_each_plane_on_pipe(display, pipe, plane)
+			igt_plane_set_fb(plane, NULL);
+
+	for_each_connected_output(display, output)
+		igt_output_set_pipe(output, PIPE_NONE);
+
+	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 }
 
 static void flip(igt_display_t *display,
@@ -178,24 +217,21 @@ static void flip(igt_display_t *display,
 {
 	struct drm_mode_cursor arg;
 	uint64_t *results;
-	struct igt_fb fb_info;
+	struct igt_fb fb_info, fb_info2, cursor_fb;
 	uint32_t fb_id;
 
 	results = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(results != MAP_FAILED);
 
-	memset(&arg, 0, sizeof(arg));
-	arg.flags = DRM_MODE_CURSOR_BO;
-	arg.crtc_id = display->pipes[cursor_pipe].crtc_id;
-	arg.width = 64;
-	arg.height = 64;
-	arg.handle = kmstest_dumb_create(display->drm_fd, 64, 64, 32, NULL, NULL);
+	igt_require((fb_id = set_fb_on_crtc(display, flip_pipe, &fb_info)));
+	if (flip_pipe != cursor_pipe)
+		igt_require(set_fb_on_crtc(display, cursor_pipe, &fb_info2));
 
-	drmIoctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
+	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
+	set_cursor_on_pipe(display, cursor_pipe, &cursor_fb);
+	populate_cursor_args(display, cursor_pipe, &arg, &cursor_fb);
 
-	fb_id = igt_create_fb(display->drm_fd, 1024, 768, DRM_FORMAT_XRGB8888,
-			      I915_TILING_NONE, &fb_info);
-	igt_require(set_fb_on_crtc(display, flip_pipe, &fb_info));
+	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	arg.flags = DRM_MODE_CURSOR_MOVE;
 	igt_fork(child, 1) {
@@ -229,8 +265,14 @@ static void flip(igt_display_t *display,
 	}
 	igt_waitchildren();
 
-	gem_close(display->drm_fd, arg.handle);
 	munmap(results, 4096);
+
+	do_cleanup_display(display);
+
+	igt_remove_fb(display->drm_fd, &fb_info);
+	if (flip_pipe != cursor_pipe)
+		igt_remove_fb(display->drm_fd, &fb_info2);
+	igt_remove_fb(display->drm_fd, &cursor_fb);
 }
 
 static inline uint32_t pipe_select(int pipe)
@@ -259,24 +301,18 @@ static void basic_flip_vs_cursor(igt_display_t *display, int nloops)
 {
 	struct drm_mode_cursor arg;
 	struct drm_event_vblank vbl;
-	struct igt_fb fb_info;
+	struct igt_fb fb_info, cursor_fb;
 	unsigned vblank_start;
 	int target;
 	uint32_t fb_id;
 
-	memset(&arg, 0, sizeof(arg));
-	arg.flags = DRM_MODE_CURSOR_BO;
-	arg.crtc_id = display->pipes[0].crtc_id;
-	arg.width = 64;
-	arg.height = 64;
-	arg.handle = kmstest_dumb_create(display->drm_fd, 64, 64, 32, NULL, NULL);
+	igt_require((fb_id = set_fb_on_crtc(display, 0, &fb_info)));
 
-	drmIoctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
-	arg.flags = DRM_MODE_CURSOR_MOVE;
+	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
+	set_cursor_on_pipe(display, 0, &cursor_fb);
+	populate_cursor_args(display, 0, &arg, &cursor_fb);
 
-	fb_id = igt_create_fb(display->drm_fd, 1024, 768, DRM_FORMAT_XRGB8888,
-			      I915_TILING_NONE, &fb_info);
-	igt_require(set_fb_on_crtc(display, 0, &fb_info));
+	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	target = 4096;
 	do {
@@ -319,15 +355,16 @@ static void basic_flip_vs_cursor(igt_display_t *display, int nloops)
 		igt_reset_timeout();
 	}
 
+	do_cleanup_display(display);
 	igt_remove_fb(display->drm_fd, &fb_info);
-	gem_close(display->drm_fd, arg.handle);
+	igt_remove_fb(display->drm_fd, &cursor_fb);
 }
 
 static void basic_cursor_vs_flip(igt_display_t *display, int nloops)
 {
 	struct drm_mode_cursor arg;
 	struct drm_event_vblank vbl;
-	struct igt_fb fb_info;
+	struct igt_fb fb_info, cursor_fb;
 	unsigned vblank_start, vblank_last;
 	volatile unsigned long *shared;
 	int target;
@@ -336,19 +373,13 @@ static void basic_cursor_vs_flip(igt_display_t *display, int nloops)
 	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(shared != MAP_FAILED);
 
-	memset(&arg, 0, sizeof(arg));
-	arg.flags = DRM_MODE_CURSOR_BO;
-	arg.crtc_id = display->pipes[0].crtc_id;
-	arg.width = 64;
-	arg.height = 64;
-	arg.handle = kmstest_dumb_create(display->drm_fd, 64, 64, 32, NULL, NULL);
+	igt_require((fb_id = set_fb_on_crtc(display, 0, &fb_info)));
 
-	drmIoctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
-	arg.flags = DRM_MODE_CURSOR_MOVE;
+	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
+	set_cursor_on_pipe(display, 0, &cursor_fb);
+	populate_cursor_args(display, 0, &arg, &cursor_fb);
 
-	fb_id = igt_create_fb(display->drm_fd, 1024, 768, DRM_FORMAT_XRGB8888,
-			      I915_TILING_NONE, &fb_info);
-	igt_require(set_fb_on_crtc(display, 0, &fb_info));
+	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	target = 4096;
 	do {
@@ -370,7 +401,7 @@ static void basic_cursor_vs_flip(igt_display_t *display, int nloops)
 		igt_fork(child, 1) {
 			unsigned long count = 0;
 			while (!shared[0]) {
-				drmIoctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
+				do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
 				count++;
 			}
 			igt_debug("child: %lu cursor updates\n", count);
@@ -401,8 +432,9 @@ static void basic_cursor_vs_flip(igt_display_t *display, int nloops)
 			     shared[0], 2*60ul*target, 60ul*target);
 	}
 
+	do_cleanup_display(display);
 	igt_remove_fb(display->drm_fd, &fb_info);
-	gem_close(display->drm_fd, arg.handle);
+	igt_remove_fb(display->drm_fd, &cursor_fb);
 	munmap((void *)shared, 4096);
 }
 
