@@ -155,7 +155,7 @@ uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, unsigned flags)
 	return arg.out_fence;
 }
 
-static int __vgem_fence_signal(int fd, struct local_vgem_fence_signal *arg)
+static int ioctl_vgem_fence_signal(int fd, struct local_vgem_fence_signal *arg)
 {
 	int err = 0;
 	if (igt_ioctl(fd, LOCAL_IOCTL_VGEM_FENCE_SIGNAL, arg))
@@ -164,11 +164,17 @@ static int __vgem_fence_signal(int fd, struct local_vgem_fence_signal *arg)
 	return err;
 }
 
-void vgem_fence_signal(int fd, uint32_t fence)
+int __vgem_fence_signal(int fd, uint32_t fence)
 {
 	struct local_vgem_fence_signal arg;
 
 	memset(&arg, 0, sizeof(arg));
 	arg.fence = fence;
-	igt_assert_eq(__vgem_fence_signal(fd, &arg), 0);
+
+	return ioctl_vgem_fence_signal(fd, &arg);
+}
+
+void vgem_fence_signal(int fd, uint32_t fence)
+{
+	igt_assert_eq(__vgem_fence_signal(fd, fence), 0);
 }

@@ -68,7 +68,7 @@ static void test_nohang(int fd)
 	igt_assert(poll(&pfd, 1, 0) == 0);
 	igt_assert(poll(&pfd, 1, 60*1000) == 1);
 
-	vgem_fence_signal(fd, fence);
+	igt_assert_eq(__vgem_fence_signal(fd, fence), -110);
 	close(pfd.fd);
 	gem_close(fd, bo.handle);
 }

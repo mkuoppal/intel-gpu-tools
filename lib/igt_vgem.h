@@ -44,6 +44,7 @@ bool vgem_fence_has_flag(int fd, unsigned flags);
 uint32_t vgem_fence_attach(int fd, struct vgem_bo *bo, unsigned flags);
 #define VGEM_FENCE_WRITE 0x1
 #define WIP_VGEM_FENCE_NOTIMEOUT 0x2
+int __vgem_fence_signal(int fd, uint32_t fence);
 void vgem_fence_signal(int fd, uint32_t fence);
 
 #endif /* IGT_VGEM_H */
