@@ -36,6 +36,7 @@
  */
 
 #include "igt.h"
+#include "igt_vgem.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -55,6 +56,7 @@ IGT_TEST_DESCRIPTION("Test of pread/pwrite/mmap behavior when writing to active"
 		     " buffers.");
 
 int fd, devid, gen;
+int vgem_drv = -1;
 int all;
 int pass;
 
@@ -421,6 +423,64 @@ dmabuf_release_bo(drm_intel_bo *bo)
 
 	bo->virtual = NULL;
 	drm_intel_bo_unreference(bo);
+}
+
+static bool has_prime_export(int _fd)
+{
+	uint64_t value;
+
+	if (drmGetCap(_fd, DRM_CAP_PRIME, &value))
+		return false;
+
+	return value & DRM_PRIME_CAP_EXPORT;
+}
+
+static void create_vgem_require(const struct create *create, unsigned count)
+{
+	igt_require(vgem_drv != -1);
+	igt_require(has_prime_export(vgem_drv));
+	create_dmabuf_require(create, count);
+}
+
+static drm_intel_bo *
+vgem_create_bo(const struct buffers *b)
+{
+	struct drm_prime_handle args;
+	drm_intel_bo *bo;
+	struct vgem_bo vgem;
+	struct dmabuf *dmabuf;
+
+	igt_assert(vgem_drv != -1);
+
+	vgem.width = b->width;
+	vgem.height = b->height;
+	vgem.bpp = 32;
+	vgem_create(vgem_drv, &vgem);
+
+	memset(&args, 0, sizeof(args));
+	args.handle = vgem.handle;
+	args.flags = DRM_RDWR;
+	args.fd = -1;
+
+	do_ioctl(vgem_drv, DRM_IOCTL_PRIME_HANDLE_TO_FD, &args);
+	gem_close(vgem_drv, args.handle);
+	igt_assert(args.fd != -1);
+
+	bo = drm_intel_bo_gem_create_from_prime(b->bufmgr, args.fd, vgem.size);
+	igt_assert(bo);
+
+	dmabuf = malloc(sizeof(*dmabuf));
+	igt_assert(dmabuf);
+
+	dmabuf->fd = args.fd;
+	dmabuf->map = mmap(NULL, vgem.size,
+			   PROT_READ | PROT_WRITE, MAP_SHARED,
+			   dmabuf->fd, 0);
+	igt_assert(dmabuf->map != (void *)-1);
+
+	bo->virtual = dmabuf;
+
+	return bo;
 }
 
 static void
@@ -1702,6 +1762,14 @@ igt_main
 			.release_bo = dmabuf_release_bo,
 		},
 		{
+			.name = "vgem",
+			.create_bo = vgem_create_bo,
+			.require = create_vgem_require,
+			.set_bo = dmabuf_set_bo,
+			.cmp_bo = dmabuf_cmp_bo,
+			.release_bo = dmabuf_release_bo,
+		},
+		{
 			.name = "gtt",
 			.create_bo = gtt_create_bo,
 			.set_bo = gtt_set_bo,
@@ -1774,6 +1842,8 @@ igt_main
 		devid = intel_get_drm_devid(fd);
 		gen = intel_gen(devid);
 		rendercopy = igt_get_render_copyfunc(devid);
+
+		vgem_drv = __drm_open_driver(DRIVER_VGEM);
 	}
 
 	for (const struct create *c = create; c->name; c++) {
