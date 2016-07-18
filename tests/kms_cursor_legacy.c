@@ -297,6 +297,22 @@ static unsigned get_vblank(int fd, int pipe, unsigned flags)
 	return vbl.reply.sequence;
 }
 
+static enum pipe find_connected_pipe(igt_display_t *display)
+{
+	enum pipe pipe;
+	igt_output_t *output;
+	bool found = false;
+
+	for_each_pipe_with_valid_output(display, pipe, output) {
+		found = true;
+		break;
+	}
+
+	igt_require_f(found, "No valid display found");
+
+	return pipe;
+}
+
 static void basic_flip_vs_cursor(igt_display_t *display, int nloops)
 {
 	struct drm_mode_cursor arg;
@@ -305,23 +321,24 @@ static void basic_flip_vs_cursor(igt_display_t *display, int nloops)
 	unsigned vblank_start;
 	int target;
 	uint32_t fb_id;
+	enum pipe pipe = find_connected_pipe(display);
 
-	igt_require((fb_id = set_fb_on_crtc(display, 0, &fb_info)));
+	igt_require((fb_id = set_fb_on_crtc(display, pipe, &fb_info)));
 
 	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
-	set_cursor_on_pipe(display, 0, &cursor_fb);
-	populate_cursor_args(display, 0, &arg, &cursor_fb);
+	set_cursor_on_pipe(display, pipe, &cursor_fb);
+	populate_cursor_args(display, pipe, &arg, &cursor_fb);
 
 	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	target = 4096;
 	do {
-		vblank_start = get_vblank(display->drm_fd, 0, DRM_VBLANK_NEXTONMISS);
-		igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start);
+		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 		for (int n = 0; n < target; n++)
 			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
 		target /= 2;
-		if (get_vblank(display->drm_fd, 0, 0) == vblank_start)
+		if (get_vblank(display->drm_fd, pipe, 0) == vblank_start)
 			break;
 	} while (target);
 	igt_require(target > 1);
@@ -329,29 +346,29 @@ static void basic_flip_vs_cursor(igt_display_t *display, int nloops)
 	igt_debug("Using a target of %d cursor updates per half-vblank\n",
 		  target);
 
-	vblank_start = get_vblank(display->drm_fd, 0, DRM_VBLANK_NEXTONMISS);
-	igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start);
+	vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
+	igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 	for (int n = 0; n < target; n++)
 		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
-	igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start);
+	igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
 	while (nloops--) {
 		/* Start with a synchronous query to align with the vblank */
-		vblank_start = get_vblank(display->drm_fd, 0, DRM_VBLANK_NEXTONMISS);
+		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
 		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
 
 		/* Schedule a nonblocking flip for the next vblank */
 		do_or_die(drmModePageFlip(display->drm_fd, arg.crtc_id, fb_id,
 					DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
 
-		igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 		for (int n = 0; n < target; n++)
 			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
-		igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
 		igt_set_timeout(1, "Stuck page flip");
 		igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
-		igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start + 1);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start + 1);
 		igt_reset_timeout();
 	}
 
@@ -369,26 +386,27 @@ static void basic_cursor_vs_flip(igt_display_t *display, int nloops)
 	volatile unsigned long *shared;
 	int target;
 	uint32_t fb_id;
+	enum pipe pipe = find_connected_pipe(display);
 
 	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(shared != MAP_FAILED);
 
-	igt_require((fb_id = set_fb_on_crtc(display, 0, &fb_info)));
+	igt_require((fb_id = set_fb_on_crtc(display, pipe, &fb_info)));
 
 	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
-	set_cursor_on_pipe(display, 0, &cursor_fb);
-	populate_cursor_args(display, 0, &arg, &cursor_fb);
+	set_cursor_on_pipe(display, pipe, &cursor_fb);
+	populate_cursor_args(display, pipe, &arg, &cursor_fb);
 
 	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	target = 4096;
 	do {
-		vblank_start = get_vblank(display->drm_fd, 0, DRM_VBLANK_NEXTONMISS);
-		igt_assert_eq(get_vblank(display->drm_fd, 0, 0), vblank_start);
+		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 		for (int n = 0; n < target; n++)
 			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
 		target /= 2;
-		if (get_vblank(display->drm_fd, 0, 0) == vblank_start)
+		if (get_vblank(display->drm_fd, pipe, 0) == vblank_start)
 			break;
 	} while (target);
 	igt_require(target > 1);
