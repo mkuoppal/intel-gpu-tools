@@ -58,6 +58,44 @@ static void test_read(int vgem, int i915)
 	gem_close(i915, handle);
 }
 
+static void test_fence_read(int vgem, int i915)
+{
+	struct vgem_bo scratch;
+	uint32_t handle;
+	uint32_t *ptr;
+	uint32_t fence;
+	int dmabuf, i;
+
+	scratch.width = 1024;
+	scratch.height = 1024;
+	scratch.bpp = 32;
+	vgem_create(vgem, &scratch);
+
+	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
+	handle = prime_fd_to_handle(i915, dmabuf);
+	close(dmabuf);
+
+	fence = vgem_fence_attach(vgem, &scratch, VGEM_FENCE_WRITE);
+
+	igt_fork(child, 1) {
+		for (i = 0; i < 1024; i++) {
+			uint32_t tmp;
+			gem_read(i915, handle, 4096*i, &tmp, sizeof(tmp));
+			igt_assert_eq(tmp, i);
+		}
+		gem_close(i915, handle);
+	}
+
+	ptr = vgem_mmap(vgem, &scratch, PROT_WRITE);
+	for (i = 0; i < 1024; i++)
+		ptr[1024*i] = i;
+	munmap(ptr, scratch.size);
+	vgem_fence_signal(vgem, fence);
+	gem_close(vgem, scratch.handle);
+
+	igt_waitchildren();
+}
+
 static void test_write(int vgem, int i915)
 {
 	struct vgem_bo scratch;
@@ -624,6 +662,9 @@ igt_main
 		igt_fixture {
 			igt_require(vgem_has_fences(vgem));
 		}
+
+		igt_subtest("basic-fence-read")
+			test_fence_read(i915, vgem);
 
 		for (e = intel_execution_engines; e->name; e++) {
 			igt_subtest_f("%sfence-wait-%s",
