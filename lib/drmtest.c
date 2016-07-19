@@ -272,7 +272,6 @@ int __drm_open_driver(int chipset)
 		close(fd);
 	}
 
-	igt_skip("No known gpu found\n");
 	return -1;
 }
 
@@ -340,9 +339,10 @@ static void quiescent_gpu_at_exit_render(int sig)
 int drm_open_driver(int chipset)
 {
 	static int open_count;
-	int fd = __drm_open_driver(chipset);
+	int fd;
 
-	igt_require(fd >= 0);
+	fd = __drm_open_driver(chipset);
+	igt_skip_on_f(fd<0, "No known gpu found\n");
 
 	if (__sync_fetch_and_add(&open_count, 1))
 		return fd;
@@ -369,7 +369,6 @@ int drm_open_driver_master(int chipset)
 {
 	int fd = drm_open_driver(chipset);
 
-	igt_require(fd >= 0);
 	igt_require_f(drmSetMaster(fd) == 0, "Can't become DRM master, "
 		      "please check if no other DRM client is running.\n");
 
