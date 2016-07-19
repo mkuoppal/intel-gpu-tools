@@ -58,7 +58,7 @@ static void test_read(int vgem, int i915)
 	gem_close(i915, handle);
 }
 
-static void test_fence_read(int vgem, int i915)
+static void test_fence_read(int i915, int vgem)
 {
 	struct vgem_bo scratch;
 	uint32_t handle;
@@ -85,6 +85,8 @@ static void test_fence_read(int vgem, int i915)
 		}
 		gem_close(i915, handle);
 	}
+
+	sleep(1);
 
 	ptr = vgem_mmap(vgem, &scratch, PROT_WRITE);
 	for (i = 0; i < 1024; i++)
