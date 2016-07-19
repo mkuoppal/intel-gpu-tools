@@ -153,13 +153,14 @@ igt_main
 		i = 0;
 		while (getline(&line, &line_size, file) > 0) {
 			igt_debug("%s", line);
-			igt_assert(i < num_wa_regs);
 			if (sscanf(line, "0x%X: 0x%08X, mask: 0x%08X",
 				   &wa_regs[i].addr,
 				   &wa_regs[i].value,
 				   &wa_regs[i].mask) == 3)
 				i++;
 		}
+
+		igt_assert_lte(i, num_wa_regs);
 
 		free(line);
 		fclose(file);
