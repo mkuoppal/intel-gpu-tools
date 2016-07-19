@@ -65,6 +65,10 @@ static void test_fence_read(int i915, int vgem)
 	uint32_t *ptr;
 	uint32_t fence;
 	int dmabuf, i;
+	int master[2], slave[2];
+
+	igt_assert(pipe(master) == 0);
+	igt_assert(pipe(slave) == 0);
 
 	scratch.width = 1024;
 	scratch.height = 1024;
@@ -75,9 +79,14 @@ static void test_fence_read(int i915, int vgem)
 	handle = prime_fd_to_handle(i915, dmabuf);
 	close(dmabuf);
 
-	fence = vgem_fence_attach(vgem, &scratch, VGEM_FENCE_WRITE);
-
 	igt_fork(child, 1) {
+		for (i = 0; i < 1024; i++) {
+			uint32_t tmp;
+			gem_read(i915, handle, 4096*i, &tmp, sizeof(tmp));
+			igt_assert_eq(tmp, 0);
+		}
+		write(master[1], &child, sizeof(child));
+		read(slave[0], &child, sizeof(child));
 		for (i = 0; i < 1024; i++) {
 			uint32_t tmp;
 			gem_read(i915, handle, 4096*i, &tmp, sizeof(tmp));
@@ -86,7 +95,9 @@ static void test_fence_read(int i915, int vgem)
 		gem_close(i915, handle);
 	}
 
-	sleep(1);
+	read(master[0], &i, sizeof(i));
+	fence = vgem_fence_attach(vgem, &scratch, VGEM_FENCE_WRITE);
+	write(slave[1], &i, sizeof(i));
 
 	ptr = vgem_mmap(vgem, &scratch, PROT_WRITE);
 	for (i = 0; i < 1024; i++)
@@ -96,6 +107,63 @@ static void test_fence_read(int i915, int vgem)
 	gem_close(vgem, scratch.handle);
 
 	igt_waitchildren();
+	close(master[0]);
+	close(master[1]);
+	close(slave[0]);
+	close(slave[1]);
+}
+
+static void test_fence_mmap(int i915, int vgem)
+{
+	struct vgem_bo scratch;
+	uint32_t handle;
+	uint32_t *ptr;
+	uint32_t fence;
+	int dmabuf, i;
+	int master[2], slave[2];
+
+	igt_assert(pipe(master) == 0);
+	igt_assert(pipe(slave) == 0);
+
+	scratch.width = 1024;
+	scratch.height = 1024;
+	scratch.bpp = 32;
+	vgem_create(vgem, &scratch);
+
+	dmabuf = prime_handle_to_fd(vgem, scratch.handle);
+	handle = prime_fd_to_handle(i915, dmabuf);
+	close(dmabuf);
+
+	igt_fork(child, 1) {
+		ptr = gem_mmap__gtt(i915, handle, 4096*1024, PROT_READ);
+		gem_close(i915, handle);
+
+		for (i = 0; i < 1024; i++)
+			igt_assert_eq(ptr[1024*i], 0);
+
+		write(master[1], &child, sizeof(child));
+		read(slave[0], &child, sizeof(child));
+
+		for (i = 0; i < 1024; i++)
+			igt_assert_eq(ptr[1024*i], i);
+	}
+
+	read(master[0], &i, sizeof(i));
+	fence = vgem_fence_attach(vgem, &scratch, VGEM_FENCE_WRITE);
+	write(slave[1], &i, sizeof(i));
+
+	ptr = vgem_mmap(vgem, &scratch, PROT_WRITE);
+	for (i = 0; i < 1024; i++)
+		ptr[1024*i] = i;
+	munmap(ptr, scratch.size);
+	vgem_fence_signal(vgem, fence);
+	gem_close(vgem, scratch.handle);
+
+	igt_waitchildren();
+	close(master[0]);
+	close(master[1]);
+	close(slave[0]);
+	close(slave[1]);
 }
 
 static void test_write(int vgem, int i915)
@@ -667,6 +735,8 @@ igt_main
 
 		igt_subtest("basic-fence-read")
 			test_fence_read(i915, vgem);
+		igt_subtest("basic-fence-mmap")
+			test_fence_mmap(i915, vgem);
 
 		for (e = intel_execution_engines; e->name; e++) {
 			igt_subtest_f("%sfence-wait-%s",
