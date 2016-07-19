@@ -136,16 +136,19 @@ static void test_fence_mmap(int i915, int vgem)
 
 	igt_fork(child, 1) {
 		ptr = gem_mmap__gtt(i915, handle, 4096*1024, PROT_READ);
-		gem_close(i915, handle);
 
+		gem_set_domain(i915, handle, I915_GEM_DOMAIN_GTT, 0);
 		for (i = 0; i < 1024; i++)
 			igt_assert_eq(ptr[1024*i], 0);
 
 		write(master[1], &child, sizeof(child));
 		read(slave[0], &child, sizeof(child));
 
+		gem_set_domain(i915, handle, I915_GEM_DOMAIN_GTT, 0);
 		for (i = 0; i < 1024; i++)
 			igt_assert_eq(ptr[1024*i], i);
+
+		gem_close(i915, handle);
 	}
 
 	read(master[0], &i, sizeof(i));
