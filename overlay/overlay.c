@@ -862,7 +862,7 @@ int main(int argc, char **argv)
 	config_init(&config);
 
 	opterr = 0;
-	while ((i = getopt_long(argc, argv, "c:fhn?", long_options, &index)) != -1) {
+	while ((i = getopt_long(argc, argv, "c:G:fhn?", long_options, &index)) != -1) {
 		switch (i) {
 		case 'c':
 			config_parse_string(&config, optarg);
