@@ -29,6 +29,7 @@
 
 #include "igt.h"
 #include "igt_gt.h"
+#include "igt_sysfs.h"
 
 #define LOCAL_I915_EXEC_NO_RELOC (1<<11)
 #define LOCAL_I915_EXEC_HANDLE_LUT (1<<12)
@@ -391,6 +392,45 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 		gem_close(fd, batches[n].handle);
 }
 
+static void print_welcome(int fd)
+{
+	bool active;
+	char *str;
+	int dir;
+
+	dir = igt_sysfs_open_parameters(fd);
+	if (dir < 0)
+		return;
+
+	str = igt_sysfs_get(dir, "enable_guc_submission");
+	active = str && atoi(str) > 0;
+	free(str);
+
+	if (active) {
+		igt_info("Using GuC submission\n");
+		goto out;
+	}
+
+	str = igt_sysfs_get(dir, "enable_execlists");
+	active = str && atoi(str) > 0;
+	free(str);
+
+	if (active) {
+		igt_info("Using Execlists submission\n");
+		goto out;
+	}
+
+	str = igt_sysfs_get(dir, "semaphores");
+	active = str && atoi(str) > 0;
+	free(str);
+
+	igt_info("Using Legacy submission %s\n",
+		 active ? ", with semaphores" : "");
+
+out:
+	close(dir);
+}
+
 igt_main
 {
 	const struct mode {
@@ -412,6 +452,7 @@ igt_main
 
 	igt_fixture {
 		fd = drm_open_driver_master(DRIVER_INTEL);
+		print_welcome(fd);
 
 		igt_fork_hang_detector(fd);
 	}

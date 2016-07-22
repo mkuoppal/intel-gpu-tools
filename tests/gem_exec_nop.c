@@ -26,6 +26,7 @@
  */
 
 #include "igt.h"
+#include "igt_sysfs.h"
 #include <unistd.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -196,6 +197,45 @@ static void all(int fd, uint32_t handle, int timeout)
 		     1e6*time, 1e6*min, 1e6*max, 1e6*(max + 10*min/9));
 }
 
+static void print_welcome(int fd)
+{
+	bool active;
+	char *str;
+	int dir;
+
+	dir = igt_sysfs_open_parameters(fd);
+	if (dir < 0)
+		return;
+
+	str = igt_sysfs_get(dir, "enable_guc_submission");
+	active = str && atoi(str) > 0;
+	free(str);
+
+	if (active) {
+		igt_info("Using GuC submission\n");
+		goto out;
+	}
+
+	str = igt_sysfs_get(dir, "enable_execlists");
+	active = str && atoi(str) > 0;
+	free(str);
+
+	if (active) {
+		igt_info("Using Execlists submission\n");
+		goto out;
+	}
+
+	str = igt_sysfs_get(dir, "semaphores");
+	active = str && atoi(str) > 0;
+	free(str);
+
+	igt_info("Using Legacy submission %s\n",
+		 active ? ", with semaphores" : "");
+
+out:
+	close(dir);
+}
+
 igt_main
 {
 	const struct intel_execution_engine *e;
@@ -206,6 +246,8 @@ igt_main
 		const uint32_t bbe = MI_BATCH_BUFFER_END;
 
 		device = drm_open_driver(DRIVER_INTEL);
+		print_welcome(device);
+
 		handle = gem_create(device, 4096);
 		gem_write(device, handle, 0, &bbe, sizeof(bbe));
 

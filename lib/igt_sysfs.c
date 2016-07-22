@@ -119,6 +119,29 @@ int igt_sysfs_open(int fd, int *idx)
 }
 
 /**
+ * igt_sysfs_open_parameters:
+ * @device: fd of the device (or -1 to default to Intel)
+ *
+ * This opens the module parameters directory (under sysfs) corresponding
+ * to the device for use with igt_sysfs_set() and igt_sysfs_get().
+ *
+ * Returns:
+ * The directory fd, or -1 on failure.
+ */
+int igt_sysfs_open_parameters(int fd)
+{
+	int dir, params;
+
+	dir = igt_sysfs_open(fd, &params);
+	if (dir < 0)
+		return -1;
+
+	params = openat(dir, "device/driver/module/parameters", O_RDONLY);
+	close(dir);
+
+	return params;
+}
+/**
  * igt_sysfs_set:
  * @dir: directory for the device from igt_sysfs_open()
  * @attr: name of the sysfs node to open
