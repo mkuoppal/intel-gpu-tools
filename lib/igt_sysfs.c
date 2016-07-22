@@ -26,6 +26,7 @@
 #include <sys/stat.h>
 #include <sys/mount.h>
 #include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <limits.h>
@@ -219,22 +220,67 @@ out:
 	return buf;
 }
 
+int igt_sysfs_scanf(int dir, const char *attr, const char *fmt, ...)
+{
+	FILE *file;
+	int fd;
+	int ret = -1;
+
+	fd = openat(dir, attr, O_RDONLY);
+	if (fd < 0)
+		return -1;
+
+	file = fdopen(fd, "r");
+	if (file) {
+		va_list ap;
+
+		va_start(ap, fmt);
+		ret = vfscanf(file, fmt, ap);
+		va_end(ap);
+
+		fclose(file);
+	}
+	close(fd);
+
+	return ret;
+}
+
+int igt_sysfs_printf(int dir, const char *attr, const char *fmt, ...)
+{
+	FILE *file;
+	int fd;
+	int ret = -1;
+
+	fd = openat(dir, attr, O_WRONLY);
+	if (fd < 0)
+		return -1;
+
+	file = fdopen(fd, "w");
+	if (file) {
+		va_list ap;
+
+		va_start(ap, fmt);
+		ret = vfprintf(file, fmt, ap);
+		va_end(ap);
+
+		fclose(file);
+	}
+	close(fd);
+
+	return ret;
+}
+
 bool igt_sysfs_get_boolean(int dir, const char *attr)
 {
-	char *str;
-	bool result;
+	int result;
 
-	str = igt_sysfs_get(dir, attr);
-	result = str && atoi(str) > 0;
-	free(str);
+	if (igt_sysfs_scanf(dir, attr, "%d", &result) != 1)
+		return false;
 
 	return result;
 }
 
 bool igt_sysfs_set_boolean(int dir, const char *attr, bool value)
 {
-	char buf[8];
-
-	sprintf(buf, "%d", value);
-	return igt_sysfs_set(dir, attr, buf);
+	return igt_sysfs_printf(dir, attr, "%d", value) == 1;
 }
