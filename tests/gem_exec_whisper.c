@@ -395,35 +395,25 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 static void print_welcome(int fd)
 {
 	bool active;
-	char *str;
 	int dir;
 
 	dir = igt_sysfs_open_parameters(fd);
 	if (dir < 0)
 		return;
 
-	str = igt_sysfs_get(dir, "enable_guc_submission");
-	active = str && atoi(str) > 0;
-	free(str);
-
+	active = igt_sysfs_get_boolean(dir, "enable_guc_submission");
 	if (active) {
 		igt_info("Using GuC submission\n");
 		goto out;
 	}
 
-	str = igt_sysfs_get(dir, "enable_execlists");
-	active = str && atoi(str) > 0;
-	free(str);
-
+	active = igt_sysfs_get_boolean(dir, "enable_execlists");
 	if (active) {
 		igt_info("Using Execlists submission\n");
 		goto out;
 	}
 
-	str = igt_sysfs_get(dir, "semaphores");
-	active = str && atoi(str) > 0;
-	free(str);
-
+	active = igt_sysfs_get_boolean(dir, "semaphores");
 	igt_info("Using Legacy submission %s\n",
 		 active ? ", with semaphores" : "");
 

@@ -31,5 +31,7 @@ int igt_sysfs_open(int device, int *idx);
 int igt_sysfs_open_parameters(int fd);
 bool igt_sysfs_set(int dir, const char *attr, const char *value);
 char *igt_sysfs_get(int dir, const char *attr);
+bool igt_sysfs_get_boolean(int dir, const char *attr);
+bool igt_sysfs_set_boolean(int dir, const char *attr, bool value);
 
 #endif /* __IGT_SYSFS_H__ */

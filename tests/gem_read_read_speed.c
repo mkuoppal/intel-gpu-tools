@@ -27,6 +27,7 @@
  */
 
 #include "igt.h"
+#include "igt_sysfs.h"
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -48,39 +49,19 @@ igt_render_copyfunc_t rendercopy;
 struct intel_batchbuffer *batch;
 int width, height;
 
-static int gem_param(int fd, int name)
-{
-	drm_i915_getparam_t gp;
-	int v = -1; /* No param uses the sign bit, reserve it for errors */
-
-	memset(&gp, 0, sizeof(gp));
-	gp.param = name;
-	gp.value = &v;
-	if (drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &gp))
-		return -1;
-
-	return v;
-}
-
 static int semaphores_enabled(int fd)
 {
-	FILE *file;
-	int detected = -1;
-	int ret;
+	bool enabled = false;
+	int dir;
 
-	ret = gem_param(fd, 20);
-	if (ret != -1)
-		return ret > 0;
+	dir = igt_sysfs_open_parameters(fd);
+	if (dir < 0)
+		return false;
 
-	file = fopen("/sys/module/i915/parameters/semaphores", "r");
-	if (file) {
-		int value;
-		if (fscanf(file, "%d", &value) == 1)
-			detected = value;
-		fclose(file);
-	}
+	enabled = igt_sysfs_get_boolean(dir, "semaphores");
+	close(dir);
 
-	return detected;
+	return enabled;
 }
 
 static drm_intel_bo *rcs_copy_bo(drm_intel_bo *dst, drm_intel_bo *src)

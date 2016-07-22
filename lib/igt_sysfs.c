@@ -218,3 +218,23 @@ out:
 	close(fd);
 	return buf;
 }
+
+bool igt_sysfs_get_boolean(int dir, const char *attr)
+{
+	char *str;
+	bool result;
+
+	str = igt_sysfs_get(dir, attr);
+	result = str && atoi(str) > 0;
+	free(str);
+
+	return result;
+}
+
+bool igt_sysfs_set_boolean(int dir, const char *attr, bool value)
+{
+	char buf[8];
+
+	sprintf(buf, "%d", value);
+	return igt_sysfs_set(dir, attr, buf);
+}

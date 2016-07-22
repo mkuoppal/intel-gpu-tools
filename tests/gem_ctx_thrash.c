@@ -23,6 +23,7 @@
  */
 
 #include "igt.h"
+#include "igt_sysfs.h"
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -41,18 +42,17 @@ static void xchg_int(void *array, unsigned i, unsigned j)
 	igt_swap(A[i], A[j]);
 }
 
-static bool has_execlists(void)
+static bool has_execlists(int fd)
 {
-	FILE *file;
 	bool enabled = false;
+	int dir;
 
-	file = fopen("/sys/module/i915/parameters/enable_execlists", "r");
-	if (file) {
-		int value;
-		if (fscanf(file, "%d", &value) == 1)
-			enabled = value != 0;
-		fclose(file);
-	}
+	dir = igt_sysfs_open_parameters(fd);
+	if (dir < 0)
+		return false;
+
+	enabled = igt_sysfs_get_boolean(dir, "enable_execlists");
+	close(dir);
 
 	return enabled;
 }
@@ -67,7 +67,7 @@ static unsigned get_num_contexts(int fd, int num_engines)
 	ggtt_size = gem_global_aperture_size(fd);
 
 	size = 64 << 10; /* Most gen require at least 64k for ctx */
-	if (has_execlists()) {
+	if (has_execlists(fd)) {
 		size *= 2; /* ringbuffer as well */
 		if (num_engines) /* one per engine with execlists */
 			size *= num_engines;
