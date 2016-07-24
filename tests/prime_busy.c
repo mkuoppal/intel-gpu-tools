@@ -37,6 +37,7 @@ static bool prime_busy(struct pollfd *pfd, bool excl)
 #define AFTER 0x2
 #define HANG 0x4
 #define POLL 0x8
+#define BASIC 0x10
 
 static void busy(int fd, unsigned ring, unsigned flags)
 {
@@ -187,7 +188,7 @@ static void run_busy(int fd,
 	}
 
 	igt_subtest_f("%s%s-%s",
-		      !e->exec_id && !(flags & HANG) ? "basic-" : "",
+		      !e->exec_id && !(flags & HANG) && (flags & BASIC) ? "basic-" : "",
 		      name, e->name)
 		busy(fd, e->exec_id | e->flags, flags);
 
@@ -213,7 +214,7 @@ static void run_poll(int fd,
 	}
 
 	igt_subtest_f("%swait-%s-%s",
-		      !e->exec_id && !(flags & HANG) ? "basic-" : "",
+		      !e->exec_id && !(flags & HANG) && (flags & BASIC) ? "basic-" : "",
 		      name, e->name)
 		busy(fd, e->exec_id | e->flags, flags | POLL);
 
