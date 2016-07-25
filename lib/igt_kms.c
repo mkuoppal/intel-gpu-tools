@@ -1325,15 +1325,37 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		int p = IGT_PLANE_2;
 		int j, type;
 		uint8_t n_planes = 0;
+		uint64_t prop_value;
 
 		pipe->crtc_id = resources->crtcs[i];
 		pipe->display = display;
 		pipe->pipe = i;
 
+		get_crtc_property(display->drm_fd, pipe->crtc_id,
+				    "background_color",
+				    &pipe->background_property,
+				    &prop_value,
+				    NULL);
+		pipe->background = (uint32_t)prop_value;
+		get_crtc_property(display->drm_fd, pipe->crtc_id,
+				  "DEGAMMA_LUT",
+				  &pipe->degamma_property,
+				  NULL,
+				  NULL);
+		get_crtc_property(display->drm_fd, pipe->crtc_id,
+				  "CTM",
+				  &pipe->ctm_property,
+				  NULL,
+				  NULL);
+		get_crtc_property(display->drm_fd, pipe->crtc_id,
+				  "GAMMA_LUT",
+				  &pipe->gamma_property,
+				  NULL,
+				  NULL);
+
 		/* add the planes that can be used with that pipe */
 		for (j = 0; j < plane_resources->count_planes; j++) {
 			drmModePlane *drm_plane;
-			uint64_t prop_value;
 
 			drm_plane = drmModeGetPlane(display->drm_fd,
 						    plane_resources->planes[j]);
@@ -1440,7 +1462,6 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 	igt_assert(display->outputs);
 
 	for (i = 0; i < display->n_outputs; i++) {
-		int j;
 		igt_output_t *output = &display->outputs[i];
 
 		/*
@@ -1452,35 +1473,6 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		output->display = display;
 
 		igt_output_refresh(output);
-
-		for (j = 0; j < display->n_pipes; j++) {
-			uint64_t prop_value;
-			igt_pipe_t *pipe = &display->pipes[j];
-
-			if (output->config.crtc) {
-				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
-						   "background_color",
-						   &pipe->background_property,
-						   &prop_value,
-						   NULL);
-				pipe->background = (uint32_t)prop_value;
-				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
-						  "DEGAMMA_LUT",
-						  &pipe->degamma_property,
-						  NULL,
-						  NULL);
-				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
-						  "CTM",
-						  &pipe->ctm_property,
-						  NULL,
-						  NULL);
-				get_crtc_property(display->drm_fd, output->config.crtc->crtc_id,
-						  "GAMMA_LUT",
-						  &pipe->gamma_property,
-						  NULL,
-						  NULL);
-			}
-		}
 	}
 
 	drmModeFreePlaneResources(plane_resources);
