@@ -36,10 +36,14 @@
 #define DRM_CAP_CURSOR_HEIGHT 0x9
 #endif
 
+struct plane_parms {
+	struct igt_fb *fb;
+	uint32_t width, height;
+};
+
 static void
-wm_setup_plane(igt_display_t *display, enum pipe pipe, uint32_t mask,
-	       struct igt_fb *fb, struct igt_fb *argb_fb,
-	       uint64_t cursor_width, uint64_t cursor_height)
+wm_setup_plane(igt_display_t *display, enum pipe pipe,
+	       uint32_t mask, struct plane_parms *parms)
 {
 	igt_plane_t *plane;
 
@@ -49,20 +53,16 @@ wm_setup_plane(igt_display_t *display, enum pipe pipe, uint32_t mask,
 	* later on.
 	*/
 	for_each_plane_on_pipe(display, pipe, plane) {
+		int i = plane->index;
+
 		if (!((1 << plane->index) & mask)) {
 			igt_plane_set_fb(plane, NULL);
 			continue;
 		}
 
-		if (plane->is_primary)
-			igt_plane_set_fb(plane, fb);
-		else
-			igt_plane_set_fb(plane, argb_fb);
-
-		if (plane->is_cursor) {
-			igt_fb_set_size(argb_fb, plane, cursor_width, cursor_height);
-			igt_plane_set_size(plane, cursor_width, cursor_height);
-		}
+		igt_plane_set_fb(plane, parms[i].fb);
+		igt_fb_set_size(parms[i].fb, plane, parms[i].width, parms[i].height);
+		igt_plane_set_size(plane, parms[i].width, parms[i].height);
 	}
 }
 
@@ -82,7 +82,9 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	drmModeModeInfo *mode;
 	igt_plane_t *plane;
 	uint64_t cursor_width, cursor_height;
-	uint32_t iter_max = 1 << display->pipes[pipe].n_planes, i, j;
+	uint32_t n_planes = display->pipes[pipe].n_planes;
+	uint32_t iter_max = 1 << n_planes, i;
+	struct plane_parms parms[IGT_MAX_PLANES];
 
 	mode = igt_output_get_mode(output);
 
@@ -103,37 +105,87 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	if (modeset) {
 		igt_output_set_pipe(output, PIPE_NONE);
 
-		wm_setup_plane(display, pipe, 0, NULL, NULL,
-			      cursor_width, cursor_height);
+		wm_setup_plane(display, pipe, 0, NULL);
 
 		igt_display_commit2(display, COMMIT_ATOMIC);
+	}
+
+	for_each_plane_on_pipe(display, pipe, plane) {
+		i = plane->index;
+
+		if (plane->is_primary)
+			parms[i].fb = &fb;
+		else
+			parms[i].fb = &argb_fb;
+
+		if (plane->is_cursor) {
+			parms[i].width = cursor_width;
+			parms[i].height = cursor_height;
+		} else {
+			parms[i].width = mode->hdisplay;
+			parms[i].height = mode->vdisplay;
+		}
+	}
+
+	/*
+	 * In some configurations the tests may not run to completion with all
+	 * sprite planes lit up at 4k resolution, try decreasing width/size of secondary
+	 * planes to fix this
+	 */
+	while (1) {
+		int ret;
+
+		igt_output_set_pipe(output, pipe);
+		wm_setup_plane(display, pipe, iter_max - 1, parms);
+		ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+
+		if (ret != -EINVAL || n_planes < 3)
+			break;
+
+		ret = 0;
+		for_each_plane_on_pipe(display, pipe, plane) {
+			i = plane->index;
+
+			if (plane->is_primary || plane->is_cursor)
+				continue;
+
+			if (parms[i].width <= 512)
+				continue;
+
+			parms[i].width /= 2;
+			ret = 1;
+			igt_info("Reducing sprite %i to %ux%u\n", i - 1, parms[i].width, parms[i].height);
+			break;
+		}
+
+		if (!ret)
+			igt_skip("Cannot run tests without proper size sprite planes\n");
+
 	}
 
 	for (i = 0; i < iter_max; i++) {
 		igt_output_set_pipe(output, pipe);
 
-		wm_setup_plane(display, pipe, i, &fb, &argb_fb,
-			       cursor_width, cursor_height);
+		wm_setup_plane(display, pipe, i, parms);
 
 		igt_display_commit2(display, COMMIT_ATOMIC);
 
 		if (modeset) {
 			igt_output_set_pipe(output, PIPE_NONE);
 
-			wm_setup_plane(display, pipe, 0, NULL, NULL,
-				       cursor_width, cursor_height);
+			wm_setup_plane(display, pipe, 0, parms);
 
 			igt_display_commit2(display, COMMIT_ATOMIC);
 		} else {
+			uint32_t j;
+
 			/* i -> i+1 will be done when i increases, can be skipped here */
 			for (j = iter_max - 1; j > i + 1; j--) {
-				wm_setup_plane(display, pipe, j, &fb, &argb_fb,
-					      cursor_width, cursor_height);
+				wm_setup_plane(display, pipe, j, parms);
 
 				igt_display_commit2(display, COMMIT_ATOMIC);
 
-				wm_setup_plane(display, pipe, i, &fb, &argb_fb,
-					      cursor_width, cursor_height);
+				wm_setup_plane(display, pipe, i, parms);
 				igt_display_commit2(display, COMMIT_ATOMIC);
 			}
 		}
