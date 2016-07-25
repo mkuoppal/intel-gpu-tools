@@ -1259,10 +1259,10 @@ get_crtc_property(int drm_fd, uint32_t crtc_id, const char *name,
 }
 
 static void
-igt_crtc_set_property(igt_output_t *output, uint32_t prop_id, uint64_t value)
+igt_crtc_set_property(igt_pipe_t *pipe, uint32_t prop_id, uint64_t value)
 {
-	drmModeObjectSetProperty(output->display->drm_fd,
-		output->config.crtc->crtc_id, DRM_MODE_OBJECT_CRTC, prop_id, value);
+	drmModeObjectSetProperty(pipe->display->drm_fd,
+		pipe->crtc_id, DRM_MODE_OBJECT_CRTC, prop_id, value);
 }
 
 /*
@@ -1620,6 +1620,18 @@ static igt_plane_t *igt_pipe_get_plane(igt_pipe_t *pipe, enum igt_plane plane)
 	return &pipe->planes[idx];
 }
 
+static igt_output_t *igt_pipe_get_output(igt_pipe_t *pipe)
+{
+	igt_display_t *display = pipe->display;
+	igt_output_t *output;
+
+	for_each_connected_output(display, output)
+		if (output->config.pipe == pipe->pipe)
+			return output;
+
+	return NULL;
+}
+
 bool igt_pipe_get_property(igt_pipe_t *pipe, const char *name,
 			   uint32_t *prop_id, uint64_t *value,
 			   drmModePropertyPtr *prop)
@@ -1733,10 +1745,10 @@ igt_atomic_prepare_plane_commit(igt_plane_t *plane, igt_output_t *output,
  * tests that expect a specific error code).
  */
 static int igt_drm_plane_commit(igt_plane_t *plane,
-				igt_output_t *output,
+				igt_pipe_t *pipe,
 				bool fail_on_error)
 {
-	igt_display_t *display = output->display;
+	igt_display_t *display = pipe->display;
 	uint32_t fb_id, crtc_id;
 	int ret;
 	uint32_t src_x;
@@ -1755,13 +1767,12 @@ static int igt_drm_plane_commit(igt_plane_t *plane,
 		   !plane->rotation_changed);
 
 	fb_id = igt_plane_get_fb_id(plane);
-	crtc_id = output->config.crtc->crtc_id;
+	crtc_id = pipe->crtc_id;
 
 	if ((plane->fb_changed || plane->size_changed) && fb_id == 0) {
 		LOG(display,
-		    "%s: SetPlane pipe %s, plane %d, disabling\n",
-		    igt_output_name(output),
-		    kmstest_pipe_name(output->config.pipe),
+		    "SetPlane pipe %s, plane %d, disabling\n",
+		    kmstest_pipe_name(pipe->pipe),
 		    plane->index);
 
 		ret = drmModeSetPlane(display->drm_fd,
@@ -1789,10 +1800,9 @@ static int igt_drm_plane_commit(igt_plane_t *plane,
 		crtc_h = plane->crtc_h;
 
 		LOG(display,
-		    "%s: SetPlane %s.%d, fb %u, src = (%d, %d) "
+		    "SetPlane %s.%d, fb %u, src = (%d, %d) "
 			"%ux%u dst = (%u, %u) %ux%u\n",
-		    igt_output_name(output),
-		    kmstest_pipe_name(output->config.pipe),
+		    kmstest_pipe_name(pipe->pipe),
 		    plane->index,
 		    fb_id,
 		    src_x >> 16, src_y >> 16, src_w >> 16, src_h >> 16,
@@ -1833,11 +1843,11 @@ static int igt_drm_plane_commit(igt_plane_t *plane,
  * code).
  */
 static int igt_cursor_commit_legacy(igt_plane_t *cursor,
-				    igt_output_t *output,
+				    igt_pipe_t *pipe,
 				    bool fail_on_error)
 {
-	igt_display_t *display = output->display;
-	uint32_t crtc_id = output->config.crtc->crtc_id;
+	igt_display_t *display = pipe->display;
+	uint32_t crtc_id = pipe->crtc_id;
 	int ret;
 
 	if (cursor->fb_changed) {
@@ -1845,9 +1855,8 @@ static int igt_cursor_commit_legacy(igt_plane_t *cursor,
 
 		if (gem_handle) {
 			LOG(display,
-			    "%s: SetCursor pipe %s, fb %u %dx%d\n",
-			    igt_output_name(output),
-			    kmstest_pipe_name(output->config.pipe),
+			    "SetCursor pipe %s, fb %u %dx%d\n",
+			    kmstest_pipe_name(pipe->pipe),
 			    gem_handle,
 			    cursor->crtc_w, cursor->crtc_h);
 
@@ -1857,9 +1866,8 @@ static int igt_cursor_commit_legacy(igt_plane_t *cursor,
 					       cursor->crtc_h);
 		} else {
 			LOG(display,
-			    "%s: SetCursor pipe %s, disabling\n",
-			    igt_output_name(output),
-			    kmstest_pipe_name(output->config.pipe));
+			    "SetCursor pipe %s, disabling\n",
+			    kmstest_pipe_name(pipe->pipe));
 
 			ret = drmModeSetCursor(display->drm_fd, crtc_id,
 					       0, 0, 0);
@@ -1875,9 +1883,8 @@ static int igt_cursor_commit_legacy(igt_plane_t *cursor,
 		int y = cursor->crtc_y;
 
 		LOG(display,
-		    "%s: MoveCursor pipe %s, (%d, %d)\n",
-		    igt_output_name(output),
-		    kmstest_pipe_name(output->config.pipe),
+		    "MoveCursor pipe %s, (%d, %d)\n",
+		    kmstest_pipe_name(pipe->pipe),
 		    x, y);
 
 		ret = drmModeMoveCursor(display->drm_fd, crtc_id, x, y);
@@ -1894,10 +1901,11 @@ static int igt_cursor_commit_legacy(igt_plane_t *cursor,
  * (setmode).
  */
 static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
-					   igt_output_t *output,
+					   igt_pipe_t *pipe,
 					   bool fail_on_error)
 {
 	struct igt_display *display = primary->pipe->display;
+	igt_output_t *output = igt_pipe_get_output(pipe);
 	drmModeModeInfo *mode;
 	uint32_t fb_id, crtc_id;
 	int ret;
@@ -1912,7 +1920,7 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 		!primary->size_changed && !primary->panning_changed)
 		return 0;
 
-	crtc_id = output->config.crtc->crtc_id;
+	crtc_id = pipe->crtc_id;
 	fb_id = igt_plane_get_fb_id(primary);
 	if (fb_id)
 		mode = igt_output_get_mode(output);
@@ -1924,7 +1932,7 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 		    "%s: SetCrtc pipe %s, fb %u, panning (%d, %d), "
 		    "mode %dx%d\n",
 		    igt_output_name(output),
-		    kmstest_pipe_name(output->config.pipe),
+		    kmstest_pipe_name(pipe->pipe),
 		    fb_id,
 		    primary->pan_x, primary->pan_y,
 		    mode->hdisplay, mode->vdisplay);
@@ -1938,9 +1946,8 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 				     mode);
 	} else {
 		LOG(display,
-		    "%s: SetCrtc pipe %s, disabling\n",
-		    igt_output_name(output),
-		    kmstest_pipe_name(output->config.pipe));
+		    "SetCrtc pipe %s, disabling\n",
+		    kmstest_pipe_name(pipe->pipe));
 
 		ret = drmModeSetCrtc(display->drm_fd,
 				     crtc_id,
@@ -1968,17 +1975,17 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
  * which API is used to do the programming.
  */
 static int igt_plane_commit(igt_plane_t *plane,
-			    igt_output_t *output,
+			    igt_pipe_t *pipe,
 			    enum igt_commit_style s,
 			    bool fail_on_error)
 {
 	if (plane->is_cursor && s == COMMIT_LEGACY) {
-		return igt_cursor_commit_legacy(plane, output, fail_on_error);
+		return igt_cursor_commit_legacy(plane, pipe, fail_on_error);
 	} else if (plane->is_primary && s == COMMIT_LEGACY) {
-		return igt_primary_plane_commit_legacy(plane, output,
+		return igt_primary_plane_commit_legacy(plane, pipe,
 						       fail_on_error);
 	} else {
-			return igt_drm_plane_commit(plane, output, fail_on_error);
+			return igt_drm_plane_commit(plane, pipe, fail_on_error);
 	}
 }
 
@@ -1992,31 +1999,28 @@ static int igt_plane_commit(igt_plane_t *plane,
  * further programming will take place, which may result in some changes
  * taking effect and others not taking effect.
  */
-static int igt_output_commit(igt_output_t *output,
-			     enum igt_commit_style s,
-			     bool fail_on_error)
+static int igt_pipe_commit(igt_pipe_t *pipe,
+			   enum igt_commit_style s,
+			   bool fail_on_error)
 {
-	igt_display_t *display = output->display;
-	igt_pipe_t *pipe;
+	igt_display_t *display = pipe->display;
 	int i;
 	int ret;
 	bool need_wait_for_vblank = false;
 
-	pipe = igt_output_get_driving_pipe(output);
-
 	if (pipe->background_changed) {
-		igt_crtc_set_property(output, pipe->background_property,
+		igt_crtc_set_property(pipe, pipe->background_property,
 			pipe->background);
 
 		pipe->background_changed = false;
 	}
 
 	if (pipe->color_mgmt_changed) {
-		igt_crtc_set_property(output, pipe->degamma_property,
+		igt_crtc_set_property(pipe, pipe->degamma_property,
 				      pipe->degamma_blob);
-		igt_crtc_set_property(output, pipe->ctm_property,
+		igt_crtc_set_property(pipe, pipe->ctm_property,
 				      pipe->ctm_blob);
-		igt_crtc_set_property(output, pipe->gamma_property,
+		igt_crtc_set_property(pipe, pipe->gamma_property,
 				      pipe->gamma_blob);
 
 		pipe->color_mgmt_changed = false;
@@ -2028,7 +2032,7 @@ static int igt_output_commit(igt_output_t *output,
 		if (plane->fb_changed || plane->position_changed || plane->size_changed)
 			need_wait_for_vblank = true;
 
-		ret = igt_plane_commit(plane, output, s, fail_on_error);
+		ret = igt_plane_commit(plane, pipe, s, fail_on_error);
 		CHECK_RETURN(ret, fail_on_error);
 	}
 
@@ -2051,6 +2055,9 @@ static void igt_atomic_prepare_crtc_commit(igt_output_t *output, drmModeAtomicRe
 {
 
 	igt_pipe_t *pipe_obj = igt_output_get_driving_pipe(output);
+
+	if (!pipe_obj)
+		return;
 
 	if (pipe_obj->background_changed)
 		igt_atomic_populate_crtc_req(req, output, IGT_CRTC_BACKGROUND, pipe_obj->background);
@@ -2117,6 +2124,8 @@ static int igt_atomic_commit(igt_display_t *display)
 
 
 		pipe_obj = igt_output_get_driving_pipe(output);
+		if (!pipe_obj)
+			continue;
 
 		pipe = pipe_obj->pipe;
 
@@ -2159,14 +2168,14 @@ static int do_display_commit(igt_display_t *display,
 
 	}
 
-	for (i = 0; i < display->n_outputs; i++) {
-		igt_output_t *output = &display->outputs[i];
+	for_each_pipe(display, i) {
+		igt_pipe_t *pipe_obj = &display->pipes[i];
+		igt_output_t *output = igt_pipe_get_output(pipe_obj);
 
-		if (!output->valid)
-			continue;
+		if (output && output->valid)
+			valid_outs++;
 
-		valid_outs++;
-		ret = igt_output_commit(output, s, fail_on_error);
+		ret = igt_pipe_commit(pipe_obj, s, fail_on_error);
 		CHECK_RETURN(ret, fail_on_error);
 	}
 
@@ -2289,6 +2298,8 @@ igt_plane_t *igt_output_get_plane(igt_output_t *output, enum igt_plane plane)
 	igt_pipe_t *pipe;
 
 	pipe = igt_output_get_driving_pipe(output);
+	igt_assert(pipe);
+
 	return igt_pipe_get_plane(pipe, plane);
 }
 
