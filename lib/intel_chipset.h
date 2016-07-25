@@ -172,6 +172,9 @@ void intel_check_pch(void);
 #define HAS_BSD_RING(devid)	AT_LEAST_GEN(devid, 5)
 #define HAS_BLT_RING(devid)	AT_LEAST_GEN(devid, 6)
 
-#define HAS_PCH_SPLIT(devid)	AT_LEAST_GEN(devid, 5) /* XXX Valleyview? */
+#define HAS_PCH_SPLIT(devid)	(AT_LEAST_GEN(devid, 5) && \
+				 !(IS_VALLEYVIEW(devid) || \
+				   IS_CHERRYVIEW(devid) || \
+				   IS_BROXTON(devid)))
 
 #endif /* _INTEL_CHIPSET_H */

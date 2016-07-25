@@ -900,11 +900,11 @@ int main(int argc, char *argv[])
 {
 	devid = intel_get_pci_device()->device_id;
 
-	if (HAS_PCH_SPLIT(devid)) {
-		ilk_wm_dump();
-	} else if (IS_VALLEYVIEW(devid) || IS_CHERRYVIEW(devid)) {
+	if (IS_VALLEYVIEW(devid) || IS_CHERRYVIEW(devid)) {
 		display_base = 0x180000;
 		vlv_wm_dump();
+	} else if (HAS_PCH_SPLIT(devid)) {
+		ilk_wm_dump();
 	} else if (IS_G4X(devid)) {
 		g4x_wm_dump();
 	} else if (IS_GEN4(devid)) {

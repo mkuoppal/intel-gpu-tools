@@ -2479,6 +2479,8 @@ int main(int argc, char **argv)
 	printf("%s audio registers:\n\n", intel_device_info(devid)->codename);
 	if (IS_VALLEYVIEW(devid)) {
 		dump_ironlake();
+	} else if (IS_CHERRYVIEW(devid)) {
+		dump_braswell();
 	}  else if (IS_GEN9(devid)
 		|| IS_BROADWELL(devid) || IS_HASWELL(devid)) {
 		dump_hsw_plus();
@@ -2490,8 +2492,6 @@ int main(int argc, char **argv)
 		dump_ironlake();
 	} else if (IS_G4X(devid)) {
 		dump_eaglelake();
-	} else if (IS_CHERRYVIEW(devid)) {
-		dump_braswell();
 	}
 
 	return 0;
