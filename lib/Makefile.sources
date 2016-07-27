@@ -1,4 +1,4 @@
-libintel_tools_la_SOURCES = 	\
+lib_source_list =	 	\
 	debug.h			\
 	drmtest.c		\
 	drmtest.h		\

@@ -5,6 +5,8 @@ SUBDIRS = . tests
 
 include Makefile.sources
 
+libintel_tools_la_SOURCES = $(lib_source_list)
+
 noinst_LTLIBRARIES = libintel_tools.la
 noinst_HEADERS = check-ndebug.h
 
