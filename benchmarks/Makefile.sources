@@ -1,10 +1,6 @@
 benchmarksdir=$(libexecdir)/intel-gpu-tools/benchmarks
 
 benchmarks_PROGRAMS =			\
-	intel_upload_blit_large         \
-	intel_upload_blit_large_gtt     \
-	intel_upload_blit_large_map     \
-	intel_upload_blit_small		\
 	gem_blt				\
 	gem_create			\
 	gem_exec_ctx			\
@@ -17,7 +13,14 @@ benchmarks_PROGRAMS =			\
 	gem_prw				\
 	gem_set_domain			\
 	gem_syslatency			\
-	gem_userptr_benchmark		\
 	kms_vblank			\
 	vgem_mmap			\
+	$(NULL)
+
+LIBDRM_INTEL_BENCHMARKS =		\
+	intel_upload_blit_large		\
+	intel_upload_blit_large_gtt	\
+	intel_upload_blit_large_map	\
+	intel_upload_blit_small		\
+	gem_userptr_benchmark		\
 	$(NULL)

@@ -34,4 +34,8 @@ endef
 
 benchmark_list := $(benchmarks_PROGRAMS)
 
+ifeq ($(HAVE_LIBDRM_INTEL),true)
+    benchmark_list += $(LIBDRM_INTEL_BENCHMARKS)
+endif
+
 $(foreach item,$(benchmark_list),$(eval $(call add_benchmark,$(item))))

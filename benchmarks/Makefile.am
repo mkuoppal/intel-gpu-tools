@@ -1,5 +1,8 @@
-
 include Makefile.sources
+
+if HAVE_LIBDRM_INTEL
+	benchmarks_PROGRAMS += $(LIBDRM_INTEL_BENCHMARKS)
+endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/lib
 AM_CFLAGS = $(DRM_CFLAGS) $(CWARNFLAGS) $(CAIRO_CFLAGS) $(LIBUNWIND_CFLAGS) \
