@@ -47,7 +47,7 @@
  *
  * This library provides helpers to access debugfs features. On top of some
  * basic functions to access debugfs files with e.g. igt_debugfs_open() it also
- * provides higher-level wrappers for some debugfs features
+ * provides higher-level wrappers for some debugfs features.
  *
  * # Pipe CRC Support
  *
@@ -804,17 +804,17 @@ int igt_get_stable_obj_count(int driver)
  * @device: fd of the device (or -1 to default to Intel)
  *
  * This opens the debugfs directory corresponding to device for use
- * with igt_debugfs_set() and igt_debugfs_get().
+ * with igt_sysfs_get() and related functions.
  *
  * Returns:
  * The directory fd, or -1 on failure.
  */
-int igt_debugfs_dir(int fd)
+int igt_debugfs_dir(int device)
 {
 	struct stat st;
 	char path[256];
 
-	if (fstat(fd, &st) || !S_ISCHR(st.st_mode))
+	if (fstat(device, &st) || !S_ISCHR(st.st_mode))
 		return -1;
 
 	sprintf(path, "%s/dri/%d", __debugfs_mount(), (int)(st.st_rdev & 0xff));

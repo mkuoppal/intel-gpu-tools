@@ -155,6 +155,11 @@ bool igt_crc_equal(igt_crc_t *a, igt_crc_t *b);
  * Also drop active objects once retired.
  */
 #define DROP_ACTIVE 0x8
+/**
+ * DROP_ALL:
+ *
+ * All of the above DROP_ flags combined.
+ */
 #define DROP_ALL (DROP_UNBOUND | \
 		  DROP_BOUND | \
 		  DROP_RETIRE | \
@@ -175,6 +180,6 @@ void igt_enable_prefault(void);
  */
 int igt_get_stable_obj_count(int driver);
 
-int igt_debugfs_dir(int fd);
+int igt_debugfs_dir(int device);
 
 #endif /* __IGT_DEBUGFS_H__ */
