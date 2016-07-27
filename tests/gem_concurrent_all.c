@@ -81,7 +81,7 @@ struct buffers {
 	drm_intel_bo **src, **dst;
 	drm_intel_bo *snoop, *spare;
 	uint32_t *tmp;
-	int width, height, npixels;
+	int width, height, npixels, page_size;
 	int count, num_buffers;
 };
 
@@ -258,8 +258,7 @@ userptr_create_bo(const struct buffers *b)
 	void *ptr;
 
 	memset(&userptr, 0, sizeof(userptr));
-	userptr.user_size = b->npixels * 4;
-	userptr.user_size = (userptr.user_size + 4095) & -4096;
+	userptr.user_size = b->page_size;
 
 	ptr = mmap(NULL, userptr.user_size,
 		   PROT_READ | PROT_WRITE, MAP_ANON | MAP_SHARED, -1, 0);
@@ -357,8 +356,7 @@ dmabuf_create_bo(const struct buffers *b)
 	struct dmabuf *dmabuf;
 	int size;
 
-	size = 4*b->npixels;
-	size = (size + 4095) & -4096;
+	size = b->page_size;
 
 	memset(&args, 0, sizeof(args));
 	args.handle = gem_create(fd, size);
@@ -755,7 +753,9 @@ static void buffers_init(struct buffers *b,
 	b->width = size->width;
 	b->height = size->height;
 	b->npixels = size->width * size->height;
-	b->tmp = malloc(4*b->npixels);
+	b->page_size = 4*b->npixels;
+	b->page_size = (b->page_size + 4095) & -4096;
+	b->tmp = malloc(b->page_size);
 	igt_assert(b->tmp);
 
 	b->bufmgr = drm_intel_bufmgr_gem_init(_fd, 4096);
@@ -892,7 +892,7 @@ static void blt_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 
 static void cpu_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 {
-	const int size = b->npixels * sizeof(uint32_t);
+	const int size = b->page_size;
 	void *d, *s;
 
 	gem_set_domain(fd, src->handle, I915_GEM_DOMAIN_CPU, 0);
@@ -908,7 +908,7 @@ static void cpu_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 
 static void gtt_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 {
-	const int size = b->npixels * sizeof(uint32_t);
+	const int size = b->page_size;
 	void *d, *s;
 
 	gem_set_domain(fd, src->handle, I915_GEM_DOMAIN_GTT, 0);
@@ -925,7 +925,7 @@ static void gtt_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 
 static void wc_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 {
-	const int size = b->width * sizeof(uint32_t);
+	const int size = b->page_size;
 	void *d, *s;
 
 	gem_set_domain(fd, src->handle, I915_GEM_DOMAIN_GTT, 0);
