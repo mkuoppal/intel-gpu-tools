@@ -1,33 +1,34 @@
-noinst_PROGRAMS = \
-	hsw_compute_wrpll \
-	skl_compute_wrpll \
-	skl_ddb_allocation \
+noinst_PROGRAMS =		\
+	hsw_compute_wrpll	\
+	skl_compute_wrpll	\
+	skl_ddb_allocation	\
 	$(NULL)
 
-bin_PROGRAMS = 				\
-	igt_stats			\
-	intel_audio_dump 		\
-	intel_reg			\
-	intel_backlight 		\
-	intel_bios_dumper 		\
-	intel_bios_reader 		\
-	intel_display_crc		\
-	intel_display_poller		\
-	intel_forcewaked		\
-	intel_gpu_frequency		\
-	intel_firmware_decode		\
-	intel_gpu_time 			\
-	intel_gpu_top 			\
-	intel_gtt 			\
-	intel_infoframes		\
-	intel_l3_parity			\
-	intel_lid			\
-	intel_opregion_decode		\
-	intel_panel_fitter		\
-	intel_reg_checker 		\
-	intel_residency			\
-	intel_stepping 			\
-	intel_watermark
+bin_PROGRAMS =			\
+	igt_stats		\
+	intel_audio_dump	\
+	intel_reg		\
+	intel_backlight		\
+	intel_bios_dumper	\
+	intel_bios_reader	\
+	intel_display_crc	\
+	intel_display_poller	\
+	intel_forcewaked	\
+	intel_gpu_frequency	\
+	intel_firmware_decode	\
+	intel_gpu_time		\
+	intel_gpu_top		\
+	intel_gtt		\
+	intel_infoframes	\
+	intel_l3_parity		\
+	intel_lid		\
+	intel_opregion_decode	\
+	intel_panel_fitter	\
+	intel_reg_checker	\
+	intel_residency		\
+	intel_stepping		\
+	intel_watermark		\
+	$(NULL)
 
 dist_bin_SCRIPTS = intel_gpu_abrt
 
