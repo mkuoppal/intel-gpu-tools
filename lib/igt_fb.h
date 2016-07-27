@@ -43,8 +43,24 @@ typedef struct _cairo cairo_t;
 
 #include <i915_drm.h>
 
-/* helpers to create nice-looking framebuffers */
-struct igt_fb {
+/**
+ * igt_fb_t:
+ * @fb_id: KMS ID of the framebuffer
+ * @fd: DRM device fd this framebuffer is created on
+ * @gem_handle: GEM handler of the underlying backing storage
+ * @is_dumb: Whether this framebuffer was allocated using the dumb buffer API
+ * @drm_format: DRM FOURCC code
+ * @width: width in pixels
+ * @height: height in pixels
+ * @stride: line stride in bytes
+ * @tiling: tiling mode as a DRM framebuffer modifier
+ * @size: size in bytes of the underlying backing storage
+ * @cairo_surface: optionally attached cairo drawing surface
+ * @domain: current domain for cache flushing tracking on i915.ko
+ *
+ * Tracking structure for KMS framebuffer objects.
+ */
+typedef struct igt_fb {
 	uint32_t fb_id;
 	int fd;
 	uint32_t gem_handle;
@@ -52,13 +68,24 @@ struct igt_fb {
 	uint32_t drm_format;
 	int width;
 	int height;
-	unsigned stride;
+	unsigned int stride;
 	uint64_t tiling;
-	unsigned size;
+	unsigned int size;
 	cairo_surface_t *cairo_surface;
-	unsigned domain;
-};
+	unsigned int domain;
+} igt_fb_t;
 
+/**
+ * igt_text_align:
+ * @align_left: align left
+ * @align_right: align right
+ * @align_bottom: align bottom
+ * @align_top: align top
+ * @align_vcenter: align vcenter
+ * @align_hcenter: align hcenter
+ *
+ * Alignment mode for text drawing using igt_cairo_printf_line().
+ */
 enum igt_text_align {
 	align_left,
 	align_bottom	= align_left,
@@ -99,7 +126,7 @@ int igt_dirty_fb(int fd, struct igt_fb *fb);
 
 int igt_create_bo_with_dimensions(int fd, int width, int height, uint32_t format,
 				  uint64_t modifier, unsigned stride,
-				  unsigned *stride_out, unsigned *size_out,
+				  unsigned *stride_ret, unsigned *size_ret,
 				  bool *is_dumb);
 
 /* cairo-based painting */
