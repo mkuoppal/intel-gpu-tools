@@ -14,6 +14,12 @@ if HAVE_LIBDRM_VC4
         igt_vc4.h
 endif
 
+if !HAVE_LIBDRM_INTEL
+    libintel_tools_la_SOURCES += 	\
+        stubs/drm/intel_bufmgr.c	\
+        stubs/drm/intel_bufmgr.h
+endif
+
 AM_CPPFLAGS = -I$(top_srcdir)
 AM_CFLAGS = $(CWARNFLAGS) $(DRM_CFLAGS) $(PCIACCESS_CFLAGS) $(LIBUNWIND_CFLAGS) $(DEBUG_CFLAGS) \
 	    -DIGT_SRCDIR=\""$(abs_top_srcdir)/tests"\" \
