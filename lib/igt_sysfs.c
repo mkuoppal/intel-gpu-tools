@@ -37,6 +37,16 @@
 
 #include "igt_sysfs.h"
 
+/**
+ * SECTION:igt_sysfs
+ * @short_description: Support code for sysfs features
+ * @title: sysfs
+ * @include: igt.h
+ *
+ * This library provides helpers to access sysfs features. Right now it only
+ * provides basic support for like igt_sysfs_open().
+ */
+
 static int readN(int fd, char *buf, int len)
 {
 	int total = 0;
@@ -70,6 +80,7 @@ static int writeN(int fd, const char *buf, int len)
 /**
  * igt_sysfs_open:
  * @device: fd of the device (or -1 to default to Intel)
+ * @idx: optional pointer to store the card index of the opened device
  *
  * This opens the sysfs directory corresponding to device for use
  * with igt_sysfs_set() and igt_sysfs_get().
@@ -77,17 +88,17 @@ static int writeN(int fd, const char *buf, int len)
  * Returns:
  * The directory fd, or -1 on failure.
  */
-int igt_sysfs_open(int fd, int *idx)
+int igt_sysfs_open(int device, int *idx)
 {
 	char path[80];
 	struct stat st;
 
-	if (fd != -1 && (fstat(fd, &st) || !S_ISCHR(st.st_mode)))
+	if (device != -1 && (fstat(device, &st) || !S_ISCHR(st.st_mode)))
 		return -1;
 
 	for (int n = 0; n < 16; n++) {
 		int len = sprintf(path, "/sys/class/drm/card%d", n);
-		if (fd != -1) {
+		if (device != -1) {
 			FILE *file;
 			int ret, maj, min;
 
@@ -129,11 +140,11 @@ int igt_sysfs_open(int fd, int *idx)
  * Returns:
  * The directory fd, or -1 on failure.
  */
-int igt_sysfs_open_parameters(int fd)
+int igt_sysfs_open_parameters(int device)
 {
 	int dir, params;
 
-	dir = igt_sysfs_open(fd, &params);
+	dir = igt_sysfs_open(device, &params);
 	if (dir < 0)
 		return -1;
 
@@ -220,6 +231,19 @@ out:
 	return buf;
 }
 
+/**
+ * igt_sysfs_scanf:
+ * @dir: directory for the device from igt_sysfs_open()
+ * @attr: name of the sysfs node to open
+ * @fmt: scanf format string
+ * @...: Additional paramaters to store the scaned input values
+ *
+ * scanf() wrapper for sysfs.
+ * 
+ * Returns:
+ * Number of values successfully scanned (which can be 0), EOF on errors or
+ * premature end of file.
+ */
 int igt_sysfs_scanf(int dir, const char *attr, const char *fmt, ...)
 {
 	FILE *file;
@@ -245,6 +269,18 @@ int igt_sysfs_scanf(int dir, const char *attr, const char *fmt, ...)
 	return ret;
 }
 
+/**
+ * igt_sysfs_printf:
+ * @dir: directory for the device from igt_sysfs_open()
+ * @attr: name of the sysfs node to open
+ * @fmt: printf format string
+ * @...: Additional paramaters to store the scaned input values
+ *
+ * printf() wrapper for sysfs.
+ * 
+ * Returns:
+ * Number of characters written, negative value on error.
+ */
 int igt_sysfs_printf(int dir, const char *attr, const char *fmt, ...)
 {
 	FILE *file;
@@ -270,6 +306,16 @@ int igt_sysfs_printf(int dir, const char *attr, const char *fmt, ...)
 	return ret;
 }
 
+/**
+ * igt_sysfs_get_boolean:
+ * @dir: directory for the device from igt_sysfs_open()
+ * @attr: name of the sysfs node to open
+ *
+ * Convenience wrapper to read a boolean sysfs file.
+ * 
+ * Returns:
+ * The value read.
+ */
 bool igt_sysfs_get_boolean(int dir, const char *attr)
 {
 	int result;
@@ -280,6 +326,17 @@ bool igt_sysfs_get_boolean(int dir, const char *attr)
 	return result;
 }
 
+/**
+ * igt_sysfs_set_boolean:
+ * @dir: directory for the device from igt_sysfs_open()
+ * @attr: name of the sysfs node to open
+ * @value: value to set
+ *
+ * Convenience wrapper to write a boolean sysfs file.
+ * 
+ * Returns:
+ * The value read.
+ */
 bool igt_sysfs_set_boolean(int dir, const char *attr, bool value)
 {
 	return igt_sysfs_printf(dir, attr, "%d", value) == 1;
