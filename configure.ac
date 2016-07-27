@@ -119,7 +119,7 @@ if test "x$GCC" = "xyes"; then
 fi
 AC_SUBST(ASSEMBLER_WARN_CFLAGS)
 
-PKG_CHECK_MODULES(DRM, [libdrm_intel >= 2.4.67 libdrm])
+PKG_CHECK_MODULES(DRM, [libdrm])
 PKG_CHECK_MODULES(PCIACCESS, [pciaccess >= 0.10])
 
 case "$target_cpu" in
@@ -169,6 +169,23 @@ PKG_CHECK_MODULES(GLIB, glib-2.0)
 # -----------------------------------------------------------------------------
 #			Configuration options
 # -----------------------------------------------------------------------------
+AC_ARG_ENABLE(intel, AS_HELP_STRING([--disable-intel],
+	      [Enable building of intel specific parts (default: auto)]),
+	      [INTEL=$enableval], [INTEL=auto])
+if test "x$INTEL" = xauto; then
+	PKG_CHECK_EXISTS([libdrm_intel >= 2.4.64], [INTEL=yes], [INTEL=no])
+fi
+if test "x$INTEL" = xyes; then
+	PKG_CHECK_MODULES(DRM_INTEL, [libdrm_intel >= 2.4.64])
+	AC_DEFINE(HAVE_LIBDRM_INTEL, 1, [Have intel support])
+	DRM_LIBS="$DRM_LIBS $DRM_INTEL_LIBS"
+	AC_SUBST([DRM_LIBS])
+else
+	DRM_INTEL_CFLAGS=$(top_srcdir)/lib/stubs/drm/
+	AC_SUBST([DRM_INTEL_CFLAGS])
+fi
+AM_CONDITIONAL(HAVE_LIBDRM_INTEL, [test "x$INTEL" = xyes])
+
 # for dma-buf tests
 AC_ARG_ENABLE(nouveau, AS_HELP_STRING([--disable-nouveau],
 	      [Enable use of nouveau API for prime tests (default: auto)]),
