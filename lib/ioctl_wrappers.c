@@ -1352,6 +1352,7 @@ uint64_t gem_mappable_aperture_size(void)
 
 /**
  * gem_global_aperture_size:
+ * @fd: open i915 drm file descriptor
  *
  * Feature test macro to query the kernel for the global gpu aperture size.
  * This is the area available for the kernel to perform address translations.
@@ -1574,6 +1575,9 @@ off_t prime_get_size(int dma_buf_fd)
 /**
  * prime_sync_start
  * @dma_buf_fd: dma-buf fd handle
+ * @write: read/write or read-only access
+ *
+ * Must be called before starting CPU mmap access to a dma-buf.
  */
 void prime_sync_start(int dma_buf_fd, bool write)
 {
@@ -1590,6 +1594,9 @@ void prime_sync_start(int dma_buf_fd, bool write)
 /**
  * prime_sync_end
  * @dma_buf_fd: dma-buf fd handle
+ * @write: read/write or read-only access
+ *
+ * Must be called after finishing CPU mmap access to a dma-buf.
  */
 void prime_sync_end(int dma_buf_fd, bool write)
 {
