@@ -57,6 +57,7 @@
 
 /**
  * igt_vc4_get_cleared_bo:
+ * @fd: device file descriptor
  * @size: size of the BO in bytes
  * @clearval: u32 value that the buffer should be completely cleared with
  *
