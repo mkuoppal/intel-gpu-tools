@@ -520,7 +520,7 @@ int main(int argc, char **argv)
 		while (src == dst)
 			dst = random() % count;
 
-			copy(fd, handle[dst], tiling[dst], handle[src], tiling[src]);
+		copy(fd, handle[dst], tiling[dst], handle[src], tiling[src]);
 		start_val[dst] = start_val[src];
 	}
 	igt_info("verifying..."); fflush(stdout);
