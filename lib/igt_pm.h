@@ -28,4 +28,26 @@ void igt_pm_enable_audio_runtime_pm(void);
 int8_t *igt_pm_enable_sata_link_power_management(void);
 void igt_pm_restore_sata_link_power_management(int8_t *pm_data);
 
+/**
+ * igt_runtime_pm_status:
+ * @IGT_RUNTIME_PM_STATUS_ACTIVE: device is active
+ * @IGT_RUNTIME_PM_STATUS_SUSPENDED: device is suspended
+ * @IGT_RUNTIME_PM_STATUS_SUSPENDING: device is in the process of suspending
+ * @IGT_RUNTIME_PM_STATUS_RESUMING: device is in the process of resuming
+ * @IGT_RUNTIME_PM_STATUS_UNKNOWN: unknown runtime PM status
+ *
+ * Symbolic values for runtime PM device status.
+ */
+enum igt_runtime_pm_status {
+	IGT_RUNTIME_PM_STATUS_ACTIVE,
+	IGT_RUNTIME_PM_STATUS_SUSPENDED,
+	IGT_RUNTIME_PM_STATUS_SUSPENDING,
+	IGT_RUNTIME_PM_STATUS_RESUMING,
+	IGT_RUNTIME_PM_STATUS_UNKNOWN,
+};
+
+bool igt_setup_runtime_pm(void);
+enum igt_runtime_pm_status igt_get_runtime_pm_status(void);
+bool igt_wait_for_pm_status(enum igt_runtime_pm_status status);
+
 #endif /* IGT_PM_H */
