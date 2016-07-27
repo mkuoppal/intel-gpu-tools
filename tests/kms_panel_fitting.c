@@ -219,9 +219,6 @@ test_panel_fitting_fastset(igt_display_t *display, const enum pipe pipe, igt_out
 {
 	igt_plane_t *primary, *sprite;
 	drmModeModeInfo mode;
-	igt_crc_t topleft, cur_crc;
-	igt_pipe_crc_t *pipe_crc;
-
 	struct igt_fb black, red;
 
 	igt_assert(kmstest_get_connector_default_mode(display->drm_fd, output->config.connector, &mode));
@@ -245,9 +242,6 @@ test_panel_fitting_fastset(igt_display_t *display, const enum pipe pipe, igt_out
 
 	igt_display_commit2(display, COMMIT_ATOMIC);
 
-	pipe_crc = igt_pipe_crc_new(pipe, INTEL_PIPE_CRC_SOURCE_AUTO);
-	igt_pipe_crc_collect_crc(pipe_crc, &topleft);
-
 	mode.hdisplay = 640;
 	mode.vdisplay = 480;
 	igt_output_override_mode(output, &mode);
@@ -258,15 +252,9 @@ test_panel_fitting_fastset(igt_display_t *display, const enum pipe pipe, igt_out
 	/* Don't pass ALLOW_MODESET with overridden mode, force fastset. */
 	igt_display_commit_atomic(display, 0, NULL);
 
-	igt_pipe_crc_collect_crc(pipe_crc, &cur_crc);
-
-	igt_assert(!igt_crc_equal(&topleft, &cur_crc));
-
 	igt_plane_set_fb(primary, NULL);
 	igt_output_set_pipe(output, PIPE_NONE);
 	igt_output_override_mode(output, NULL);
-
-	igt_pipe_crc_free(pipe_crc);
 }
 
 static void test_atomic_fastset(igt_display_t *display)
@@ -280,7 +268,6 @@ static void test_atomic_fastset(igt_display_t *display)
 	if (stat("/sys/module/i915/parameters/fastboot", &sb) == 0)
 		igt_set_module_param_int("fastboot", 1);
 
-	igt_require_pipe_crc();
 	igt_require(display->is_atomic);
 	igt_require(intel_gen(intel_get_drm_devid(display->drm_fd)) >= 5);
 
