@@ -243,15 +243,15 @@ static const struct pci_id_match intel_device_match[] = {
 };
 
 /**
- * intel_device_info:
+ * intel_get_device_info:
  * @devid: pci device id
  *
  * Looks up the Intel GFX device info for the given device id.
  *
  * Returns:
- * The associated intel_device_info
+ * The associated intel_get_device_info
  */
-const struct intel_device_info *intel_device_info(uint16_t devid)
+const struct intel_device_info *intel_get_device_info(uint16_t devid)
 {
 	static const struct intel_device_info *cache = &intel_generic_info;
 	static uint16_t cached_devid;
@@ -284,7 +284,7 @@ out:
  */
 unsigned intel_gen(uint16_t devid)
 {
-	return ffs(intel_device_info(devid)->gen);
+	return ffs(intel_get_device_info(devid)->gen);
 }
 
 /**

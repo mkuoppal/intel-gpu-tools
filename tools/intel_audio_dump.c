@@ -2476,7 +2476,7 @@ int main(int argc, char **argv)
 	else
 		intel_mmio_use_pci_bar(pci_dev);
 
-	printf("%s audio registers:\n\n", intel_device_info(devid)->codename);
+	printf("%s audio registers:\n\n", intel_get_device_info(devid)->codename);
 	if (IS_VALLEYVIEW(devid)) {
 		dump_ironlake();
 	} else if (IS_CHERRYVIEW(devid)) {

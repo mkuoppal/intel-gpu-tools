@@ -34,7 +34,7 @@
 struct pci_device *intel_get_pci_device(void);
 uint32_t intel_get_drm_devid(int fd);
 
-const struct intel_device_info {
+struct intel_device_info {
 	unsigned gen;
 	bool is_mobile : 1;
 	bool is_whitney : 1;
@@ -64,7 +64,9 @@ const struct intel_device_info {
 	bool is_broxton : 1;
 	bool is_kabylake : 1;
 	const char *codename;
-} *intel_device_info(uint16_t devid) __attribute__((pure));
+};
+
+const struct intel_device_info *intel_get_device_info(uint16_t devid) __attribute__((pure));
 
 unsigned intel_gen(uint16_t devid) __attribute__((pure));
 unsigned intel_gt(uint16_t devid) __attribute__((pure));
@@ -120,42 +122,42 @@ void intel_check_pch(void);
 
 #endif /* __GTK_DOC_IGNORE__ */
 
-#define IS_915G(devid)		(intel_device_info(devid)->is_grantsdale)
-#define IS_915GM(devid)		(intel_device_info(devid)->is_alviso)
+#define IS_915G(devid)		(intel_get_device_info(devid)->is_grantsdale)
+#define IS_915GM(devid)		(intel_get_device_info(devid)->is_alviso)
 
 #define IS_915(devid)		(IS_915G(devid) || IS_915GM(devid))
 
-#define IS_945G(devid)		(intel_device_info(devid)->is_lakeport)
-#define IS_945GM(devid)		(intel_device_info(devid)->is_calistoga)
+#define IS_945G(devid)		(intel_get_device_info(devid)->is_lakeport)
+#define IS_945GM(devid)		(intel_get_device_info(devid)->is_calistoga)
 
 #define IS_945(devid)		(IS_945G(devid) || \
 				 IS_945GM(devid) || \
 				 IS_G33(devid))
 
-#define IS_PINEVIEW(devid)	(intel_device_info(devid)->is_pineview)
-#define IS_G33(devid)		(intel_device_info(devid)->is_bearlake || \
-				 intel_device_info(devid)->is_pineview)
+#define IS_PINEVIEW(devid)	(intel_get_device_info(devid)->is_pineview)
+#define IS_G33(devid)		(intel_get_device_info(devid)->is_bearlake || \
+				 intel_get_device_info(devid)->is_pineview)
 
-#define IS_BROADWATER(devid)	(intel_device_info(devid)->is_broadwater)
-#define IS_CRESTLINE(devid)	(intel_device_info(devid)->is_crestline)
+#define IS_BROADWATER(devid)	(intel_get_device_info(devid)->is_broadwater)
+#define IS_CRESTLINE(devid)	(intel_get_device_info(devid)->is_crestline)
 
-#define IS_GM45(devid)		(intel_device_info(devid)->is_cantiga)
-#define IS_G45(devid)		(intel_device_info(devid)->is_eaglelake)
+#define IS_GM45(devid)		(intel_get_device_info(devid)->is_cantiga)
+#define IS_G45(devid)		(intel_get_device_info(devid)->is_eaglelake)
 #define IS_G4X(devid)		(IS_G45(devid) || IS_GM45(devid))
 
-#define IS_IRONLAKE(devid)	(intel_device_info(devid)->is_ironlake)
-#define IS_ARRANDALE(devid)	(intel_device_info(devid)->is_arrandale)
-#define IS_IVYBRIDGE(devid)	(intel_device_info(devid)->is_ivybridge)
-#define IS_VALLEYVIEW(devid)	(intel_device_info(devid)->is_valleyview)
-#define IS_HASWELL(devid)	(intel_device_info(devid)->is_haswell)
-#define IS_BROADWELL(devid)	(intel_device_info(devid)->is_broadwell)
-#define IS_CHERRYVIEW(devid)	(intel_device_info(devid)->is_cherryview)
-#define IS_KABYLAKE(devid)	(intel_device_info(devid)->is_kabylake)
-#define IS_SKYLAKE(devid)	(intel_device_info(devid)->is_skylake)
-#define IS_BROXTON(devid)	(intel_device_info(devid)->is_broxton)
+#define IS_IRONLAKE(devid)	(intel_get_device_info(devid)->is_ironlake)
+#define IS_ARRANDALE(devid)	(intel_get_device_info(devid)->is_arrandale)
+#define IS_IVYBRIDGE(devid)	(intel_get_device_info(devid)->is_ivybridge)
+#define IS_VALLEYVIEW(devid)	(intel_get_device_info(devid)->is_valleyview)
+#define IS_HASWELL(devid)	(intel_get_device_info(devid)->is_haswell)
+#define IS_BROADWELL(devid)	(intel_get_device_info(devid)->is_broadwell)
+#define IS_CHERRYVIEW(devid)	(intel_get_device_info(devid)->is_cherryview)
+#define IS_KABYLAKE(devid)	(intel_get_device_info(devid)->is_kabylake)
+#define IS_SKYLAKE(devid)	(intel_get_device_info(devid)->is_skylake)
+#define IS_BROXTON(devid)	(intel_get_device_info(devid)->is_broxton)
 
-#define IS_GEN(devid, x)	(intel_device_info(devid)->gen & (1u << ((x)-1)))
-#define AT_LEAST_GEN(devid, x)	(intel_device_info(devid)->gen & -(1u << ((x)-1)))
+#define IS_GEN(devid, x)	(intel_get_device_info(devid)->gen & (1u << ((x)-1)))
+#define AT_LEAST_GEN(devid, x)	(intel_get_device_info(devid)->gen & -(1u << ((x)-1)))
 
 #define IS_GEN2(devid)		IS_GEN(devid, 2)
 #define IS_GEN3(devid)		IS_GEN(devid, 3)
@@ -166,7 +168,7 @@ void intel_check_pch(void);
 #define IS_GEN8(devid)		IS_GEN(devid, 8)
 #define IS_GEN9(devid)		IS_GEN(devid, 9)
 
-#define IS_MOBILE(devid)	(intel_device_info(devid)->is_mobile)
+#define IS_MOBILE(devid)	(intel_get_device_info(devid)->is_mobile)
 #define IS_965(devid)		AT_LEAST_GEN(devid, 4)
 
 #define HAS_BSD_RING(devid)	AT_LEAST_GEN(devid, 5)

@@ -657,7 +657,7 @@ static int intel_reg_help(struct config *config, int argc, char *argv[])
  */
 static const char *get_codename(uint32_t devid)
 {
-	return intel_device_info(devid)->codename;
+	return intel_get_device_info(devid)->codename;
 }
 
 /*
