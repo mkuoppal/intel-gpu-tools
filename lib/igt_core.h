@@ -720,7 +720,16 @@ void igt_skip_on_simulation(void);
 
 extern const char *igt_interactive_debug;
 
-/* structured logging */
+/**
+ * igt_log_level:
+ * @IGT_LOG_DEBUG: debug information, not printed by default
+ * @IGT_LOG_INFO: informational message, printed by default
+ * @IGT_LOG_WARN: non-fatal warnings which should be treated as test failures
+ * @IGT_LOG_CRITICAL: critical errors which lead to immediate termination of tests
+ * @IGT_LOG_NONE: unused
+ *
+ * Log levels used by functions like igt_log().
+ */
 enum igt_log_level {
 	IGT_LOG_DEBUG,
 	IGT_LOG_INFO,
