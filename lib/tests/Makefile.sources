@@ -1,4 +1,4 @@
-check_PROGRAMS = \
+check_prog_list = \
 	igt_no_exit \
 	igt_no_exit_list_only \
 	igt_fork_helper \
@@ -15,13 +15,13 @@ check_PROGRAMS = \
 	igt_exit_handler \
 	$(NULL)
 
-check_SCRIPTS = \
+check_script_list = \
 	igt_command_line.sh \
 	$(NULL)
 
 TESTS = \
-	$(check_PROGRAMS) \
-	$(check_SCRIPTS) \
+	$(check_prog_list) \
+	$(check_script_list) \
 	$(NULL)
 
 # Test that exercise specific asserts in the test framework library and are

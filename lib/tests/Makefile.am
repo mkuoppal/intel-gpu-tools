@@ -1,5 +1,8 @@
 include Makefile.sources
 
+check_PROGRAMS = $(check_prog_list)
+check_SCRIPTS = $(check_script_list)
+
 AM_TESTS_ENVIRONMENT = \
 	top_builddir=$(top_builddir) \
 	top_srcdir=$(top_srcdir)
