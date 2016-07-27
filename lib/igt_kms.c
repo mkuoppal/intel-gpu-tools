@@ -50,6 +50,29 @@
 #include "igt_debugfs.h"
 #include "igt_sysfs.h"
 
+/**
+ * SECTION:igt_kms
+ * @short_description: Kernel modesetting support library
+ * @title: KMS
+ * @include: igt.h
+ *
+ * This library provides support to enumerate and set modeset configurations.
+ *
+ * There are two parts in this library: First the low level helper function
+ * which directly build on top of raw ioctls or the interfaces provided by
+ * libdrm. Those functions all have a kmstest_ prefix.
+ *
+ * The second part is a high-level library to manage modeset configurations
+ * which abstracts away some of the low-level details like the difference
+ * between legacy and universal plane support for setting cursors or in the
+ * future the difference between legacy and atomic commit. These high-level
+ * functions have all igt_ prefixes. This part is still very much work in
+ * progress and so also lacks a bit documentation for the individual functions.
+ *
+ * Note that this library's header pulls in the [i-g-t framebuffer](intel-gpu-tools-i-g-t-framebuffer.html)
+ * library as a dependency.
+ */
+
 /* list of connectors that need resetting on exit */
 #define MAX_CONNECTORS 32
 static char *forced_connectors[MAX_CONNECTORS + 1];
@@ -280,29 +303,6 @@ const unsigned char* igt_kms_get_alt_edid(void)
 
 	return alt_edid;
 }
-
-/**
- * SECTION:igt_kms
- * @short_description: Kernel modesetting support library
- * @title: KMS
- * @include: igt.h
- *
- * This library provides support to enumerate and set modeset configurations.
- *
- * There are two parts in this library: First the low level helper function
- * which directly build on top of raw ioctls or the interfaces provided by
- * libdrm. Those functions all have a kmstest_ prefix.
- *
- * The second part is a high-level library to manage modeset configurations
- * which abstracts away some of the low-level details like the difference
- * between legacy and universal plane support for setting cursors or in the
- * future the difference between legacy and atomic commit. These high-level
- * functions have all igt_ prefixes. This part is still very much work in
- * progress and so also lacks a bit documentation for the individual functions.
- *
- * Note that this library's header pulls in the [i-g-t framebuffer](intel-gpu-tools-i-g-t-framebuffer.html)
- * library as a dependency.
- */
 
 /**
  * kmstest_pipe_name:
