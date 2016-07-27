@@ -67,6 +67,11 @@ ifneq ("${ANDROID_HAS_CAIRO}", "1")
     skip_tools_list += intel_residency
 endif
 
+ifeq ($(HAVE_LIBDRM_INTEL),true)
+    bin_PROGRAMS += $(LIBDRM_INTEL_BIN)
+    intel_error_decode_LDFLAGS = -lz
+endif
+
 tools_list := $(filter-out $(skip_tools_list),$(bin_PROGRAMS))
 
 $(foreach item,$(tools_list),$(eval $(call add_tool,$(item))))

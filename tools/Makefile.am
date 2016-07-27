@@ -1,5 +1,10 @@
 include Makefile.sources
 
+if HAVE_LIBDRM_INTEL
+	bin_PROGRAMS += $(LIBDRM_INTEL_BIN)
+	intel_error_decode_LDFLAGS = -lz
+endif
+
 SUBDIRS = null_state_gen registers
 
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/lib

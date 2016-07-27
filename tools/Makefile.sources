@@ -13,11 +13,8 @@ bin_PROGRAMS = 				\
 	intel_bios_reader 		\
 	intel_display_crc		\
 	intel_display_poller		\
-	intel_dump_decode 		\
-	intel_error_decode 		\
 	intel_forcewaked		\
 	intel_gpu_frequency		\
-	intel_framebuffer_dump 		\
 	intel_firmware_decode		\
 	intel_gpu_time 			\
 	intel_gpu_top 			\
@@ -27,7 +24,6 @@ bin_PROGRAMS = 				\
 	intel_lid			\
 	intel_opregion_decode		\
 	intel_panel_fitter		\
-	intel_perf_counters		\
 	intel_reg_checker 		\
 	intel_residency			\
 	intel_stepping 			\
@@ -35,18 +31,18 @@ bin_PROGRAMS = 				\
 
 dist_bin_SCRIPTS = intel_gpu_abrt
 
-intel_dump_decode_SOURCES = 	\
-	intel_dump_decode.c
+LIBDRM_INTEL_BIN =		\
+	intel_dump_decode	\
+	intel_error_decode	\
+	intel_framebuffer_dump	\
+	intel_perf_counters	\
+	$(NULL)
 
 intel_reg_SOURCES =		\
 	intel_reg.c		\
 	intel_reg_decode.c	\
 	intel_reg_spec.c	\
 	intel_reg_spec.h
-
-intel_error_decode_SOURCES =	\
-	intel_error_decode.c
-intel_error_decode_LDFLAGS = -lz
 
 intel_bios_reader_SOURCES =	\
 	intel_bios_reader.c	\
