@@ -1496,130 +1496,132 @@ run_mode(const char *prefix,
 				igt_fork_hang_detector(fd);
 
 		for (p = all ? pipelines : pskip; p->prefix; p++) {
-			igt_fixture p->require();
+			igt_subtest_group  {
+				igt_fixture p->require();
 
-			igt_subtest_f("%s-%s-%s-sanitycheck0%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers, do_basic0,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-sanitycheck0%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers, do_basic0,
+							p->copy, h->hang);
+				}
 
-			igt_subtest_f("%s-%s-%s-sanitycheck1%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers, do_basic1,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-sanitycheck1%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers, do_basic1,
+							p->copy, h->hang);
+				}
 
-			igt_subtest_f("%s-%s-%s-sanitycheckN%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers, do_basicN,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-sanitycheckN%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers, do_basicN,
+							p->copy, h->hang);
+				}
 
-			/* try to overwrite the source values */
-			igt_subtest_f("%s-%s-%s-overwrite-source-one%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_overwrite_source__one,
-					      p->copy, h->hang);
-			}
+				/* try to overwrite the source values */
+				igt_subtest_f("%s-%s-%s-overwrite-source-one%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_overwrite_source__one,
+							p->copy, h->hang);
+				}
 
-			igt_subtest_f("%s-%s-%s-overwrite-source%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_overwrite_source,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-overwrite-source%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_overwrite_source,
+							p->copy, h->hang);
+				}
 
-			igt_subtest_f("%s-%s-%s-overwrite-source-read-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_overwrite_source_read_bcs,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-overwrite-source-read-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_overwrite_source_read_bcs,
+							p->copy, h->hang);
+				}
 
-			igt_subtest_f("%s-%s-%s-overwrite-source-read-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				igt_require(rendercopy);
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_overwrite_source_read_rcs,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-overwrite-source-read-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					igt_require(rendercopy);
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_overwrite_source_read_rcs,
+							p->copy, h->hang);
+				}
 
-			igt_subtest_f("%s-%s-%s-overwrite-source-rev%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_overwrite_source__rev,
-					      p->copy, h->hang);
-			}
+				igt_subtest_f("%s-%s-%s-overwrite-source-rev%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_overwrite_source__rev,
+							p->copy, h->hang);
+				}
 
-			/* try to intermix copies with GPU copies*/
-			igt_subtest_f("%s-%s-%s-intermix-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				igt_require(rendercopy);
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_intermix_rcs,
-					      p->copy, h->hang);
-			}
-			igt_subtest_f("%s-%s-%s-intermix-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				igt_require(rendercopy);
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_intermix_bcs,
-					      p->copy, h->hang);
-			}
-			igt_subtest_f("%s-%s-%s-intermix-both%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				igt_require(rendercopy);
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_intermix_both,
-					      p->copy, h->hang);
-			}
+				/* try to intermix copies with GPU copies*/
+				igt_subtest_f("%s-%s-%s-intermix-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					igt_require(rendercopy);
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_intermix_rcs,
+							p->copy, h->hang);
+				}
+				igt_subtest_f("%s-%s-%s-intermix-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					igt_require(rendercopy);
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_intermix_bcs,
+							p->copy, h->hang);
+				}
+				igt_subtest_f("%s-%s-%s-intermix-both%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					igt_require(rendercopy);
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_intermix_both,
+							p->copy, h->hang);
+				}
 
-			/* try to read the results before the copy completes */
-			igt_subtest_f("%s-%s-%s-early-read%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_early_read,
-					      p->copy, h->hang);
-			}
+				/* try to read the results before the copy completes */
+				igt_subtest_f("%s-%s-%s-early-read%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_early_read,
+							p->copy, h->hang);
+				}
 
-			/* concurrent reads */
-			igt_subtest_f("%s-%s-%s-read-read-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_read_read_bcs,
-					      p->copy, h->hang);
-			}
-			igt_subtest_f("%s-%s-%s-read-read-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				igt_require(rendercopy);
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_read_read_rcs,
-					      p->copy, h->hang);
-			}
+				/* concurrent reads */
+				igt_subtest_f("%s-%s-%s-read-read-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_read_read_bcs,
+							p->copy, h->hang);
+				}
+				igt_subtest_f("%s-%s-%s-read-read-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					igt_require(rendercopy);
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_read_read_rcs,
+							p->copy, h->hang);
+				}
 
-			/* split copying between rings */
-			igt_subtest_f("%s-%s-%s-write-read-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_write_read_bcs,
-					      p->copy, h->hang);
-			}
-			igt_subtest_f("%s-%s-%s-write-read-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				igt_require(rendercopy);
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_write_read_rcs,
-					      p->copy, h->hang);
-			}
+				/* split copying between rings */
+				igt_subtest_f("%s-%s-%s-write-read-bcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_write_read_bcs,
+							p->copy, h->hang);
+				}
+				igt_subtest_f("%s-%s-%s-write-read-rcs%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					igt_require(rendercopy);
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_write_read_rcs,
+							p->copy, h->hang);
+				}
 
-			/* and finally try to trick the kernel into loosing the pending write */
-			igt_subtest_f("%s-%s-%s-gpu-read-after-write%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
-				buffers_create(&buffers);
-				run_wrap_func(&buffers,
-					      do_gpu_read_after_write,
-					      p->copy, h->hang);
+				/* and finally try to trick the kernel into loosing the pending write */
+				igt_subtest_f("%s-%s-%s-gpu-read-after-write%s%s", prefix, mode->name, p->prefix, suffix, h->suffix) {
+					buffers_create(&buffers);
+					run_wrap_func(&buffers,
+							do_gpu_read_after_write,
+							p->copy, h->hang);
+				}
 			}
 		}
 
