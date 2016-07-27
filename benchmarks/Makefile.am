@@ -1,5 +1,7 @@
 include Makefile.sources
 
+benchmarks_PROGRAMS = $(benchmarks_prog_list)
+
 if HAVE_LIBDRM_INTEL
 	benchmarks_PROGRAMS += $(LIBDRM_INTEL_BENCHMARKS)
 endif

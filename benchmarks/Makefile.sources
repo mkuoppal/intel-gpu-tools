@@ -1,6 +1,6 @@
 benchmarksdir=$(libexecdir)/intel-gpu-tools/benchmarks
 
-benchmarks_PROGRAMS =			\
+benchmarks_prog_list =			\
 	gem_blt				\
 	gem_create			\
 	gem_exec_ctx			\

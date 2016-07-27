@@ -32,7 +32,7 @@ endef
 
 #================#
 
-benchmark_list := $(benchmarks_PROGRAMS)
+benchmark_list := $(benchmarks_prog_list)
 
 ifeq ($(HAVE_LIBDRM_INTEL),true)
     benchmark_list += $(LIBDRM_INTEL_BENCHMARKS)
