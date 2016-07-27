@@ -1,0 +1,7 @@
+bin_PROGRAMS =			\
+	$(NULL)
+
+HAVE_LIBDRM_INTEL_BIN =		\
+	intel_sprite_on		\
+	$(NULL)
+

@@ -1,6 +1,8 @@
-bin_PROGRAMS = 				\
-	intel_sprite_on			\
-	$(NULL)
+include Makefile.sources
+
+if HAVE_LIBDRM_INTEL
+	bin_PROGRAMS += $(LIBDRM_INTEL_BIN)
+endif
 
 AM_CPPFLAGS = -I$(top_srcdir) -I$(top_srcdir)/lib
 AM_CFLAGS = $(DRM_CFLAGS) $(PCIACCESS_CFLAGS) $(CWARNFLAGS) \
