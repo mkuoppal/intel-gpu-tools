@@ -31,6 +31,7 @@
     <xi:include href="xml/intel_chipset.xml"/>
     <xi:include href="xml/intel_io.xml"/>
     <xi:include href="xml/igt_vc4.xml"/>
+    <xi:include href="xml/igt_vgem.xml"/>
   </chapter>
   <xi:include href="xml/igt_test_programs.xml"/>
 

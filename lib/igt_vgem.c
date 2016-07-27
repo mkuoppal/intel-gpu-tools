@@ -28,6 +28,18 @@
 
 #include <sys/mman.h>
 
+/**
+ * SECTION:igt_vgem
+ * @short_description: VGEM support library
+ * @title: VGEM
+ * @include: igt.h
+ *
+ * This library provides various auxiliary helper functions for writing VGEM
+ * tests. VGEM is especially useful as a virtual dma-buf import and exporter and
+ * for testing cross driver synchronization (either using epxlicit dma-fences or
+ * using implicit fences attached to dma-bufs).
+ */
+
 int __vgem_create(int fd, struct vgem_bo *bo)
 {
 	struct drm_mode_create_dumb arg;
