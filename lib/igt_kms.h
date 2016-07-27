@@ -39,6 +39,15 @@
 
 /* Low-level helpers with kmstest_ prefix */
 
+/**
+ * pipe:
+ * @PIPE_NONE: Invalid pipe, used for disconnecting a output from a pipe.
+ * @PIPE_ANY: Deprecated alias for @PIPE_NONE.
+ * @PIPE_A: First crtc.
+ * @PIPE_B: Second crtc.
+ * @PIPE_C: Third crtc.
+ * @I915_MAX_PIPES: Max number of pipes allowed.
+ */
 enum pipe {
         PIPE_NONE = -1,
         PIPE_ANY = PIPE_NONE,
@@ -174,6 +183,13 @@ void *kmstest_dumb_map_buffer(int fd, uint32_t handle, uint64_t size,
  */
 
 /* High-level kms api with igt_ prefix */
+
+/**
+ * igt_commit_style:
+ * @COMMIT_LEGACY: Changes will be committed using the legacy API.
+ * @COMMIT_UNIVERSAL: Changes will be committed with the universal plane API, no modesets are allowed.
+ * @COMMIT_ATOMIC: Changes will be committed using the atomic API.
+ */
 enum igt_commit_style {
 	COMMIT_LEGACY = 0,
 	COMMIT_UNIVERSAL,
@@ -351,24 +367,50 @@ static inline bool igt_output_is_connected(igt_output_t *output)
 	return false;
 }
 
-static inline bool igt_pipe_connector_valid(enum pipe pipe,
-					    igt_output_t *output)
-{
-	return igt_output_is_connected(output) &&
-	       (output->config.valid_crtc_idx_mask & (1 << pipe));
-}
+/**
+ * igt_pipe_connector_valid:
+ * @pipe: pipe to check.
+ * @output: #igt_output_t to check.
+ *
+ * Checks whether the given pipe and output can be used together.
+ */
+#define igt_pipe_connector_valid(pipe, output) \
+	(igt_output_is_connected((output)) && \
+	       (output->config.valid_crtc_idx_mask & (1 << (pipe))))
 
 #define for_each_if(condition) if (!(condition)) {} else
 
+/**
+ * for_each_connected_output:
+ * @display: a pointer to an #igt_display_t structure
+ * @output: The output to iterate.
+ *
+ * This for loop iterates over all outputs.
+ */
 #define for_each_connected_output(display, output)		\
 	for (int i__ = 0;  i__ < (display)->n_outputs; i__++)	\
 		for_each_if (((output = &(display)->outputs[i__]), \
 			      igt_output_is_connected(output)))
 
+/**
+ * for_each_pipe:
+ * @display: a pointer to an #igt_display_t structure
+ * @pipe: The pipe to iterate.
+ *
+ * This for loop iterates over all pipes.
+ */
 #define for_each_pipe(display, pipe)					\
-	for (pipe = 0; pipe < igt_display_get_n_pipes(display); pipe++)	\
+	for (pipe = 0; pipe < igt_display_get_n_pipes(display); pipe++)
 
-/* Big complex macro to make 'break' work as expected. */
+/**
+ * for_each_pipe_with_valid_output:
+ * @display: a pointer to an #igt_display_t structure
+ * @pipe: The pipe for which this @pipe / @output combination is valid.
+ * @output: The output for which this @pipe / @output combination is valid.
+ *
+ * This for loop is called over all connected outputs. This function
+ * will try every combination of @pipe and @output.
+ */
 #define for_each_pipe_with_valid_output(display, pipe, output) \
 	for (int con__ = pipe = 0; \
 	     pipe < igt_display_get_n_pipes((display)) && con__ < (display)->n_outputs; \
@@ -376,6 +418,16 @@ static inline bool igt_pipe_connector_valid(enum pipe pipe,
 		for_each_if (((output = &(display)->outputs[con__]), \
 			     igt_pipe_connector_valid(pipe, output)))
 
+/**
+ * for_each_valid_output_on_pipe:
+ * @display: a pointer to an #igt_display_t structure
+ * @pipe: Pipe to enumerate valid outputs over
+ * @output: The enumerated output.
+ *
+ * This for loop is called over all connected @output that can be used
+ * on this @pipe . If there are no valid outputs for this pipe, nothing
+ * happens.
+ */
 #define for_each_valid_output_on_pipe(display, pipe, output) \
 	for_each_connected_output(display, output) \
 		for_each_if (igt_pipe_connector_valid(pipe, output))

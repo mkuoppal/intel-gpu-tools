@@ -468,6 +468,8 @@ uint32_t kmstest_find_crtc_for_connector(int fd, drmModeRes *res,
  * @width: width of the buffer in pixels
  * @height: height of the buffer in pixels
  * @bpp: bytes per pixel of the buffer
+ * @stride: Pointer which receives the dumb bo's stride, can be NULL.
+ * @size: Pointer which receives the dumb bo's size, can be NULL.
  *
  * This wraps the CREATE_DUMB ioctl, which allocates a new dumb buffer object
  * for the specified dimensions.
@@ -2269,6 +2271,25 @@ static int do_display_commit(igt_display_t *display,
 	return 0;
 }
 
+/**
+ * igt_display_try_commit_atomic:
+ * @display: #igt_display_t to commit.
+ * @flags: Flags passed to drmModeAtomicCommit.
+ * @user_data: User defined pointer passed to drmModeAtomicCommit.
+ *
+ * This function is similar to #igt_display_try_commit2, but is
+ * used when you want to pass different flags to the actual commit.
+ *
+ * Useful flags can be DRM_MODE_ATOMIC_ALLOW_MODESET,
+ * DRM_MODE_ATOMIC_NONBLOCK, DRM_MODE_PAGE_FLIP_EVENT,
+ * or DRM_MODE_ATOMIC_TEST_ONLY.
+ *
+ * @user_data is returned in the event if you pass
+ * DRM_MODE_PAGE_FLIP_EVENT to @flags.
+ *
+ * This function will return an error if commit fails, instead of
+ * aborting the test.
+ */
 int igt_display_try_commit_atomic(igt_display_t *display, uint32_t flags, void *user_data)
 {
 	int ret;
@@ -2291,6 +2312,24 @@ int igt_display_try_commit_atomic(igt_display_t *display, uint32_t flags, void *
 	return 0;
 }
 
+/**
+ * igt_display_commit_atomic:
+ * @display: #igt_display_t to commit.
+ * @flags: Flags passed to drmModeAtomicCommit.
+ * @user_data: User defined pointer passed to drmModeAtomicCommit.
+ *
+ * This function is similar to #igt_display_commit2, but is
+ * used when you want to pass different flags to the actual commit.
+ *
+ * Useful flags can be DRM_MODE_ATOMIC_ALLOW_MODESET,
+ * DRM_MODE_ATOMIC_NONBLOCK, DRM_MODE_PAGE_FLIP_EVENT,
+ * or DRM_MODE_ATOMIC_TEST_ONLY.
+ *
+ * @user_data is returned in the event if you pass
+ * DRM_MODE_PAGE_FLIP_EVENT to @flags.
+ *
+ * This function will abort the test if commit fails.
+ */
 void igt_display_commit_atomic(igt_display_t *display, uint32_t flags, void *user_data)
 {
 	int ret = igt_display_try_commit_atomic(display, flags, user_data);
@@ -2715,6 +2754,7 @@ void igt_reset_connectors(void)
 
 /**
  * kmstest_get_vbl_flag:
+ * @pipe_id: Pipe to convert to flag representation.
  *
  * Convert a pipe id into the flag representation
  * expected in DRM while processing DRM_IOCTL_WAIT_VBLANK.
