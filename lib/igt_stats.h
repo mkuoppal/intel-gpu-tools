@@ -32,16 +32,17 @@
 /**
  * igt_stats_t:
  * @values_u64: An array containing pushed integer values
+ * @is_float: Whether @values_f or @values_u64 is valid
  * @values_f: An array containing pushed float values
  * @n_values: The number of pushed values
  */
 typedef struct {
+	unsigned int n_values;
+	unsigned int is_float : 1;
 	union {
 		uint64_t *values_u64;
 		double *values_f;
 	};
-	unsigned int n_values;
-	unsigned int is_float : 1;
 
 	/*< private >*/
 	unsigned int capacity;
@@ -81,37 +82,22 @@ double igt_stats_get_median(igt_stats_t *stats);
 double igt_stats_get_variance(igt_stats_t *stats);
 double igt_stats_get_std_deviation(igt_stats_t *stats);
 
+/**
+ * igt_mean:
+ *
+ * Structure to compute running statistical numbers. Needs to be initialized
+ * with igt_mean_init(). Read out data using igt_mean_get() and
+ * igt_mean_get_variance().
+ */
 struct igt_mean {
+	/*< private >*/
 	double mean, sq, min, max;
 	unsigned long count;
 };
 
-static inline void igt_mean_init(struct igt_mean *m)
-{
-	memset(m, 0, sizeof(*m));
-	m->max = -HUGE_VAL;
-	m->min = HUGE_VAL;
-}
-
-static inline void igt_mean_add(struct igt_mean *m, double v)
-{
-	double delta = v - m->mean;
-	m->mean += delta / ++m->count;
-	m->sq += delta * (v - m->mean);
-	if (v < m->min)
-		m->min = v;
-	if (v > m->max)
-		m->max = v;
-}
-
-static inline double igt_mean_get(struct igt_mean *m)
-{
-	return m->mean;
-}
-
-static inline double igt_mean_get_variance(struct igt_mean *m)
-{
-	return m->sq / m->count;
-}
+void igt_mean_init(struct igt_mean *m);
+void igt_mean_add(struct igt_mean *m, double v);
+double igt_mean_get(struct igt_mean *m);
+double igt_mean_get_variance(struct igt_mean *m);
 
 #endif /* __IGT_STATS_H__ */

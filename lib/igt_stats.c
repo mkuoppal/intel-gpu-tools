@@ -606,3 +606,57 @@ double igt_stats_get_trimean(igt_stats_t *stats)
 	igt_stats_get_quartiles(stats, &q1, &q2, &q3);
 	return (q1 + 2*q2 + q3) / 4;
 }
+
+/**
+ * igt_mean_init:
+ * @m: tracking structure
+ *
+ * Initializes or resets @m.
+ */
+void igt_mean_init(struct igt_mean *m)
+{
+	memset(m, 0, sizeof(*m));
+	m->max = -HUGE_VAL;
+	m->min = HUGE_VAL;
+}
+
+/**
+ * igt_mean_add:
+ * @m: tracking structure
+ * @v: value
+ *
+ * Adds a new value @v to @m.
+ */
+void igt_mean_add(struct igt_mean *m, double v)
+{
+	double delta = v - m->mean;
+	m->mean += delta / ++m->count;
+	m->sq += delta * (v - m->mean);
+	if (v < m->min)
+		m->min = v;
+	if (v > m->max)
+		m->max = v;
+}
+
+/**
+ * igt_mean_get:
+ * @m: tracking structure
+ *
+ * Computes the current mean of the samples tracked in @m.
+ */
+double igt_mean_get(struct igt_mean *m)
+{
+	return m->mean;
+}
+
+/**
+ * igt_mean_get_variance:
+ * @m: tracking structure
+ *
+ * Computes the current variance of the samples tracked in @m.
+ */
+double igt_mean_get_variance(struct igt_mean *m)
+{
+	return m->sq / m->count;
+}
+
