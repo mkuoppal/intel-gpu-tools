@@ -4,7 +4,7 @@ noinst_PROGRAMS =		\
 	skl_ddb_allocation	\
 	$(NULL)
 
-bin_PROGRAMS =			\
+tools_prog_lists =		\
 	igt_stats		\
 	intel_audio_dump	\
 	intel_reg		\

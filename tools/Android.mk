@@ -55,6 +55,7 @@ endef
 $(shell mkdir -p $(TARGET_OUT_VENDOR)/$(LOCAL_TOOLS_DIR)/registers)
 $(shell cp $(LOCAL_PATH)/registers/* $(TARGET_OUT_VENDOR)/$(LOCAL_TOOLS_DIR)/registers)
 
+bin_PROGRAMS := $(tools_prog_lists)
 
 skip_tools_list := \
     intel_framebuffer_dump \
