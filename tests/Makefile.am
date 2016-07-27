@@ -1,10 +1,10 @@
 include Makefile.sources
 
-if HAVE_NOUVEAU
+if HAVE_LIBDRM_NOUVEAU
     TESTS_progs_M += $(NOUVEAU_TESTS_M)
 endif
 
-if HAVE_VC4
+if HAVE_LIBDRM_VC4
     TESTS_progs_M += $(VC4_TESTS_M)
 endif
 
