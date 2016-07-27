@@ -1,4 +1,4 @@
-bin_PROGRAMS =			\
+demos_prog_list =		\
 	$(NULL)
 
 HAVE_LIBDRM_INTEL_BIN =		\

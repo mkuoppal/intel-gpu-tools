@@ -1,5 +1,7 @@
 include Makefile.sources
 
+bin_PROGRAMS = $(demos_prog_list)
+
 if HAVE_LIBDRM_INTEL
 	bin_PROGRAMS += $(LIBDRM_INTEL_BIN)
 endif

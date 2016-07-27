@@ -4,7 +4,7 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 
-LOCAL_SRC_FILES :=
+LOCAL_SRC_FILES := $(demos_prog_lists)
 
 ifeq ($(HAVE_LIBDRM_INTEL),true)
     LOCAL_SRC_FILES += $(LIBDRM_INTEL_BIN)
