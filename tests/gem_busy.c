@@ -383,6 +383,9 @@ igt_main
 
 	igt_fixture {
 		fd = drm_open_driver_master(DRIVER_INTEL);
+	}
+
+	igt_fixture {
 		igt_fork_hang_detector(fd);
 	}
 
@@ -406,16 +409,6 @@ igt_main
 					      "MI_STORE_DATA broken on gen6 bsd\n");
 				gem_quiescent_gpu(fd);
 				one(fd, e->exec_id, e->flags, 0);
-				gem_quiescent_gpu(fd);
-			}
-
-			igt_subtest_f("hang-%s", e->name) {
-				gem_require_ring(fd, e->exec_id | e->flags);
-				igt_skip_on_f(gen == 6 &&
-					      e->exec_id == I915_EXEC_BSD,
-					      "MI_STORE_DATA broken on gen6 bsd\n");
-				gem_quiescent_gpu(fd);
-				one(fd, e->exec_id, e->flags, HANG);
 				gem_quiescent_gpu(fd);
 			}
 		}
@@ -453,6 +446,34 @@ igt_main
 
 	igt_fixture {
 		igt_stop_hang_detector();
+	}
+
+	igt_subtest_group {
+		int gen = 0;
+
+		igt_fixture {
+			gem_require_mmap_wc(fd);
+			gen = intel_gen(intel_get_drm_devid(fd));
+		}
+
+		for (e = intel_execution_engines; e->name; e++) {
+			/* default exec-id is purely symbolic */
+			if (e->exec_id == 0)
+				continue;
+
+			igt_subtest_f("hang-%s", e->name) {
+				gem_require_ring(fd, e->exec_id | e->flags);
+				igt_skip_on_f(gen == 6 &&
+					      e->exec_id == I915_EXEC_BSD,
+					      "MI_STORE_DATA broken on gen6 bsd\n");
+				gem_quiescent_gpu(fd);
+				one(fd, e->exec_id, e->flags, HANG);
+				gem_quiescent_gpu(fd);
+			}
+		}
+	}
+
+	igt_fixture {
 		close(fd);
 	}
 }
