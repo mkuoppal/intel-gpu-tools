@@ -38,21 +38,31 @@
 #define FD_ARR_SZ 100
 int fd_arr[FD_ARR_SZ];
 
+static bool allow_unlimited_files(void)
+{
+	struct rlimit rlim;
+	unsigned nofile_rlim = 1024*1024;
+
+	FILE *file = fopen("/proc/sys/fs/file-max", "r");
+	if (file) {
+		igt_assert(fscanf(file, "%u", &nofile_rlim) == 1);
+		igt_info("System limit for open files is %u\n", nofile_rlim);
+		fclose(file);
+	}
+
+	if (getrlimit(RLIMIT_NOFILE, &rlim))
+		return false;
+
+	rlim.rlim_cur = nofile_rlim;
+	rlim.rlim_max = nofile_rlim;
+	return setrlimit(RLIMIT_NOFILE, &rlim) == 0;
+}
+
 igt_simple_main
 {
 	int fd, i;
-	struct rlimit rlim;
-	unsigned nofile_rlim;
-	FILE *file_max = fopen("/proc/sys/fs/file-max", "r");
-	igt_assert(fscanf(file_max, "%u", &nofile_rlim) == 1);
-	fclose(file_max);
 
-	igt_info("System limit for open files is %u\n", nofile_rlim);
-
-	igt_assert(getrlimit(RLIMIT_NOFILE, &rlim) == 0);
-	rlim.rlim_cur = nofile_rlim;
-	rlim.rlim_max = nofile_rlim;
-	igt_assert(setrlimit(RLIMIT_NOFILE, &rlim) == 0);
+	igt_require(allow_unlimited_files());
 
 	fd = drm_open_driver(DRIVER_INTEL);
 

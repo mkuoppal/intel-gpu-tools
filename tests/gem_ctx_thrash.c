@@ -269,7 +269,7 @@ static void processes(void)
 		rlim.rlim_cur = ALIGN(num_ctx + 1024, 1024);
 		if (rlim.rlim_cur > rlim.rlim_max)
 			rlim.rlim_max = rlim.rlim_cur;
-		igt_assert(setrlimit(RLIMIT_NOFILE, &rlim) == 0);
+		igt_require(setrlimit(RLIMIT_NOFILE, &rlim) == 0);
 	}
 
 	fds = malloc(num_ctx * sizeof(int));
