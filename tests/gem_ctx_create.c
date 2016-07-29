@@ -96,13 +96,17 @@ static void files(int core, int timeout, const int ncpus)
 	gem_close(core, batch);
 }
 
-static void active(int fd, unsigned engine, int timeout, const int ncpus)
+static void active(int fd, unsigned engine, int timeout, int ncpus)
 {
 	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
+	unsigned *shared;
 
 	gem_require_ring(fd, engine);
+
+	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(shared != MAP_FAILED);
 
 	memset(&obj, 0, sizeof(obj));
 	obj.handle = gem_create(fd, 4096);
@@ -112,6 +116,29 @@ static void active(int fd, unsigned engine, int timeout, const int ncpus)
 	execbuf.buffers_ptr = (uintptr_t)&obj;
 	execbuf.buffer_count = 1;
 	execbuf.flags = engine;
+
+	if (ncpus < 0) {
+		igt_fork(child, ppgtt_nengine) {
+			unsigned long count = 0;
+
+			if (ppgtt_engines[child] == engine)
+				continue;
+
+			execbuf.flags = ppgtt_engines[child];
+
+			while (!*(volatile unsigned *)shared) {
+				obj.handle = gem_create(fd, 4096 << 10);
+				gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+
+				gem_execbuf(fd, &execbuf);
+				gem_close(fd, obj.handle);
+				count++;
+			}
+
+			igt_debug("hog[%d]: cycles=%lu\n", child, count);
+		}
+		ncpus = -ncpus;
+	}
 
 	igt_fork(child, ncpus) {
 		struct timespec start, end;
@@ -131,10 +158,13 @@ static void active(int fd, unsigned engine, int timeout, const int ncpus)
 		clock_gettime(CLOCK_MONOTONIC, &end);
 		igt_info("[%d] Context creation + execution: %.3f us\n",
 			 child, elapsed(&start, &end) / count *1e6);
+
+		shared[0] = 1;
 	}
 	igt_waitchildren();
 
 	gem_close(fd, obj.handle);
+	munmap(shared, 4096);
 }
 
 igt_main
@@ -191,6 +221,10 @@ igt_main
 			active(fd, e->exec_id | e->flags, 20, 1);
 		igt_subtest_f("forked-active-%s", e->name)
 			active(fd, e->exec_id | e->flags, 20, ncpus);
+		if (e->exec_id) {
+			igt_subtest_f("hog-%s", e->name)
+				active(fd, e->exec_id | e->flags, 20, -1);
+		}
 	}
 
 	igt_fixture {
