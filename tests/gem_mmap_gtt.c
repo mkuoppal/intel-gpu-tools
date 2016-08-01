@@ -248,26 +248,26 @@ test_wc(int fd)
 	gem_close(fd, handle);
 
 	gtt_reads = 0;
-	igt_until_timeout(1) {
+	igt_for_milliseconds(200) {
 		memcpy(cpu, gtt, 4096);
 		gtt_reads++;
 	}
-	igt_debug("%lu GTT reads in 1s\n", gtt_reads);
+	igt_debug("%lu GTT reads in 200us\n", gtt_reads);
 
 	gtt_writes = 0;
-	igt_until_timeout(1) {
+	igt_for_milliseconds(200) {
 		memcpy(gtt, cpu, 4096);
 		gtt_writes++;
 	}
-	igt_debug("%lu GTT writes in 1s\n", gtt_writes);
+	igt_debug("%lu GTT writes in 200us\n", gtt_writes);
 
 	if (igt_setup_clflush()) {
 		cpu_writes = 0;
-		igt_until_timeout(1) {
+		igt_for_milliseconds(200) {
 			igt_clflush_range(cpu, 4096);
 			cpu_writes++;
 		}
-		igt_debug("%lu CPU writes in 1s\n", cpu_writes);
+		igt_debug("%lu CPU writes in 200us\n", cpu_writes);
 	} else
 		cpu_writes = gtt_writes;
 
@@ -276,11 +276,11 @@ test_wc(int fd)
 
 	igt_assert_f(gtt_writes > 2*gtt_reads,
 		     "Write-Combined writes are expected to be much faster than reads: read=%.2fMiB/s, write=%.2fMiB/s\n",
-		     gtt_reads/256., gtt_writes/256.);
+		     5*gtt_reads/256., 5*gtt_writes/256.);
 
 	igt_assert_f(gtt_writes > cpu_writes/2,
 		     "Write-Combined writes are expected to be roughly equivalent to WB writes: WC (gtt)=%.2fMiB/s, WB (cpu)=%.2fMiB/s\n",
-		     gtt_writes/256., cpu_writes/256.);
+		     5*gtt_writes/256., 5*cpu_writes/256.);
 }
 
 static void
