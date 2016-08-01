@@ -256,17 +256,20 @@ test_wc(int fd)
 
 	gtt_writes = 0;
 	igt_until_timeout(1) {
-		memcpy(cpu, gtt, 4096);
+		memcpy(gtt, cpu, 4096);
 		gtt_writes++;
 	}
 	igt_debug("%lu GTT writes in 1s\n", gtt_writes);
 
-	cpu_writes = 0;
-	igt_until_timeout(1) {
-		memcpy(cpu, cpu, 4096);
-		cpu_writes++;
-	}
-	igt_debug("%lu CPU writes in 1s\n", cpu_writes);
+	if (igt_setup_clflush()) {
+		cpu_writes = 0;
+		igt_until_timeout(1) {
+			igt_clflush_range(cpu, 4096);
+			cpu_writes++;
+		}
+		igt_debug("%lu CPU writes in 1s\n", cpu_writes);
+	} else
+		cpu_writes = gtt_writes;
 
 	munmap(cpu, 4096);
 	munmap(gtt, 4096);
