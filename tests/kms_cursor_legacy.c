@@ -147,10 +147,9 @@ static void stress(igt_display_t *display,
 	munmap(results, 4096);
 }
 
-static uint32_t set_fb_on_crtc(igt_display_t *display, int pipe, struct igt_fb *fb_info)
+static igt_output_t *set_fb_on_crtc(igt_display_t *display, int pipe, struct igt_fb *fb_info)
 {
 	igt_output_t *output;
-	uint32_t fb_id;
 
 	for_each_valid_output_on_pipe(display, pipe, output) {
 		drmModeModeInfoPtr mode;
@@ -162,17 +161,17 @@ static uint32_t set_fb_on_crtc(igt_display_t *display, int pipe, struct igt_fb *
 		igt_output_set_pipe(output, pipe);
 		mode = igt_output_get_mode(output);
 
-		fb_id = igt_create_pattern_fb(display->drm_fd,
+		igt_create_pattern_fb(display->drm_fd,
 			      mode->hdisplay, mode->vdisplay,
 			      DRM_FORMAT_XRGB8888, I915_TILING_NONE, fb_info);
 
 		primary = igt_output_get_plane(output, IGT_PLANE_PRIMARY);
 		igt_plane_set_fb(primary, fb_info);
 
-		return fb_id;
+		return output;
 	}
 
-	return 0;
+	return NULL;
 }
 
 static void set_cursor_on_pipe(igt_display_t *display, enum pipe pipe, struct igt_fb *fb)
@@ -529,7 +528,28 @@ static void basic_flip_vs_cursor(igt_display_t *display, enum flip_test mode, in
 		igt_remove_fb(display->drm_fd, &cursor_fb2);
 }
 
-static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops)
+static bool skip_on_unsupported_nonblocking_modeset(igt_display_t *display)
+{
+	enum pipe pipe;
+	int ret;
+
+	igt_display_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+
+	ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_ATOMIC_NONBLOCK, NULL);
+
+	if (ret == -EINVAL)
+		return true;
+
+	igt_assert_eq(ret, 0);
+
+	/* Force the next state to update all crtc's, to synchronize with the nonblocking modeset. */
+	for_each_pipe(display, pipe)
+		display->pipes[pipe].mode_changed = true;
+
+	return false;
+}
+
+static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops, bool modeset)
 {
 	struct drm_mode_cursor arg[2], arg2[2];
 	struct drm_event_vblank vbl;
@@ -537,9 +557,14 @@ static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops)
 	unsigned vblank_start;
 	enum pipe pipe = find_connected_pipe(display, false);
 	enum pipe pipe2 = find_connected_pipe(display, true);
+	igt_output_t *output2;
+	bool skip_test = false;
+
+	if (modeset)
+		igt_require(display->is_atomic);
 
 	igt_require(set_fb_on_crtc(display, pipe, &fb_info));
-	igt_require(set_fb_on_crtc(display, pipe2, &fb2_info));
+	igt_require((output2 = set_fb_on_crtc(display, pipe2, &fb2_info)));
 
 	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
 	set_cursor_on_pipe(display, pipe, &cursor_fb);
@@ -556,6 +581,9 @@ static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops)
 	arg2[0].handle = 0;
 	arg2[0].width = arg2[0].height = 0;
 
+	if (modeset && (skip_test = skip_on_unsupported_nonblocking_modeset(display)))
+		goto cleanup;
+
 	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
@@ -569,14 +597,24 @@ static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops)
 		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
 		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[nloops & 1]);
 
+
 		flip_nonblocking(display, pipe, false, &fb_info);
 
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
 		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[nloops & 1]);
-		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[nloops & 1]);
-		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[nloops & 1]);
-		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[nloops & 1]);
+		if (!modeset) {
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[nloops & 1]);
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[nloops & 1]);
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[nloops & 1]);
+		} else {
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[nloops & 1]);
+
+			igt_output_set_pipe(output2, (nloops & 1) ? PIPE_NONE : pipe2);
+			igt_display_commit_atomic(display, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_ATOMIC_NONBLOCK, NULL);
+
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[nloops & 1]);
+		}
 
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
@@ -584,12 +622,22 @@ static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops)
 		igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start + 1);
 		igt_reset_timeout();
+
+		if (modeset) {
+			/* wait for pending modeset to complete, to prevent -EBUSY */
+			display->pipes[pipe2].mode_changed = true;
+			igt_display_commit2(display, COMMIT_ATOMIC);
+		}
 	}
 
+cleanup:
 	do_cleanup_display(display);
 	igt_remove_fb(display->drm_fd, &fb_info);
 	igt_remove_fb(display->drm_fd, &fb2_info);
 	igt_remove_fb(display->drm_fd, &cursor_fb);
+
+	if (skip_test)
+		igt_skip("Nonblocking modeset is not supported by this kernel\n");
 }
 
 static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, int nloops)
@@ -688,7 +736,7 @@ static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, in
 		igt_remove_fb(display->drm_fd, &cursor_fb2);
 }
 
-static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
+static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops, bool modeset)
 {
 	struct drm_mode_cursor arg[2], arg2[2];
 	struct drm_event_vblank vbl;
@@ -698,12 +746,17 @@ static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
 	int target;
 	enum pipe pipe = find_connected_pipe(display, false);
 	enum pipe pipe2 = find_connected_pipe(display, true);
+	igt_output_t *output2;
+	bool skip_test = false;
 
 	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(shared != MAP_FAILED);
 
+	if (modeset)
+		igt_require(display->is_atomic);
+
 	igt_require(set_fb_on_crtc(display, pipe, &fb_info));
-	igt_require(set_fb_on_crtc(display, pipe2, &fb2_info));
+	igt_require((output2 = set_fb_on_crtc(display, pipe2, &fb2_info)));
 
 	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
 	set_cursor_on_pipe(display, pipe, &cursor_fb);
@@ -720,6 +773,9 @@ static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
 	arg2[0].handle = 0;
 	arg2[0].width = arg2[0].height = 0;
 
+	if (modeset && (skip_test = skip_on_unsupported_nonblocking_modeset(display)))
+		goto cleanup;
+
 	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
 
 	target = 4096;
@@ -727,7 +783,9 @@ static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
 		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
-		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[0]);
+		if (!modeset)
+			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[0]);
+
 		for (int n = 0; n < target; n++) {
 			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[0]);
 		}
@@ -745,7 +803,14 @@ static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
 		igt_fork(child, 1) {
 			unsigned long count = 0;
 
-			do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[i & 1]);
+			if (!modeset)
+				do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg2[i & 1]);
+			else {
+				igt_output_set_pipe(output2, (i & 1) ? pipe2 : PIPE_NONE);
+				igt_display_commit_atomic(display, DRM_MODE_ATOMIC_ALLOW_MODESET |
+							  DRM_MODE_ATOMIC_NONBLOCK, NULL);
+			}
+
 			while (!shared[0]) {
 				do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[i & 1]);
 				count++;
@@ -754,12 +819,12 @@ static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
 			shared[0] = count;
 		}
 
-		flip_nonblocking(display, pipe, false, &fb_info);
+		flip_nonblocking(display, pipe, modeset, &fb_info);
 
 		igt_assert_eq(read(display->drm_fd, &vbl, sizeof(vbl)), sizeof(vbl));
 		vblank_start = vblank_last = vbl.sequence;
 		for (int n = 0; n < 60; n++) {
-			flip_nonblocking(display, pipe, false, &fb_info);
+			flip_nonblocking(display, pipe, modeset, &fb_info);
 
 			igt_assert_eq(read(display->drm_fd, &vbl, sizeof(vbl)), sizeof(vbl));
 			if (vbl.sequence != vblank_last + 1) {
@@ -779,11 +844,15 @@ static void two_screens_cursor_vs_flip(igt_display_t *display, int nloops)
 			     shared[0], 2*60ul*target, 60ul*target);
 	}
 
+cleanup:
 	do_cleanup_display(display);
 	igt_remove_fb(display->drm_fd, &fb_info);
 	igt_remove_fb(display->drm_fd, &fb2_info);
 	igt_remove_fb(display->drm_fd, &cursor_fb);
 	munmap((void *)shared, 4096);
+
+	if (skip_test)
+		igt_skip("Nonblocking modeset is not supported by this kernel\n");
 }
 
 igt_main
@@ -843,16 +912,28 @@ igt_main
 		stress(&display, -1, -ncpus, DRM_MODE_CURSOR_MOVE, 20);
 
 	igt_subtest("2x-flip-vs-cursor-legacy")
-		two_screens_flip_vs_cursor(&display, 8);
+		two_screens_flip_vs_cursor(&display, 8, false);
 
 	igt_subtest("2x-cursor-vs-flip-legacy")
-		two_screens_cursor_vs_flip(&display, 4);
+		two_screens_cursor_vs_flip(&display, 4, false);
 
 	igt_subtest("2x-long-flip-vs-cursor-legacy")
-		two_screens_flip_vs_cursor(&display, 150);
+		two_screens_flip_vs_cursor(&display, 150, false);
 
 	igt_subtest("2x-long-cursor-vs-flip-legacy")
-		two_screens_cursor_vs_flip(&display, 150);
+		two_screens_cursor_vs_flip(&display, 150, false);
+
+	igt_subtest("2x-nonblocking-modeset-vs-cursor-atomic")
+		two_screens_flip_vs_cursor(&display, 8, true);
+
+	igt_subtest("2x-cursor-vs-nonblocking-modeset-atomic")
+		two_screens_cursor_vs_flip(&display, 4, true);
+
+	igt_subtest("2x-long-nonblocking-modeset-vs-cursor-atomic")
+		two_screens_flip_vs_cursor(&display, 150, true);
+
+	igt_subtest("2x-long-cursor-vs-nonblocking-modeset-atomic")
+		two_screens_cursor_vs_flip(&display, 150, true);
 
 	for (i = 0; i <= flip_test_last; i++) {
 		const char *modes[flip_test_last+1] = {
