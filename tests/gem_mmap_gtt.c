@@ -231,6 +231,56 @@ test_write(int fd)
 }
 
 static void
+test_wc(int fd)
+{
+	unsigned long gtt_reads, gtt_writes, cpu_writes;
+	uint32_t handle;
+	void *gtt, *cpu;
+
+	handle = gem_create(fd, 4096);
+	cpu = gem_mmap__cpu(fd, handle, 0, 4096, PROT_READ | PROT_WRITE);
+	gem_set_domain(fd, handle, I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+	gem_close(fd, handle);
+
+	handle = gem_create(fd, 4096);
+	gtt = gem_mmap__gtt(fd, handle, 4096, PROT_READ | PROT_WRITE);
+	gem_set_domain(fd, handle, I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
+	gem_close(fd, handle);
+
+	gtt_reads = 0;
+	igt_until_timeout(1) {
+		memcpy(cpu, gtt, 4096);
+		gtt_reads++;
+	}
+	igt_debug("%lu GTT reads in 1s\n", gtt_reads);
+
+	gtt_writes = 0;
+	igt_until_timeout(1) {
+		memcpy(cpu, gtt, 4096);
+		gtt_writes++;
+	}
+	igt_debug("%lu GTT writes in 1s\n", gtt_writes);
+
+	cpu_writes = 0;
+	igt_until_timeout(1) {
+		memcpy(cpu, cpu, 4096);
+		cpu_writes++;
+	}
+	igt_debug("%lu CPU writes in 1s\n", cpu_writes);
+
+	munmap(cpu, 4096);
+	munmap(gtt, 4096);
+
+	igt_assert_f(gtt_writes > 2*gtt_reads,
+		     "Write-Combined writes are expected to be much faster than reads: read=%.2fMiB/s, write=%.2fMiB/s\n",
+		     gtt_reads/256., gtt_writes/256.);
+
+	igt_assert_f(gtt_writes > cpu_writes/2,
+		     "Write-Combined writes are expected to be roughly equivalent to WB writes: WC (gtt)=%.2fMiB/s, WB (cpu)=%.2fMiB/s\n",
+		     gtt_writes/256., cpu_writes/256.);
+}
+
+static void
 test_write_gtt(int fd)
 {
 	uint32_t dst;
@@ -610,6 +660,8 @@ igt_main
 		run_without_prefault(fd, test_write_gtt);
 	igt_subtest("basic-write-cpu-read-gtt")
 		test_write_cpu_read_gtt(fd);
+	igt_subtest("basic-wc")
+		test_wc(fd);
 
 	igt_subtest("basic-small-bo")
 		test_huge_bo(fd, -1, I915_TILING_NONE);
