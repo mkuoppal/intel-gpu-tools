@@ -1937,13 +1937,13 @@ static int igt_primary_plane_commit_legacy(igt_plane_t *primary,
 		    igt_output_name(output),
 		    kmstest_pipe_name(pipe->pipe),
 		    fb_id,
-		    primary->src_x, primary->src_x,
+		    primary->src_x, primary->src_y,
 		    mode->hdisplay, mode->vdisplay);
 
 		ret = drmModeSetCrtc(display->drm_fd,
 				     crtc_id,
 				     fb_id,
-				     primary->src_x, primary->src_x,
+				     primary->src_x, primary->src_y,
 				     &output->id,
 				     1,
 				     mode);
