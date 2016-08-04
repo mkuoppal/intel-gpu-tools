@@ -39,7 +39,7 @@
 /* Should take 64 pages to store the page pointers on 64 bit */
 #define OBJ_SIZE (128 * 1024 * 1024)
 
-unsigned char data[OBJ_SIZE];
+unsigned char *data;
 
 static void
 test_large_object(int fd)
@@ -79,7 +79,12 @@ igt_simple_main
 
 	igt_skip_on_simulation();
 
+	data = malloc(OBJ_SIZE);
+	igt_assert(data);
+
 	fd = drm_open_driver(DRIVER_INTEL);
 
 	test_large_object(fd);
+
+	free(data);
 }
