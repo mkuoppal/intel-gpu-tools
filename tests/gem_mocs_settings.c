@@ -132,65 +132,6 @@ static uint32_t get_engine_base(uint32_t engine)
 	}
 }
 
-static uint32_t get_mocs_register_value(int fd, uint64_t offset, uint32_t index)
-{
-	igt_assert(index < MAX_NUMBER_MOCS_REGISTERS);
-	return intel_register_read(offset + index * 4);
-}
-
-static void test_mocs_control_values(int fd, uint32_t engine)
-{
-	const uint32_t engine_base = get_engine_base(engine);
-	struct mocs_table table;
-	int local_fd;
-	int i;
-
-	local_fd = fd;
-	if (local_fd == -1)
-		local_fd = drm_open_driver_master(DRIVER_INTEL);
-
-	igt_assert(get_mocs_settings(local_fd, &table, false));
-
-	for (i = 0; i < table.size; i++)
-		igt_assert_eq_u32(get_mocs_register_value(local_fd,
-							  engine_base, i),
-				  table.table[i].control_value);
-
-	if (local_fd != fd)
-		close(local_fd);
-}
-
-static void test_mocs_l3cc_values(int fd)
-{
-	uint32_t reg_values[MAX_NUMBER_MOCS_REGISTERS/2];
-	struct mocs_table table;
-	int local_fd;
-	int i;
-
-	local_fd = fd;
-	if (local_fd == -1)
-		local_fd = drm_open_driver_master(DRIVER_INTEL);
-
-	for (i = 0; i < MAX_NUMBER_MOCS_REGISTERS / 2; i++)
-		reg_values[i] = intel_register_read(GEN9_LNCFCMOCS0 + (i * 4));
-
-	igt_assert(get_mocs_settings(local_fd, &table, false));
-
-	for (i = 0; i < table.size / 2; i++) {
-		igt_assert_eq_u32((reg_values[i] & 0xffff),
-				  table.table[i * 2].l3cc_value);
-		igt_assert_eq_u32((reg_values[i] >> 16),
-				  table.table[i * 2 + 1].l3cc_value);
-	}
-
-	if (table.size & 1)
-		igt_assert_eq_u32((reg_values[i] & 0xffff),
-				  table.table[i * 2].l3cc_value);
-
-	if (local_fd != fd)
-		close(local_fd);
-}
-
 #define MI_STORE_REGISTER_MEM_64_BIT_ADDR	((0x24 << 23) | 2)
 
 static int create_read_batch(struct drm_i915_gem_relocation_entry *reloc,
@@ -428,11 +369,8 @@ static void test_mocs_values(int fd)
 			continue;
 
 		igt_debug("Testing %s\n", e->name);
-		test_mocs_control_values(fd, engine);
 		test_context_mocs_values(fd, engine);
 	}
-
-	test_mocs_l3cc_values(fd);
 }
 
 static void default_context_tests(unsigned mode)
@@ -566,10 +504,18 @@ static void context_dirty_test(unsigned mode)
 
 static void run_tests(unsigned mode)
 {
+	struct pci_device *pci_dev;
+
+	pci_dev = intel_get_pci_device();
+	igt_require(pci_dev);
+	intel_register_access_init(pci_dev, 0);
+
 	default_context_tests(mode);
 	default_dirty_tests(mode);
 	context_save_restore_test(mode);
 	context_dirty_test(mode);
+
+	intel_register_access_fini();
 }
 
 static void test_requirements(void)
@@ -584,14 +530,8 @@ static void test_requirements(void)
 
 igt_main
 {
-	struct pci_device *pci_dev;
-
 	igt_fixture {
 		test_requirements();
-
-		pci_dev = intel_get_pci_device();
-		igt_require(pci_dev);
-		intel_register_access_init(pci_dev, 0);
 	}
 
 	igt_subtest("mocs-settings")
@@ -605,8 +545,4 @@ igt_main
 
 	igt_subtest("mocs-hibernate")
 		run_tests(HIBERNATE);
-
-	igt_fixture {
-		intel_register_access_fini();
-	}
 }
