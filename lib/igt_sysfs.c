@@ -307,6 +307,42 @@ int igt_sysfs_printf(int dir, const char *attr, const char *fmt, ...)
 }
 
 /**
+ * igt_sysfs_get_u32:
+ * @dir: directory for the device from igt_sysfs_open()
+ * @attr: name of the sysfs node to open
+ *
+ * Convenience wrapper to read a unsigned 32bit integer from a sysfs file.
+ *
+ * Returns:
+ * The value read.
+ */
+uint32_t igt_sysfs_get_u32(int dir, const char *attr)
+{
+	uint32_t result;
+
+	if (igt_sysfs_scanf(dir, attr, "%u", &result) != 1)
+		return 0;
+
+	return result;
+}
+
+/**
+ * igt_sysfs_set_u32:
+ * @dir: directory for the device from igt_sysfs_open()
+ * @attr: name of the sysfs node to open
+ * @value: value to set
+ *
+ * Convenience wrapper to write a unsigned 32bit integer to a sysfs file.
+ *
+ * Returns:
+ * True if successfully written
+ */
+bool igt_sysfs_set_u32(int dir, const char *attr, uint32_t value)
+{
+	return igt_sysfs_printf(dir, attr, "%u", value) == 1;
+}
+
+/**
  * igt_sysfs_get_boolean:
  * @dir: directory for the device from igt_sysfs_open()
  * @attr: name of the sysfs node to open

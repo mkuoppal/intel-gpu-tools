@@ -37,6 +37,9 @@ int igt_sysfs_scanf(int dir, const char *attr, const char *fmt, ...)
 int igt_sysfs_printf(int dir, const char *attr, const char *fmt, ...)
 	__attribute__((format(printf,3,4)));
 
+uint32_t igt_sysfs_get_u32(int dir, const char *attr);
+bool igt_sysfs_set_u32(int dir, const char *attr, uint32_t value);
+
 bool igt_sysfs_get_boolean(int dir, const char *attr);
 bool igt_sysfs_set_boolean(int dir, const char *attr, bool value);
 

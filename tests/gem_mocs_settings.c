@@ -29,6 +29,7 @@
 
 #include "igt.h"
 #include "igt_gt.h"
+#include "igt_sysfs.h"
 
 #define MAX_NUMBER_MOCS_REGISTERS	(64)
 
@@ -518,6 +519,39 @@ static void run_tests(unsigned mode)
 	intel_register_access_fini();
 }
 
+static int rc6_residency(int dir)
+{
+	return igt_sysfs_get_u32(dir, "power/rc6_residency_ms");
+}
+
+static void context_rc6_test(void)
+{
+	int fd = drm_open_driver(DRIVER_INTEL);
+	uint32_t ctx_id = gem_context_create(fd);
+	int residency;
+	int timeout;
+	int sysfs;
+
+	igt_debug("RC6 Context Test\n");
+	check_control_registers(fd, I915_EXEC_RENDER, ctx_id, false);
+	check_l3cc_registers(fd, I915_EXEC_RENDER, ctx_id, false);
+
+	sysfs = igt_sysfs_open(fd, NULL);
+
+	timeout = 3000 / 2;
+	residency = rc6_residency(sysfs);
+	while (rc6_residency(sysfs) == residency && --timeout)
+		usleep(2000);
+	igt_require(timeout);
+
+	close(sysfs);
+
+	check_control_registers(fd, I915_EXEC_RENDER, ctx_id, false);
+	check_l3cc_registers(fd, I915_EXEC_RENDER, ctx_id, false);
+	close(fd);
+}
+
+
 static void test_requirements(void)
 {
 	int fd = drm_open_driver_master(DRIVER_INTEL);
@@ -536,6 +570,9 @@ igt_main
 
 	igt_subtest("mocs-settings")
 		run_tests(NONE);
+
+	igt_subtest("mocs-rc6")
+		context_rc6_test();
 
 	igt_subtest("mocs-reset")
 		run_tests(RESET);
