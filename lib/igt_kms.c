@@ -377,7 +377,7 @@ static const char *mode_stereo_name(const drmModeModeInfo *mode)
  * kmstest_dump_mode:
  * @mode: libdrm mode structure
  *
- * Prints @mode to stdout in a huma-readable form.
+ * Prints @mode to stdout in a human-readable form.
  */
 void kmstest_dump_mode(drmModeModeInfo *mode)
 {
