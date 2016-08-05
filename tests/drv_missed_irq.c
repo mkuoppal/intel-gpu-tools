@@ -88,8 +88,9 @@ static void trigger_missed_interrupt(int fd, unsigned ring)
 		 * parent. We will have to wait for our parent to sleep
 		 * (gem_sync -> i915_wait_request) before we run.
 		 */
-		while (*((volatile uint32_t *)batch + 1000))
-			;
+		do {
+			sleep(1);
+		} while (*((volatile uint32_t *)batch + 1000));
 
 		*batch = MI_BATCH_BUFFER_END;
 		__sync_synchronize();
@@ -106,15 +107,9 @@ out:
 
 static void bind_to_cpu(int cpu)
 {
-	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	struct sched_param rt = {.sched_priority = 99 };
-	cpu_set_t allowed;
 
 	igt_assert(sched_setscheduler(getpid(), SCHED_RR | SCHED_RESET_ON_FORK, &rt) == 0);
-
-	CPU_ZERO(&allowed);
-	CPU_SET(cpu % ncpus, &allowed);
-	igt_assert(sched_setaffinity(getpid(), sizeof(cpu_set_t), &allowed) == 0);
 }
 
 igt_simple_main
@@ -123,12 +118,34 @@ igt_simple_main
 	FILE *file;
 	unsigned expect_rings;
 	unsigned missed_rings;
+	unsigned check_rings;
 	int fd;
 
 	igt_skip_on_simulation();
+	bind_to_cpu(0);
 
 	fd = drm_open_driver(DRIVER_INTEL);
 	gem_require_mmap_wc(fd);
+	igt_fork_hang_detector(fd);
+
+	file = igt_debugfs_fopen("i915_ring_test_irq", "w");
+	fprintf(file, "0");
+	fclose(file);
+
+	igt_debug("Clearing rings %x\n", expect_rings);
+	intel_detect_and_clear_missed_interrupts(fd);
+	for (e = intel_execution_engines; e->name; e++) {
+		if (expect_rings == -1 && e->exec_id)
+			continue;
+
+		if (expect_rings != -1 && e->exec_id == 0)
+			continue;
+
+		igt_debug("Clearing ring %s [%x]\n",
+			  e->name, e->exec_id | e->flags);
+		trigger_missed_interrupt(fd, e->exec_id | e->flags);
+	}
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 
 	file = igt_debugfs_fopen("i915_ring_test_irq", "w");
 	fprintf(file, "0x%x", -1);
@@ -140,11 +157,7 @@ igt_simple_main
 	fclose(file);
 
 	igt_debug("Testing rings %x\n", expect_rings);
-
-	igt_fork_hang_detector(fd);
 	intel_detect_and_clear_missed_interrupts(fd);
-
-	bind_to_cpu(0);
 	for (e = intel_execution_engines; e->name; e++) {
 		if (expect_rings == -1 && e->exec_id)
 			continue;
@@ -156,9 +169,13 @@ igt_simple_main
 			  e->name, e->exec_id | e->flags);
 		trigger_missed_interrupt(fd, e->exec_id | e->flags);
 	}
-
 	missed_rings = intel_detect_and_clear_missed_interrupts(fd);
-	igt_stop_hang_detector();
+
+	check_rings = -1;
+	file = igt_debugfs_fopen("i915_ring_test_irq", "r");
+	igt_ignore_warn(fscanf(file, "%x", &check_rings));
+	fclose(file);
+	igt_assert_eq_u32(check_rings, expect_rings);
 
 	file = igt_debugfs_fopen("i915_ring_test_irq", "w");
 	fprintf(file, "%x", 0);
@@ -169,5 +186,6 @@ igt_simple_main
 	else
 		igt_assert_eq_u32(missed_rings, expect_rings);
 
+	igt_stop_hang_detector();
 	close(fd);
 }
