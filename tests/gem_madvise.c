@@ -63,10 +63,23 @@ dontneed_before_mmap(void)
 
 	handle = gem_create(fd, OBJECT_SIZE);
 	gem_madvise(fd, handle, I915_MADV_DONTNEED);
-	ptr = __gem_mmap__gtt(fd, handle, OBJECT_SIZE, PROT_READ | PROT_WRITE);
-	igt_assert(ptr == NULL);
-	igt_assert(errno == EFAULT);
+	ptr = gem_mmap__gtt(fd, handle, OBJECT_SIZE, PROT_READ | PROT_WRITE);
 	close(fd);
+
+	signal(SIGSEGV, sigtrap);
+	signal(SIGBUS, sigtrap);
+	switch (setjmp(jmp)) {
+	case SIGBUS:
+		break;
+	case 0:
+		*ptr = 0;
+	default:
+		igt_assert(!"reached");
+		break;
+	}
+	munmap(ptr, OBJECT_SIZE);
+	signal(SIGBUS, SIG_DFL);
+	signal(SIGSEGV, SIG_DFL);
 }
 
 static void
@@ -77,7 +90,7 @@ dontneed_after_mmap(void)
 	char *ptr;
 
 	handle = gem_create(fd, OBJECT_SIZE);
-	ptr = __gem_mmap__gtt(fd, handle, OBJECT_SIZE, PROT_READ | PROT_WRITE);
+	ptr = gem_mmap__gtt(fd, handle, OBJECT_SIZE, PROT_READ | PROT_WRITE);
 	igt_assert(ptr);
 	gem_madvise(fd, handle, I915_MADV_DONTNEED);
 	close(fd);
