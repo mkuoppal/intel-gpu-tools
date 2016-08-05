@@ -26,6 +26,7 @@
  */
 
 #include <errno.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -38,13 +39,45 @@
 
 #include "intel_reg_spec.h"
 
+/**
+ * DEBUGSTRING:
+ * @result: character string where to write
+ * @len: maximum number of bytes to write
+ * @reg: register offset
+ * @val: register value
+ * @devid: PCI device ID
+ *
+ * Print the decoded representation of the register value into @result.
+ *
+ * Returns: Number of bytes written to @result
+ */
 #define _DEBUGSTRING(func) \
-	void func(char *result, int len, int reg, uint32_t val, uint32_t devid)
+	int func(char *result, int len, int reg, uint32_t val, uint32_t devid)
 #define DEBUGSTRING(func) static _DEBUGSTRING(func)
+
+/* snprintf that returns 0 when the thing didn't fit */
+static int __attribute__((format(printf, 3, 4)))
+z_snprintf(char *str, size_t size, const char *fmt, ...)
+{
+	va_list ap;
+	int ret;
+
+	va_start(ap, fmt);
+	ret = vsnprintf(str, size, fmt, ap);
+	va_end(ap);
+
+	if (ret >= size) {
+		fprintf(stderr, "snprintf() returned %d, expected < %zu\n",
+			ret, size);
+		return 0;
+	}
+
+	return ret;
+}
 
 DEBUGSTRING(i830_16bit_func)
 {
-	snprintf(result, len, "0x%04x", (uint16_t) val);
+	return z_snprintf(result, len, "0x%04x", (uint16_t) val);
 }
 
 DEBUGSTRING(i830_debug_dcc)
@@ -52,7 +85,7 @@ DEBUGSTRING(i830_debug_dcc)
 	const char *addressing = NULL;
 
 	if (!IS_MOBILE(devid))
-		return;
+		return 0;
 
 	if (IS_GEN4(devid)) {
 		if (val & (1 << 1))
@@ -76,7 +109,7 @@ DEBUGSTRING(i830_debug_dcc)
 		}
 	}
 
-	snprintf(result, len, "%s, XOR randomization: %sabled, XOR bit: %d",
+	return z_snprintf(result, len, "%s, XOR randomization: %sabled, XOR bit: %d",
 		 addressing,
 		 (val & (1 << 10)) ? "dis" : "en",
 		 (val & (1 << 9)) ? 17 : 11);
@@ -101,7 +134,7 @@ DEBUGSTRING(i830_debug_chdecmisc)
 		break;
 	}
 
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "%s, ch2 enh %sabled, ch1 enh %sabled, "
 		 "ch0 enh %sabled, "
 		 "flex %sabled, ep %spresent", enhmodesel,
@@ -114,24 +147,24 @@ DEBUGSTRING(i830_debug_chdecmisc)
 
 DEBUGSTRING(i830_debug_xyminus1)
 {
-	snprintf(result, len, "%d, %d", (val & 0xffff) + 1,
+	return z_snprintf(result, len, "%d, %d", (val & 0xffff) + 1,
 		 ((val & 0xffff0000) >> 16) + 1);
 }
 
 DEBUGSTRING(i830_debug_yxminus1)
 {
-	snprintf(result, len, "%d, %d", ((val & 0xffff0000) >> 16) + 1,
+	return z_snprintf(result, len, "%d, %d", ((val & 0xffff0000) >> 16) + 1,
 		 (val & 0xffff) + 1);
 }
 
 DEBUGSTRING(i830_debug_xy)
 {
-	snprintf(result, len, "%d, %d", (val & 0xffff), ((val & 0xffff0000) >> 16));
+	return z_snprintf(result, len, "%d, %d", (val & 0xffff), ((val & 0xffff0000) >> 16));
 }
 
 DEBUGSTRING(i830_debug_dspstride)
 {
-	snprintf(result, len, "%d bytes", val);
+	return z_snprintf(result, len, "%d bytes", val);
 }
 
 DEBUGSTRING(i830_debug_dspcntr)
@@ -139,9 +172,9 @@ DEBUGSTRING(i830_debug_dspcntr)
 	const char *enabled = val & DISPLAY_PLANE_ENABLE ? "enabled" : "disabled";
 	char plane = val & DISPPLANE_SEL_PIPE_B ? 'B' : 'A';
 	if (HAS_PCH_SPLIT(devid) || IS_BROXTON(devid))
-		snprintf(result, len, "%s", enabled);
+		return z_snprintf(result, len, "%s", enabled);
 	else
-		snprintf(result, len, "%s, pipe %c", enabled, plane);
+		return z_snprintf(result, len, "%s, pipe %c", enabled, plane);
 }
 
 DEBUGSTRING(i830_debug_pipeconf)
@@ -157,7 +190,7 @@ DEBUGSTRING(i830_debug_pipeconf)
 	else
 		bit30 = val & I965_PIPECONF_ACTIVE ? "active" : "inactive";
 
-	buf_len = snprintf(buf, sizeof(buf), "%s, %s", enabled, bit30);
+	buf_len = z_snprintf(buf, sizeof(buf), "%s, %s", enabled, bit30);
 
 	if (HAS_PCH_SPLIT(devid) || IS_BROXTON(devid)) {
 		const char *interlace;
@@ -190,7 +223,7 @@ DEBUGSTRING(i830_debug_pipeconf)
 			break;
 		}
 		if (buf_len < sizeof(buf))
-			buf_len += snprintf(&buf[buf_len], sizeof(buf) - buf_len,
+			buf_len += z_snprintf(&buf[buf_len], sizeof(buf) - buf_len,
 					    ", %s", interlace);
 	} else if (IS_GEN4(devid) || IS_VALLEYVIEW(devid) ||
 		   IS_CHERRYVIEW(devid)) {
@@ -217,7 +250,7 @@ DEBUGSTRING(i830_debug_pipeconf)
 			break;
 		}
 		if (buf_len < sizeof(buf))
-			buf_len += snprintf(&buf[buf_len], sizeof(buf) - buf_len,
+			buf_len += z_snprintf(&buf[buf_len], sizeof(buf) - buf_len,
 					    ", %s", interlace);
 	}
 
@@ -240,7 +273,7 @@ DEBUGSTRING(i830_debug_pipeconf)
 			break;
 		}
 		if (buf_len < sizeof(buf))
-			buf_len += snprintf(&buf[buf_len], sizeof(buf) - buf_len,
+			buf_len += z_snprintf(&buf[buf_len], sizeof(buf) - buf_len,
 					    ", %s", rotation);
 	}
 
@@ -265,11 +298,11 @@ DEBUGSTRING(i830_debug_pipeconf)
 			break;
 		}
 		if (buf_len < sizeof(buf))
-			buf_len += snprintf(&buf[buf_len], sizeof(buf) - buf_len,
+			buf_len += z_snprintf(&buf[buf_len], sizeof(buf) - buf_len,
 					    ", %s", bpc);
 	}
 
-	snprintf(result, len, "%s", buf);
+	return z_snprintf(result, len, "%s", buf);
 }
 
 DEBUGSTRING(i830_debug_pipestat)
@@ -323,7 +356,7 @@ DEBUGSTRING(i830_debug_pipestat)
 	    val & VBLANK_INT_STATUS ? " VBLANK_INT_STATUS" : "";
 	const char *_OREG_UPDATE_STATUS =
 	    val & OREG_UPDATE_STATUS ? " OREG_UPDATE_STATUS" : "";
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "status:%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
 		 _FIFO_UNDERRUN,
 		 _CRC_ERROR_ENABLE,
@@ -366,41 +399,41 @@ DEBUGSTRING(ivb_debug_port)
 			drrs = "high";
 			break;
 	}
-	snprintf(result, len, "HW DRRS %s",
+	return z_snprintf(result, len, "HW DRRS %s",
 			drrs);
 }
 
 DEBUGSTRING(i830_debug_hvtotal)
 {
-	snprintf(result, len, "%d active, %d total",
+	return z_snprintf(result, len, "%d active, %d total",
 		 (val & 0xffff) + 1,
 		 ((val & 0xffff0000) >> 16) + 1);
 }
 
 DEBUGSTRING(i830_debug_hvsyncblank)
 {
-	snprintf(result, len, "%d start, %d end",
+	return z_snprintf(result, len, "%d start, %d end",
 		 (val & 0xffff) + 1,
 		 ((val & 0xffff0000) >> 16) + 1);
 }
 
 DEBUGSTRING(i830_debug_vgacntrl)
 {
-	snprintf(result, len, "%s",
+	return z_snprintf(result, len, "%s",
 		 val & VGA_DISP_DISABLE ? "disabled" : "enabled");
 }
 
 DEBUGSTRING(i830_debug_fp)
 {
 	if (IS_PINEVIEW(devid)) {
-		snprintf(result, len, "n = %d, m1 = %d, m2 = %d",
+		return z_snprintf(result, len, "n = %d, m1 = %d, m2 = %d",
 			 ffs((val & FP_N_IGD_DIV_MASK) >>
 			     FP_N_DIV_SHIFT) - 1,
 			 ((val & FP_M1_DIV_MASK) >> FP_M1_DIV_SHIFT),
 			 ((val & FP_M2_IGD_DIV_MASK) >>
 			  FP_M2_DIV_SHIFT));
 	}
-	snprintf(result, len, "n = %d, m1 = %d, m2 = %d",
+	return z_snprintf(result, len, "n = %d, m1 = %d, m2 = %d",
 		 ((val & FP_N_DIV_MASK) >> FP_N_DIV_SHIFT),
 		 ((val & FP_M1_DIV_MASK) >> FP_M1_DIV_SHIFT),
 		 ((val & FP_M2_DIV_MASK) >> FP_M2_DIV_SHIFT));
@@ -424,7 +457,7 @@ DEBUGSTRING(i830_debug_vga_pd)
 		vga1_p1 = ((val & VGA1_PD_P1_MASK) >> VGA1_PD_P1_SHIFT) + 2;
 	vga1_p2 = (val & VGA1_PD_P2_DIV_4) ? 4 : 2;
 
-	snprintf(result, len, "vga0 p1 = %d, p2 = %d, vga1 p1 = %d, p2 = %d",
+	return z_snprintf(result, len, "vga0 p1 = %d, p2 = %d, vga1 p1 = %d, p2 = %d",
 			 vga0_p1, vga0_p2, vga1_p1, vga1_p2);
 }
 
@@ -446,12 +479,12 @@ DEBUGSTRING(i830_debug_pp_status)
 		break;
 	}
 
-	snprintf(result, len, "%s, %s, sequencing %s", status, ready, seq);
+	return z_snprintf(result, len, "%s, %s, sequencing %s", status, ready, seq);
 }
 
 DEBUGSTRING(i830_debug_pp_control)
 {
-	snprintf(result, len, "power target: %s",
+	return z_snprintf(result, len, "power target: %s",
 			 val & POWER_TARGET_ON ? "on" : "off");
 }
 
@@ -539,7 +572,7 @@ DEBUGSTRING(i830_debug_dpll)
 		sdvoextra[0] = '\0';
 	}
 
-	snprintf(result, len, "%s, %s%s, %s clock, %s mode, p1 = %d, "
+	return z_snprintf(result, len, "%s, %s%s, %s clock, %s mode, p1 = %d, "
 			 "p2 = %d%s%s",
 			 enabled, dvomode, vgamode, clock, mode, p1, p2,
 			 fpextra, sdvoextra);
@@ -556,7 +589,7 @@ DEBUGSTRING(i830_debug_dpll_test)
 	const char *dpllbinput = val & DPLLB_INPUT_BUFFER_ENABLE ?
 	    "" : ", DPLLB input buffer disabled";
 
-	snprintf(result, len, "%s%s%s%s%s%s",
+	return z_snprintf(result, len, "%s%s%s%s%s%s",
 			 dpllandiv, dpllamdiv, dpllainput,
 			 dpllbndiv, dpllbmdiv, dpllbinput);
 }
@@ -572,10 +605,10 @@ DEBUGSTRING(i830_debug_adpa)
 		disp_pipe = val & (1<<29) ? 'B' : 'A';
 
 	if (HAS_PCH_SPLIT(devid))
-		snprintf(result, len, "%s, transcoder %c, %chsync, %cvsync",
+		return z_snprintf(result, len, "%s, transcoder %c, %chsync, %cvsync",
 				 enable, disp_pipe, hsync, vsync);
 	else
-		snprintf(result, len, "%s, pipe %c, %chsync, %cvsync",
+		return z_snprintf(result, len, "%s, pipe %c, %chsync, %cvsync",
 				 enable, disp_pipe, hsync, vsync);
 }
 
@@ -598,7 +631,7 @@ DEBUGSTRING(i830_debug_lvds)
 	if (HAS_CPT)
 		disp_pipe = val & (1<<29) ? 'B' : 'A';
 
-	snprintf(result, len, "%s, pipe %c, %d bit, %s",
+	return z_snprintf(result, len, "%s, pipe %c, %d bit, %s",
 			 enable, disp_pipe, depth, channels);
 }
 
@@ -625,7 +658,7 @@ DEBUGSTRING(i830_debug_dvo)
 		break;
 	}
 
-	snprintf(result, len, "%s, pipe %c, %s, %chsync, %cvsync",
+	return z_snprintf(result, len, "%s, pipe %c, %s, %chsync, %cvsync",
 			 enable, disp_pipe, stall, hsync, vsync);
 }
 
@@ -646,7 +679,7 @@ DEBUGSTRING(i830_debug_sdvo)
 		sdvoextra[0] = '\0';
 	}
 
-	snprintf(result, len, "%s, pipe %c, stall %s, %sdetected%s%s",
+	return z_snprintf(result, len, "%s, pipe %c, stall %s, %sdetected%s%s",
 			 enable, disp_pipe, stall, detected, sdvoextra, gang);
 }
 
@@ -685,7 +718,7 @@ DEBUGSTRING(i830_debug_dspclk_gate_d)
 	const char *OVUUNIT = val & OVUUNIT_CLOCK_GATE_DISABLE ? " OVUUNIT" : "";
 	const char *OVLUNIT = val & OVLUNIT_CLOCK_GATE_DISABLE ? " OVLUNIT" : "";
 
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "clock gates disabled:%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s",
 		 DPUNIT_B, VSUNIT, VRHUNIT, VRDUNIT, AUDUNIT, DPUNIT_A, DPCUNIT,
 		 TVRUNIT, TVCUNIT, TVFUNIT, TVEUNIT, DVSUNIT, DSSUNIT, DDBUNIT,
@@ -702,16 +735,16 @@ DEBUGSTRING(i810_debug_915_fence)
 	int size = (1024 * 1024) << ((val & 0x700) >> 8);
 
 	if (IS_GEN4(devid) || (IS_915(devid) && reg >= FENCE_NEW))
-		return;
+		return 0;
 
 	if (format == 'X')
 		pitch *= 4;
 	if (val & 1) {
-		snprintf(result, len, "enabled, %c tiled, %4d pitch, 0x%08x - 0x%08x (%dkb)",
+		return z_snprintf(result, len, "enabled, %c tiled, %4d pitch, 0x%08x - 0x%08x (%dkb)",
 			 format, pitch, offset, offset + size,
 			 size / 1024);
 	} else {
-		snprintf(result, len, "disabled");
+		return z_snprintf(result, len, "disabled");
 	}
 }
 
@@ -723,9 +756,9 @@ DEBUGSTRING(i810_debug_965_fence_start)
 	unsigned int offset = val & 0xfffff000;
 
 	if (!IS_GEN4(devid))
-		return;
+		return 0;
 
-	snprintf(result, len, "%s, %c tile walk, %4d pitch, 0x%08x start",
+	return z_snprintf(result, len, "%s, %c tile walk, %4d pitch, 0x%08x start",
 		 enable, format, pitch, offset);
 }
 
@@ -734,9 +767,9 @@ DEBUGSTRING(i810_debug_965_fence_end)
 	unsigned int end = val & 0xfffff000;
 
 	if (!IS_GEN4(devid))
-		return;
+		return 0;
 
-	snprintf(result, len, "                                   0x%08x end", end);
+	return z_snprintf(result, len, "                                   0x%08x end", end);
 }
 
 #define DEFINEREG(reg) \
@@ -1017,19 +1050,19 @@ static const struct reg_debug intel_debug_regs[] = {
 
 DEBUGSTRING(ironlake_debug_rr_hw_ctl)
 {
-	snprintf(result, len, "low %d, high %d", val & RR_HW_LOW_POWER_FRAMES_MASK,
+	return z_snprintf(result, len, "low %d, high %d", val & RR_HW_LOW_POWER_FRAMES_MASK,
 		 (val & RR_HW_HIGH_POWER_FRAMES_MASK) >> 8);
 }
 
 DEBUGSTRING(ironlake_debug_m_tu)
 {
-	snprintf(result, len, "TU %d, val 0x%x %d", (val >> 25) + 1, val & 0xffffff,
+	return z_snprintf(result, len, "TU %d, val 0x%x %d", (val >> 25) + 1, val & 0xffffff,
 		 val & 0xffffff);
 }
 
 DEBUGSTRING(ironlake_debug_n)
 {
-	snprintf(result, len, "val 0x%x %d", val & 0xffffff, val & 0xffffff);
+	return z_snprintf(result, len, "val 0x%x %d", val & 0xffffff, val & 0xffffff);
 }
 
 DEBUGSTRING(ironlake_debug_fdi_tx_ctl)
@@ -1126,7 +1159,7 @@ DEBUGSTRING(ironlake_debug_fdi_tx_ctl)
 		break;
 	}
 
-	snprintf(result, len, "%s, train pattern %s, voltage swing %s,"
+	return z_snprintf(result, len, "%s, train pattern %s, voltage swing %s,"
 		 "pre-emphasis %s, port width %s, enhanced framing %s, FDI PLL %s, scrambing %s, master mode %s",
 		 val & FDI_TX_ENABLE ? "enable" : "disable",
 		 train, voltage, pre_emphasis, portw,
@@ -1203,7 +1236,7 @@ DEBUGSTRING(ironlake_debug_fdi_rx_ctl)
 		break;
 	}
 
-	snprintf(result, len, "%s, train pattern %s, port width %s, %s,"
+	return z_snprintf(result, len, "%s, train pattern %s, port width %s, %s,"
 		 "link_reverse_strap_overwrite %s, dmi_link_reverse %s, FDI PLL %s,"
 		 "FS ecc %s, FE ecc %s, FS err report %s, FE err report %s,"
 		 "scrambing %s, enhanced framing %s, %s",
@@ -1223,7 +1256,7 @@ DEBUGSTRING(ironlake_debug_fdi_rx_ctl)
 
 DEBUGSTRING(ironlake_debug_dspstride)
 {
-	snprintf(result, len, "%d", val >> 6);
+	return z_snprintf(result, len, "%d", val >> 6);
 }
 
 DEBUGSTRING(ironlake_debug_pch_dpll)
@@ -1272,7 +1305,7 @@ DEBUGSTRING(ironlake_debug_pch_dpll)
 
 	sdvo_mul = ((val & PLL_REF_SDVO_HDMI_MULTIPLIER_MASK) >> 9) + 1;
 
-	snprintf(result, len, "%s, sdvo high speed %s, mode %s, p2 %s, "
+	return z_snprintf(result, len, "%s, sdvo high speed %s, mode %s, p2 %s, "
 		 "FPA0 P1 %d, FPA1 P1 %d, refclk %s, sdvo/hdmi mul %d",
 		 enable, highspeed, mode, p2, fpa0_p1, fpa1_p1, refclk,
 		 sdvo_mul);
@@ -1304,7 +1337,7 @@ DEBUGSTRING(ironlake_debug_dref_ctl)
 	default:
 		cpu_source = "reserved";
 	}
-	snprintf(result, len, "cpu source %s, ssc_source %s, nonspread_source %s, "
+	return z_snprintf(result, len, "cpu source %s, ssc_source %s, nonspread_source %s, "
 		 "superspread_source %s, ssc4_mode %s, ssc1 %s, ssc4 %s",
 		 cpu_source, ssc_source, nonspread_source,
 		 superspread_source, ssc4_mode, ssc1, ssc4);
@@ -1342,14 +1375,14 @@ DEBUGSTRING(ironlake_debug_rawclk_freq)
 		tp2 = "12.0us";
 		break;
 	}
-	snprintf(result, len, "FDL_TP1 timer %s, FDL_TP2 timer %s, freq %d",
+	return z_snprintf(result, len, "FDL_TP1 timer %s, FDL_TP2 timer %s, freq %d",
 		 tp1, tp2, val & RAWCLK_FREQ_MASK);
 
 }
 
 DEBUGSTRING(ironlake_debug_fdi_rx_misc)
 {
-	snprintf(result, len, "FDI Delay %d", val & ((1 << 13) - 1));
+	return z_snprintf(result, len, "FDI Delay %d", val & ((1 << 13) - 1));
 }
 
 DEBUGSTRING(ironlake_debug_transconf)
@@ -1375,7 +1408,7 @@ DEBUGSTRING(ironlake_debug_transconf)
 		interlace = "rsvd";
 	}
 
-	snprintf(result, len, "%s, %s, %s", enable, state, interlace);
+	return z_snprintf(result, len, "%s, %s, %s", enable, state, interlace);
 }
 
 DEBUGSTRING(ironlake_debug_panel_fitting)
@@ -1412,7 +1445,7 @@ DEBUGSTRING(ironlake_debug_panel_fitting)
 		break;
 	}
 
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "%s, auto_scale %s, auto_scale_cal %s, v_filter %s, vadapt %s, mode %s, filter_sel %s,"
 		 "chroma pre-filter %s, vert3tap %s, v_inter_invert %s",
 		 val & PF_ENABLE ? "enable" : "disable",
@@ -1429,21 +1462,21 @@ DEBUGSTRING(ironlake_debug_panel_fitting)
 
 DEBUGSTRING(ironlake_debug_panel_fitting_2)
 {
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "vscale %f",
 		 val / (float) (1<<15));
 }
 
 DEBUGSTRING(ironlake_debug_panel_fitting_3)
 {
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "vscale initial phase %f",
 		 val / (float) (1<<15));
 }
 
 DEBUGSTRING(ironlake_debug_panel_fitting_4)
 {
-	snprintf(result, len,
+	return z_snprintf(result, len,
 		 "hscale %f",
 		 val / (float) (1<<15));
 }
@@ -1455,7 +1488,7 @@ DEBUGSTRING(ironlake_debug_pf_win)
 	a = (val >> 16) & 0x1fff;
 	b = val & 0xfff;
 
-	snprintf(result, len, "%d, %d", a, b);
+	return z_snprintf(result, len, "%d, %d", a, b);
 }
 
 DEBUGSTRING(ironlake_debug_hdmi)
@@ -1513,7 +1546,7 @@ DEBUGSTRING(ironlake_debug_hdmi)
 	else
 		detect = "non-detected";
 
-	snprintf(result, len, "%s pipe %c %s %s %s audio %s %s %s %s",
+	return z_snprintf(result, len, "%s pipe %c %s %s %s audio %s %s %s %s",
 		 enable, disp_pipe + 'A', bpc, encoding, mode, audio, vsync, hsync, detect);
 }
 
@@ -1523,7 +1556,7 @@ DEBUGSTRING(snb_debug_dpll_sel)
 	const char *dplla = NULL, *dpllb = NULL;
 
 	if (!HAS_CPT)
-		return;
+		return 0;
 
 	if (val & TRANSA_DPLL_ENABLE) {
 		transa = "enable";
@@ -1543,7 +1576,7 @@ DEBUGSTRING(snb_debug_dpll_sel)
 	} else
 		transb = "disable";
 
-	snprintf(result, len, "TransA DPLL %s (DPLL %s), TransB DPLL %s (DPLL %s)",
+	return z_snprintf(result, len, "TransA DPLL %s (DPLL %s), TransB DPLL %s (DPLL %s)",
 		 transa, dplla, transb, dpllb);
 }
 
@@ -1552,7 +1585,7 @@ DEBUGSTRING(snb_debug_trans_dp_ctl)
 	const char *enable, *port = NULL, *bpc = NULL, *vsync, *hsync;
 
 	if (!HAS_CPT)
-		return;
+		return 0;
 
 	if (val & TRANS_DP_OUTPUT_ENABLE)
 		enable = "enable";
@@ -1599,13 +1632,13 @@ DEBUGSTRING(snb_debug_trans_dp_ctl)
 	else
 		hsync = "-hsync";
 
-	snprintf(result, len, "%s port %s %s %s %s",
+	return z_snprintf(result, len, "%s port %s %s %s %s",
 		 enable, port, bpc, vsync, hsync);
 }
 
 DEBUGSTRING(ilk_debug_pp_control)
 {
-	snprintf(result, len, "blacklight %s, %spower down on reset, panel %s",
+	return z_snprintf(result, len, "blacklight %s, %spower down on reset, panel %s",
 		 (val & (1 << 2)) ? "enabled" : "disabled",
 		 (val & (1 << 1)) ? "" : "do not ",
 		 (val & (1 << 0)) ? "on" : "off");
@@ -1642,7 +1675,7 @@ DEBUGSTRING(hsw_debug_port_clk_sel)
 		break;
 	}
 
-	snprintf(result, len, "%s", clock);
+	return z_snprintf(result, len, "%s", clock);
 }
 
 DEBUGSTRING(hsw_debug_pipe_clk_sel)
@@ -1670,7 +1703,7 @@ DEBUGSTRING(hsw_debug_pipe_clk_sel)
 		break;
 	}
 
-	snprintf(result, len, "%s", clock);
+	return z_snprintf(result, len, "%s", clock);
 }
 
 DEBUGSTRING(hsw_debug_ddi_buf_ctl)
@@ -1697,7 +1730,7 @@ DEBUGSTRING(hsw_debug_ddi_buf_ctl)
 
 	detected = (val & 1) ? "detected" : "not detected";
 
-	snprintf(result, len, "%s %s %s %s", enable, reversal, width, detected);
+	return z_snprintf(result, len, "%s %s %s %s", enable, reversal, width, detected);
 }
 
 DEBUGSTRING(hsw_debug_sfuse_strap)
@@ -1711,7 +1744,7 @@ DEBUGSTRING(hsw_debug_sfuse_strap)
 	portc = (val & (1<<1)) ? "yes" : "no";
 	portd = (val & (1<<0)) ? "yes" : "no";
 
-	snprintf(result, len, "display %s, crt %s, lane reversal %s, "
+	return z_snprintf(result, len, "display %s, crt %s, lane reversal %s, "
 		 "port b %s, port c %s, port d %s", display, crt, lane_reversal,
 		 portb, portc, portd);
 }
@@ -1820,7 +1853,7 @@ DEBUGSTRING(hsw_debug_pipe_ddi_func_ctl)
 		break;
 	}
 
-	snprintf(result, len, "%s, %s, %s, %s, %s, %s, %s, %s", enable,
+	return z_snprintf(result, len, "%s, %s, %s, %s, %s, %s, %s, %s", enable,
 		 port, mode, bpc, vsync, hsync, edp_input, width);
 }
 
@@ -1832,7 +1865,7 @@ DEBUGSTRING(hsw_debug_wm_pipe)
 	sprite = (val >> 8) & 0x7F;
 	cursor = val & 0x3F;
 
-	snprintf(result, len, "primary %d, sprite %d, pipe %d", primary,
+	return z_snprintf(result, len, "primary %d, sprite %d, pipe %d", primary,
 		 sprite, cursor);
 }
 
@@ -1847,7 +1880,7 @@ DEBUGSTRING(hsw_debug_lp_wm)
 	pri = (val >> 8) & 0x3FF;
 	cur = val & 0xFF;
 
-	snprintf(result, len, "%s, latency %d, fbc %d, pri %d, cur %d",
+	return z_snprintf(result, len, "%s, latency %d, fbc %d, pri %d, cur %d",
 		 enable, latency, fbc, pri, cur);
 }
 
@@ -1860,7 +1893,7 @@ DEBUGSTRING(hsw_debug_sinterrupt)
 	portb = (val >> 21) & 1;
 	crt = (val >> 19) & 1;
 
-	snprintf(result, len, "port d:%d, port c:%d, port b:%d, crt:%d",
+	return z_snprintf(result, len, "port d:%d, port c:%d, port b:%d, crt:%d",
 		 portd, portc, portb, crt);
 }
 
@@ -1894,12 +1927,12 @@ DEBUGSTRING(ilk_debug_blc_pwm_cpu_ctl2)
 	}
 
 	if (IS_GEN5(devid) || IS_GEN6(devid) || IS_IVYBRIDGE(devid)) {
-		snprintf(result, len, "enable %d, pipe %s", enable, pipe);
+		return z_snprintf(result, len, "enable %d, pipe %s", enable, pipe);
 	} else {
 		blinking = (val >> 28) & 1;
 		granularity = ((val >> 27) & 1) ? 8 : 128;
 
-		snprintf(result, len, "enable %d, pipe %s, blinking %d, "
+		return z_snprintf(result, len, "enable %d, pipe %s, blinking %d, "
 			 "granularity %d", enable, pipe, blinking,
 			 granularity);
 	}
@@ -1912,11 +1945,11 @@ DEBUGSTRING(ilk_debug_blc_pwm_cpu_ctl)
 	cycle = (val & 0xFFFF);
 
 	if (IS_GEN5(devid) || IS_GEN6(devid) || IS_IVYBRIDGE(devid)) {
-		snprintf(result, len, "cycle %d", cycle);
+		return z_snprintf(result, len, "cycle %d", cycle);
 	} else {
 		freq = (val >> 16) & 0xFFFF;
 
-		snprintf(result, len, "cycle %d, freq %d", cycle, freq);
+		return z_snprintf(result, len, "cycle %d, freq %d", cycle, freq);
 	}
 }
 
@@ -1928,7 +1961,7 @@ DEBUGSTRING(ibx_debug_blc_pwm_ctl1)
 	override = (val >> 30) & 1;
 	inverted_polarity = (val >> 29) & 1;
 
-	snprintf(result, len, "enable %d, override %d, inverted polarity %d",
+	return z_snprintf(result, len, "enable %d, override %d, inverted polarity %d",
 		 enable, override, inverted_polarity);
 }
 
@@ -1939,7 +1972,7 @@ DEBUGSTRING(ibx_debug_blc_pwm_ctl2)
 	freq = (val >> 16) & 0xFFFF;
 	cycle = val & 0xFFFF;
 
-	snprintf(result, len, "freq %d, cycle %d", freq, cycle);
+	return z_snprintf(result, len, "freq %d, cycle %d", freq, cycle);
 }
 
 DEBUGSTRING(hsw_debug_blc_misc_ctl)
@@ -1948,7 +1981,7 @@ DEBUGSTRING(hsw_debug_blc_misc_ctl)
 
 	sel = (val & 1) ? "PWM1-CPU PWM2-PCH" : "PWM1-PCH PWM2-CPU";
 
-	snprintf(result, len, "%s", sel);
+	return z_snprintf(result, len, "%s", sel);
 }
 
 DEBUGSTRING(hsw_debug_util_pin_ctl)
@@ -1994,7 +2027,7 @@ DEBUGSTRING(hsw_debug_util_pin_ctl)
 	data = (val >> 23) & 1;
 	inverted_polarity = (val >> 22) & 1;
 
-	snprintf(result, len, "enable %d, transcoder %s, mode %s, data %d "
+	return z_snprintf(result, len, "enable %d, transcoder %s, mode %s, data %d "
 		 "inverted polarity %d", enable, transcoder, mode, data,
 		 inverted_polarity);
 }
@@ -2530,7 +2563,7 @@ static const struct reg_debug i945gm_mi_regs[] = {
 
 DEBUGSTRING(gen6_rp_control)
 {
-	snprintf(result, len, "%s",
+	return z_snprintf(result, len, "%s",
 		 (val & (1 << 7)) ? "enabled" : "disabled");
 }
 
@@ -2631,13 +2664,15 @@ int intel_reg_spec_decode(char *buf, size_t bufsize, const struct reg *reg,
 			if (reg->addr != r->reg)
 				continue;
 
-			if (r->debug_output)
-				r->debug_output(tmp, sizeof(tmp), r->reg,
-						val, devid);
-			else if (devid)
+			if (r->debug_output) {
+				if (r->debug_output(tmp, sizeof(tmp), r->reg,
+						    val, devid) == 0)
+					continue;
+			} else if (devid) {
 				return 0;
-			else
+			} else {
 				continue;
+			}
 
 			if (devid) {
 				strncpy(buf, tmp, bufsize);
