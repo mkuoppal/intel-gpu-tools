@@ -72,6 +72,7 @@ static void trigger_missed_interrupt(int fd, unsigned ring)
 			reloc.delta = 1;
 		}
 	}
+	batch[1000] = 1;
 
 	memset(&execbuf, 0, sizeof(execbuf));
 	execbuf.buffers_ptr = (uintptr_t)&obj;
@@ -87,10 +88,14 @@ static void trigger_missed_interrupt(int fd, unsigned ring)
 		 * parent. We will have to wait for our parent to sleep
 		 * (gem_sync -> i915_wait_request) before we run.
 		 */
+		while (*((volatile uint32_t *)batch + 1000))
+			;
+
 		*batch = MI_BATCH_BUFFER_END;
 		__sync_synchronize();
 	}
 
+	batch[1000] = 0;
 	gem_sync(fd, obj.handle);
 	igt_waitchildren();
 
