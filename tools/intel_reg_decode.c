@@ -1552,6 +1552,26 @@ DEBUGSTRING(ironlake_debug_hdmi)
 		 enable, disp_pipe + 'A', bpc, encoding, mode, audio, vsync, hsync, detect);
 }
 
+DEBUGSTRING(ironlake_debug_dp_buftrans)
+{
+	static const char * const reg_names[] = {
+		"400mV, 0.0dB",
+		"400mV, 3.5dB",
+		"400mV, 6.0dB",
+		"400mV, 9.5dB",
+		"600mV, 0.0dB",
+		"600mV, 3.5dB",
+		"600mV, 6.0dB",
+		"800mV, 0.0dB",
+		"800mV, 3.5dB",
+		"1200mV, 0.0dB",
+	};
+	int idx = (reg - DP_BUFTRANS(0)) / 4;
+
+	return z_snprintf(result, len, "%s: OE=%3d, pre-emphasis=%2d, P current drive=%2d, N current drive=%2d",
+			  reg_names[idx], (val >> 19) & 0x1ff, (val >> 12) & 0x1f, (val >> 6) & 0xf, val & 0xf);
+}
+
 DEBUGSTRING(snb_debug_dpll_sel)
 {
 	const char *transa, *transb;
@@ -2316,6 +2336,18 @@ static const struct reg_debug ironlake_debug_regs[] = {
 	DEFINEREG(PCH_DP_B),
 	DEFINEREG(PCH_DP_C),
 	DEFINEREG(PCH_DP_D),
+
+	DEFINEREG2(DP_BUFTRANS(0), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(1), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(2), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(3), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(4), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(5), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(6), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(7), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(8), ironlake_debug_dp_buftrans),
+	DEFINEREG2(DP_BUFTRANS(9), ironlake_debug_dp_buftrans),
+
 	DEFINEREG2(TRANS_DP_CTL_A, snb_debug_trans_dp_ctl),
 	DEFINEREG2(TRANS_DP_CTL_B, snb_debug_trans_dp_ctl),
 	DEFINEREG2(TRANS_DP_CTL_C, snb_debug_trans_dp_ctl),

@@ -3099,6 +3099,8 @@ typedef enum {
 #define TRANSC_DP_LINK_M2	0xe2048
 #define TRANSC_DP_LINK_N2	0xe204c
 
+#define DP_BUFTRANS(x)		(0xe4f00 + 4 * (x))
+
 #define TRANSACONF		0xf0008
 #define TRANSBCONF		0xf1008
 #define TRANSCCONF		0xf2008
