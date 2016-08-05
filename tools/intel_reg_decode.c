@@ -755,7 +755,7 @@ DEBUGSTRING(i810_debug_965_fence_start)
 	int pitch = ((val & 0xffc) >> 2) * 128 + 128;
 	unsigned int offset = val & 0xfffff000;
 
-	if (!IS_GEN4(devid))
+	if (!IS_GEN4(devid) && !IS_GEN5(devid))
 		return 0;
 
 	return z_snprintf(result, len, "%s, %c tile walk, %4d pitch, 0x%08x start",
@@ -1024,6 +1024,10 @@ static const struct reg_debug intel_debug_regs[] = {
 	DEFINEFENCE_945(14),
 	DEFINEFENCE_945(15),
 
+	DEFINEREG(INST_PM),
+};
+
+static const struct reg_debug i965_fences[] = {
 #define DEFINEFENCE_965(i) \
 	{ FENCE_NEW+i*8, "FENCE START " #i, i810_debug_965_fence_start }, \
 	{ FENCE_NEW+i*8+4, "FENCE END " #i, i810_debug_965_fence_end }
@@ -1044,8 +1048,6 @@ static const struct reg_debug intel_debug_regs[] = {
 	DEFINEFENCE_965(13),
 	DEFINEFENCE_965(14),
 	DEFINEFENCE_965(15),
-
-	DEFINEREG(INST_PM),
 };
 
 DEBUGSTRING(ironlake_debug_rr_hw_ctl)
@@ -2606,6 +2608,11 @@ static bool is_gen56ivb(uint32_t devid, uint32_t pch)
 	return IS_GEN5(devid) || IS_GEN6(devid) || IS_IVYBRIDGE(devid);
 }
 
+static bool is_gen45(uint32_t devid, uint32_t pch)
+{
+	return IS_GEN4(devid) || IS_GEN5(devid);
+}
+
 static bool is_945gm(uint32_t devid, uint32_t pch)
 {
 	return IS_945GM(devid);
@@ -2626,6 +2633,7 @@ static struct {
 } known_registers[] = {
 	DECLARE_REGS("Gen2",	intel_debug_regs,	is_gen234),
 	DECLARE_REGS("i945GM",	i945gm_mi_regs,		is_945gm),
+	DECLARE_REGS("Gen4",	i965_fences,		is_gen45),
 	DECLARE_REGS("Gen5",	ironlake_debug_regs,	is_gen56ivb),
 	DECLARE_REGS("Gen6",	gen6_rp_debug_regs,	is_gen6_plus),
 	DECLARE_REGS("Gen6+",	gen6_fences,		is_gen6_plus),
