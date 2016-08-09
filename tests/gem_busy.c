@@ -22,6 +22,7 @@
  */
 
 #include "igt.h"
+#include "igt_rand.h"
 
 #define LOCAL_EXEC_NO_RELOC (1<<11)
 
@@ -359,6 +360,91 @@ static void one(int fd, unsigned ring, uint32_t flags, unsigned test_flags)
 	gem_close(fd, obj[SCRATCH].handle);
 }
 
+static void xchg_u32(void *array, unsigned i, unsigned j)
+{
+	uint32_t *u32 = array;
+	uint32_t tmp = u32[i];
+	u32[i] = u32[j];
+	u32[j] = tmp;
+}
+
+static void close_race(int fd)
+{
+#define N_HANDLES 4096
+	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+	uint32_t *handles;
+	unsigned long *control;
+	unsigned long count = 0;
+	int i;
+
+	intel_require_memory(N_HANDLES, 4096, CHECK_RAM);
+
+	/* One thread spawning work and randomly closing fd.
+	 * One background thread per cpu checking busyness.
+	 */
+
+	control = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(control != MAP_FAILED);
+
+	handles = mmap(NULL, N_HANDLES*sizeof(*handles),
+		   PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
+	igt_assert(handles != MAP_FAILED);
+
+	for (i = 0; i < N_HANDLES; i++) {
+		handles[i] = gem_create(fd, 4096);
+	}
+
+	igt_fork(child, ncpus) {
+		struct drm_i915_gem_busy busy;
+		uint32_t indirection[N_HANDLES];
+
+		for (i = 0; i < N_HANDLES; i++)
+			indirection[i] = i;
+
+		hars_petruska_f54_1_random_perturb(child);
+
+		memset(&busy, 0, sizeof(busy));
+		do {
+			igt_permute_array(indirection, N_HANDLES, xchg_u32);
+			__sync_synchronize();
+			for (i = 0; i < N_HANDLES; i++) {
+				busy.handle = indirection[handles[i]];
+				/* Check that the busy computation doesn't
+				 * explode in the face of random gem_close().
+				 */
+				drmIoctl(fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
+			}
+			count++;
+		} while(*(volatile long *)control == 0);
+
+		igt_debug("child[%d]: count = %lu\n", child, count);
+		control[child] = count;
+	}
+
+	igt_until_timeout(20) {
+		int j = rand() % N_HANDLES;
+
+		gem_close(fd, handles[j]);
+		__sync_synchronize();
+		handles[j] = busy_blt(fd);
+
+		count++;
+	}
+	control[0] = 1;
+	igt_waitchildren();
+
+	for (i = 0; i < ncpus; i++)
+		control[ncpus + 1] += control[i + 1];
+	igt_info("Total execs %lu, busy-ioctls %lu\n",
+		 count, control[ncpus + 1] * N_HANDLES);
+
+	for (i = 0; i < N_HANDLES; i++)
+		gem_close(fd, handles[i]);
+
+	munmap(handles, N_HANDLES * sizeof(*handles));
+	munmap(control, 4096);
+}
+
 static bool has_semaphores(int fd)
 {
 	struct drm_i915_getparam gp;
@@ -470,6 +556,12 @@ igt_main
 				one(fd, e->exec_id, e->flags, HANG);
 				gem_quiescent_gpu(fd);
 			}
+		}
+	}
+
+	igt_subtest_group {
+		igt_subtest("close-race") {
+			close_race(fd);
 		}
 	}
 
