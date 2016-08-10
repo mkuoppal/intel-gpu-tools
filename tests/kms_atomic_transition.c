@@ -41,6 +41,8 @@ struct plane_parms {
 	uint32_t width, height;
 };
 
+#define hweight32 __builtin_popcount
+
 static void
 wm_setup_plane(igt_display_t *display, enum pipe pipe,
 	       uint32_t mask, struct plane_parms *parms)
@@ -202,11 +204,307 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	igt_remove_fb(display->drm_fd, &argb_fb);
 }
 
+static void commit_display(igt_display_t *display, unsigned event_mask, bool nonblocking)
+{
+	unsigned flags;
+	int num_events = hweight32(event_mask);
+	ssize_t ret;
+
+	flags = DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_PAGE_FLIP_EVENT;
+	if (nonblocking)
+		flags |= DRM_MODE_ATOMIC_NONBLOCK;
+
+	igt_display_commit_atomic(display, flags, NULL);
+
+	while (num_events) {
+		char buf[32];
+		struct drm_event *e = (void *)buf;
+		struct drm_event_vblank *vblank = (void *)buf;
+		uint32_t crtc_id, pipe = I915_MAX_PIPES;
+
+		ret = read(display->drm_fd, buf, sizeof(buf));
+		if (ret < 0 && (errno == EINTR || errno == EAGAIN))
+			continue;
+
+		igt_assert(ret >= 0);
+		igt_assert_eq(e->type, DRM_EVENT_FLIP_COMPLETE);
+
+		crtc_id = vblank->reserved;
+		if (crtc_id) {
+			for_each_pipe(display, pipe)
+				if (display->pipes[pipe].crtc_id == crtc_id)
+					break;
+
+			igt_assert_lt(pipe, display->n_pipes);
+
+			igt_debug("Retrieved vblank seq: %u on %u/%u\n", vblank->sequence, vblank->reserved, pipe);
+		} else
+			igt_debug("Retrieved vblank seq: %u on unk/unk\n", vblank->sequence);
+
+		num_events--;
+	}
+}
+
+static unsigned set_combinations(igt_display_t *display, unsigned mask, struct igt_fb *fb)
+{
+	igt_output_t *output;
+	enum pipe pipe;
+	unsigned event_mask = 0;
+
+	for_each_connected_output(display, output)
+		igt_output_set_pipe(output, PIPE_NONE);
+
+	for_each_pipe(display, pipe) {
+		igt_plane_t *plane = &display->pipes[pipe].planes[IGT_PLANE_PRIMARY];
+		drmModeModeInfo *mode = NULL;
+
+		if (!(mask & (1 << pipe))) {
+			if (display->pipes[pipe].mode_blob) {
+				event_mask |= 1 << pipe;
+				igt_plane_set_fb(plane, NULL);
+			}
+
+			continue;
+		}
+
+		event_mask |= 1 << pipe;
+
+		for_each_valid_output_on_pipe(display, pipe, output) {
+			if (output->pending_crtc_idx_mask)
+				continue;
+
+			mode = igt_output_get_mode(output);
+			break;
+		}
+
+		if (!mode)
+			return 0;
+
+		igt_output_set_pipe(output, pipe);
+		igt_plane_set_fb(plane, fb);
+		igt_fb_set_size(fb, plane, mode->hdisplay, mode->vdisplay);
+		igt_plane_set_size(plane, mode->hdisplay, mode->vdisplay);
+	}
+
+	return event_mask;
+}
+
+static void refresh_primaries(igt_display_t *display)
+{
+	enum pipe pipe;
+	igt_plane_t *plane;
+
+	for_each_pipe(display, pipe)
+		for_each_plane_on_pipe(display, pipe, plane)
+			if (plane->is_primary && plane->fb)
+				plane->fb_changed = true;
+}
+
+static void collect_crcs_mask(igt_pipe_crc_t **pipe_crcs, unsigned mask, igt_crc_t *crcs)
+{
+	int i;
+
+	for (i = 0; i < I915_MAX_PIPES; i++) {
+		if (!((1 << i) & mask))
+			continue;
+
+		if (!pipe_crcs[i])
+			continue;
+
+		igt_pipe_crc_collect_crc(pipe_crcs[i], &crcs[i]);
+	}
+}
+
+static void run_modeset_tests(igt_display_t *display, int howmany, bool nonblocking)
+{
+	struct igt_fb fbs[2];
+	int i, j, ret = 0;
+	unsigned iter_max = 1 << I915_MAX_PIPES;
+	igt_pipe_crc_t *pipe_crcs[I915_MAX_PIPES];
+	igt_output_t *output;
+	unsigned width = 0, height = 0;
+
+	for_each_connected_output(display, output) {
+		drmModeModeInfo *mode = igt_output_get_mode(output);
+
+		igt_output_set_pipe(output, PIPE_NONE);
+
+		width = max(width, mode->hdisplay);
+		height = max(height, mode->vdisplay);
+	}
+
+	igt_create_pattern_fb(display->drm_fd, width, height,
+				   DRM_FORMAT_XRGB8888, 0, &fbs[0]);
+	igt_create_color_pattern_fb(display->drm_fd, width, height,
+				    DRM_FORMAT_XRGB8888, 0, .5, .5, .5, &fbs[1]);
+
+	for_each_pipe(display, i) {
+		igt_plane_t *plane = &display->pipes[i].planes[IGT_PLANE_PRIMARY];
+		drmModeModeInfo *mode = NULL;
+
+		if (is_i915_device(display->drm_fd))
+			pipe_crcs[i] = igt_pipe_crc_new(i, INTEL_PIPE_CRC_SOURCE_AUTO);
+
+		for_each_valid_output_on_pipe(display, i, output) {
+			if (output->pending_crtc_idx_mask)
+				continue;
+
+			igt_output_set_pipe(output, i);
+			mode = igt_output_get_mode(output);
+			break;
+		}
+
+		if (mode) {
+			igt_plane_set_fb(plane, &fbs[1]);
+			igt_fb_set_size(&fbs[1], plane, mode->hdisplay, mode->vdisplay);
+			igt_plane_set_size(plane, mode->hdisplay, mode->vdisplay);
+		} else
+			igt_plane_set_fb(plane, NULL);
+	}
+
+	/*
+	 * When i915 supports nonblocking modeset, this if branch can be removed.
+	 * It's only purpose is to ensure nonblocking modeset works.
+	 */
+	if (nonblocking) {
+		/*
+		 * Make sure we only skip when the suggested configuration is
+		 * unsupported by committing it first with TEST_ONLY, if it's
+		 * unsupported -EINVAL is returned. If the second commit returns
+		 * -EINVAL, it's from not being able to support nonblocking modeset.
+		 */
+		igt_display_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+
+		ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_ATOMIC_NONBLOCK, NULL);
+
+		if (ret == -EINVAL)
+			goto cleanup;
+
+		igt_assert_eq(ret, 0);
+
+		/*
+		 * We don't know the initial state, so we can't tell for sure how many events we would get.
+		 * Create a new atomic state with all crtcs updated and commit it synchronously.
+		 */
+		for_each_pipe(display, i)
+			display->pipes[i].mode_changed = true;
+	}
+
+	igt_display_commit2(display, COMMIT_ATOMIC);
+
+	for (i = 0; i < iter_max; i++) {
+		igt_crc_t crcs[5][I915_MAX_PIPES];
+		unsigned event_mask;
+
+		if (hweight32(i) > howmany)
+			continue;
+
+		event_mask = set_combinations(display, i, &fbs[0]);
+		if (!event_mask && i)
+			continue;
+
+		commit_display(display, event_mask, nonblocking);
+
+		collect_crcs_mask(pipe_crcs, i, crcs[0]);
+
+		for (j = iter_max - 1; j > i + 1; j--) {
+			if (hweight32(j) > howmany)
+				continue;
+
+			if (hweight32(i) < howmany && hweight32(j) < howmany)
+				continue;
+
+			event_mask = set_combinations(display, j, &fbs[1]);
+			if (!event_mask)
+				continue;
+
+			commit_display(display, event_mask, nonblocking);
+
+			collect_crcs_mask(pipe_crcs, j, crcs[1]);
+
+			refresh_primaries(display);
+			commit_display(display, j, nonblocking);
+			collect_crcs_mask(pipe_crcs, j, crcs[2]);
+
+			event_mask = set_combinations(display, i, &fbs[0]);
+			if (!event_mask)
+				continue;
+
+			commit_display(display, event_mask, nonblocking);
+			collect_crcs_mask(pipe_crcs, i, crcs[3]);
+
+			refresh_primaries(display);
+			commit_display(display, i, nonblocking);
+			collect_crcs_mask(pipe_crcs, i, crcs[4]);
+
+			if (!is_i915_device(display->drm_fd))
+				continue;
+
+			for (int k = 0; k < I915_MAX_PIPES; k++) {
+				if (i & (1 << k)) {
+					igt_assert_crc_equal(&crcs[0][k], &crcs[3][k]);
+					igt_assert_crc_equal(&crcs[0][k], &crcs[4][k]);
+				}
+
+				if (j & (1 << k))
+					igt_assert_crc_equal(&crcs[1][k], &crcs[2][k]);
+			}
+		}
+	}
+
+cleanup:
+	set_combinations(display, 0, NULL);
+	igt_display_commit2(display, COMMIT_ATOMIC);
+
+	if (is_i915_device(display->drm_fd))
+		for_each_pipe(display, i)
+			igt_pipe_crc_free(pipe_crcs[i]);
+
+	igt_remove_fb(display->drm_fd, &fbs[1]);
+	igt_remove_fb(display->drm_fd, &fbs[0]);
+
+	if (ret == -EINVAL)
+		igt_skip("Atomic nonblocking modesets are not supported.\n");
+
+}
+
+static void run_modeset_transition(igt_display_t *display, int requested_outputs, bool nonblocking)
+{
+	igt_output_t *outputs[I915_MAX_PIPES] = {};
+	int num_outputs = 0;
+	enum pipe pipe;
+
+	for_each_pipe(display, pipe) {
+		igt_output_t *output;
+
+		for_each_valid_output_on_pipe(display, pipe, output) {
+			int i;
+
+			for (i = pipe - 1; i >= 0; i--)
+				if (outputs[i] == output)
+					break;
+
+			if (i < 0) {
+				outputs[pipe] = output;
+				num_outputs++;
+				break;
+			}
+		}
+	}
+
+	igt_require_f(num_outputs >= requested_outputs,
+		      "Should have at least %i outputs, found %i\n",
+		      requested_outputs, num_outputs);
+
+	run_modeset_tests(display, requested_outputs, nonblocking);
+}
+
 igt_main
 {
 	igt_display_t display;
 	igt_output_t *output;
 	enum pipe pipe;
+	int i;
 
 	igt_skip_on_simulation();
 
@@ -227,13 +525,21 @@ igt_main
 		igt_require_f(valid_outputs, "no valid crtc/connector combinations found\n");
 	}
 
-	igt_subtest_f("plane-all-transition")
+	igt_subtest("plane-all-transition")
 		for_each_pipe_with_valid_output(&display, pipe, output)
 			run_transition_test(&display, pipe, output, false);
 
-	igt_subtest_f("plane-modeset-transition")
+	igt_subtest("plane-modeset-transition")
 		for_each_pipe_with_valid_output(&display, pipe, output)
 			run_transition_test(&display, pipe, output, true);
+
+	for (i = 1; i <= I915_MAX_PIPES; i++) {
+		igt_subtest_f("%ix-modeset-transitions", i)
+			run_modeset_transition(&display, i, false);
+
+		igt_subtest_f("%ix-modeset-transitions-nonblocking", i)
+			run_modeset_transition(&display, i, true);
+	}
 
 	igt_fixture {
 		igt_display_fini(&display);
