@@ -507,7 +507,7 @@ end:
 	return zstream.total_out / 4;
 }
 
-static int ascii85_decode(const char *in, uint32_t **out)
+static int ascii85_decode(const char *in, uint32_t **out, bool inflate)
 {
 	int len = 0, size = 1024;
 
@@ -537,6 +537,9 @@ static int ascii85_decode(const char *in, uint32_t **out)
 		}
 		(*out)[len++] = v;
 	}
+
+	if (!inflate)
+		return len;
 
 	return zlib_inflate(out, len);
 }
@@ -638,8 +641,8 @@ read_data_file(FILE *file)
 			}
 		}
 
-		if (line[0] == ':') {
-			count = ascii85_decode(line+1, &data);
+		if (line[0] == ':' || line[0] == '~') {
+			count = ascii85_decode(line+1, &data, line[0] == ':');
 			if (count == 0) {
 				fprintf(stderr, "ASCII85 decode failed.\n");
 				exit(1);
