@@ -68,6 +68,43 @@ wm_setup_plane(igt_display_t *display, enum pipe pipe,
 	}
 }
 
+static bool skip_on_unsupported_nonblocking_modeset(igt_display_t *display)
+{
+	enum pipe pipe;
+	int ret;
+
+	/*
+	 * Make sure we only skip when the suggested configuration is
+	 * unsupported by committing it first with TEST_ONLY, if it's
+	 * unsupported -EINVAL is returned. If the second commit returns
+	 * -EINVAL, it's from not being able to support nonblocking modeset.
+	 */
+	igt_display_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+
+	ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_ATOMIC_NONBLOCK, NULL);
+
+	if (ret == -EINVAL)
+		return true;
+
+	igt_assert_eq(ret, 0);
+
+	/* Force the next state to update all crtc's, to synchronize with the nonblocking modeset. */
+	for_each_pipe(display, pipe)
+		display->pipes[pipe].mode_changed = true;
+
+	return false;
+}
+
+static void ev_page_flip(int fd, unsigned seq, unsigned tv_sec, unsigned tv_usec, void *user_data)
+{
+	igt_debug("Retrieved vblank seq: %u on unk\n", seq);
+}
+
+static drmEventContext drm_events = {
+	.version = DRM_EVENT_CONTEXT_VERSION,
+	.page_flip_handler = ev_page_flip
+};
+
 /*
  * 1. Set primary plane to a known fb.
  * 2. Make sure getcrtc returns the correct fb id.
@@ -78,7 +115,7 @@ wm_setup_plane(igt_display_t *display, enum pipe pipe,
  * so test this and make sure it works.
  */
 static void
-run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output, bool modeset)
+run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output, bool modeset, bool nonblocking)
 {
 	struct igt_fb fb, argb_fb;
 	drmModeModeInfo *mode;
@@ -87,6 +124,14 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	uint32_t n_planes = display->pipes[pipe].n_planes;
 	uint32_t iter_max = 1 << n_planes, i;
 	struct plane_parms parms[IGT_MAX_PLANES];
+	bool skip_test = false;
+	unsigned flags = DRM_MODE_PAGE_FLIP_EVENT;
+
+	if (nonblocking)
+		flags |= DRM_MODE_ATOMIC_NONBLOCK;
+
+	if (modeset)
+		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
 
 	mode = igt_output_get_mode(output);
 
@@ -104,12 +149,19 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	if (cursor_height > mode->vdisplay)
 		cursor_height = mode->vdisplay;
 
+	igt_output_set_pipe(output, pipe);
+
+	wm_setup_plane(display, pipe, 0, NULL);
+
+	if (nonblocking && modeset && (skip_test = skip_on_unsupported_nonblocking_modeset(display)))
+		goto cleanup;
+
 	if (modeset) {
 		igt_output_set_pipe(output, PIPE_NONE);
 
-		wm_setup_plane(display, pipe, 0, NULL);
-
 		igt_display_commit2(display, COMMIT_ATOMIC);
+
+		igt_output_set_pipe(output, pipe);
 	}
 
 	for_each_plane_on_pipe(display, pipe, plane) {
@@ -129,6 +181,8 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 		}
 	}
 
+	igt_display_commit2(display, COMMIT_ATOMIC);
+
 	/*
 	 * In some configurations the tests may not run to completion with all
 	 * sprite planes lit up at 4k resolution, try decreasing width/size of secondary
@@ -137,7 +191,6 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	while (1) {
 		int ret;
 
-		igt_output_set_pipe(output, pipe);
 		wm_setup_plane(display, pipe, iter_max - 1, parms);
 		ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
 
@@ -170,14 +223,17 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 
 		wm_setup_plane(display, pipe, i, parms);
 
-		igt_display_commit2(display, COMMIT_ATOMIC);
+		igt_display_commit_atomic(display, flags, (void *)(unsigned long)i);
+		drmHandleEvent(display->drm_fd, &drm_events);
 
 		if (modeset) {
 			igt_output_set_pipe(output, PIPE_NONE);
 
 			wm_setup_plane(display, pipe, 0, parms);
 
-			igt_display_commit2(display, COMMIT_ATOMIC);
+			igt_display_commit_atomic(display, flags, (void *)0UL);
+
+			drmHandleEvent(display->drm_fd, &drm_events);
 		} else {
 			uint32_t j;
 
@@ -185,14 +241,17 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 			for (j = iter_max - 1; j > i + 1; j--) {
 				wm_setup_plane(display, pipe, j, parms);
 
-				igt_display_commit2(display, COMMIT_ATOMIC);
+				igt_display_commit_atomic(display, flags, (void *)(unsigned long)j);
+				drmHandleEvent(display->drm_fd, &drm_events);
 
 				wm_setup_plane(display, pipe, i, parms);
-				igt_display_commit2(display, COMMIT_ATOMIC);
+				igt_display_commit_atomic(display, flags, (void *)(unsigned long)i);
+				drmHandleEvent(display->drm_fd, &drm_events);
 			}
 		}
 	}
 
+cleanup:
 	igt_output_set_pipe(output, PIPE_NONE);
 
 	for_each_plane_on_pipe(display, pipe, plane)
@@ -202,6 +261,8 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 
 	igt_remove_fb(display->drm_fd, &fb);
 	igt_remove_fb(display->drm_fd, &argb_fb);
+	if (skip_test)
+		igt_skip("Atomic nonblocking modesets are not supported.\n");
 }
 
 static void commit_display(igt_display_t *display, unsigned event_mask, bool nonblocking)
@@ -318,11 +379,12 @@ static void collect_crcs_mask(igt_pipe_crc_t **pipe_crcs, unsigned mask, igt_crc
 static void run_modeset_tests(igt_display_t *display, int howmany, bool nonblocking)
 {
 	struct igt_fb fbs[2];
-	int i, j, ret = 0;
+	int i, j;
 	unsigned iter_max = 1 << I915_MAX_PIPES;
 	igt_pipe_crc_t *pipe_crcs[I915_MAX_PIPES];
 	igt_output_t *output;
 	unsigned width = 0, height = 0;
+	bool skip_test = false;
 
 	for_each_connected_output(display, output) {
 		drmModeModeInfo *mode = igt_output_get_mode(output);
@@ -366,29 +428,8 @@ static void run_modeset_tests(igt_display_t *display, int howmany, bool nonblock
 	 * When i915 supports nonblocking modeset, this if branch can be removed.
 	 * It's only purpose is to ensure nonblocking modeset works.
 	 */
-	if (nonblocking) {
-		/*
-		 * Make sure we only skip when the suggested configuration is
-		 * unsupported by committing it first with TEST_ONLY, if it's
-		 * unsupported -EINVAL is returned. If the second commit returns
-		 * -EINVAL, it's from not being able to support nonblocking modeset.
-		 */
-		igt_display_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
-
-		ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_ALLOW_MODESET | DRM_MODE_ATOMIC_NONBLOCK, NULL);
-
-		if (ret == -EINVAL)
-			goto cleanup;
-
-		igt_assert_eq(ret, 0);
-
-		/*
-		 * We don't know the initial state, so we can't tell for sure how many events we would get.
-		 * Create a new atomic state with all crtcs updated and commit it synchronously.
-		 */
-		for_each_pipe(display, i)
-			display->pipes[i].mode_changed = true;
-	}
+	if (nonblocking && (skip_test = skip_on_unsupported_nonblocking_modeset(display)))
+		goto cleanup;
 
 	igt_display_commit2(display, COMMIT_ATOMIC);
 
@@ -463,7 +504,7 @@ cleanup:
 	igt_remove_fb(display->drm_fd, &fbs[1]);
 	igt_remove_fb(display->drm_fd, &fbs[0]);
 
-	if (ret == -EINVAL)
+	if (skip_test)
 		igt_skip("Atomic nonblocking modesets are not supported.\n");
 
 }
@@ -527,11 +568,15 @@ igt_main
 
 	igt_subtest("plane-all-transition")
 		for_each_pipe_with_valid_output(&display, pipe, output)
-			run_transition_test(&display, pipe, output, false);
+			run_transition_test(&display, pipe, output, false, false);
+
+	igt_subtest("plane-all-transition-nonblocking")
+		for_each_pipe_with_valid_output(&display, pipe, output)
+			run_transition_test(&display, pipe, output, false, true);
 
 	igt_subtest("plane-modeset-transition")
 		for_each_pipe_with_valid_output(&display, pipe, output)
-			run_transition_test(&display, pipe, output, true);
+			run_transition_test(&display, pipe, output, true, false);
 
 	for (i = 1; i <= I915_MAX_PIPES; i++) {
 		igt_subtest_f("%ix-modeset-transitions", i)
