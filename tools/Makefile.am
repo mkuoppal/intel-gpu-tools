@@ -3,8 +3,8 @@ include Makefile.sources
 bin_PROGRAMS = $(tools_prog_lists)
 
 if HAVE_LIBDRM_INTEL
-	bin_PROGRAMS += $(LIBDRM_INTEL_BIN)
-	intel_error_decode_LDFLAGS = -lz
+bin_PROGRAMS += $(LIBDRM_INTEL_BIN)
+intel_error_decode_LDFLAGS = -lz
 endif
 
 SUBDIRS = null_state_gen registers
