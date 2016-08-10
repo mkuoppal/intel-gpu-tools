@@ -647,8 +647,10 @@ static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, in
 	struct igt_fb fb_info, cursor_fb, cursor_fb2, argb_fb;
 	unsigned vblank_start, vblank_last;
 	volatile unsigned long *shared;
-	int target;
+	long target;
 	enum pipe pipe = find_connected_pipe(display, false);
+	igt_output_t *output;
+	uint32_t vrefresh;
 
 	if (mode >= flip_test_atomic)
 		igt_require(display->is_atomic);
@@ -656,7 +658,8 @@ static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, in
 	shared = mmap(NULL, 4096, PROT_WRITE, MAP_SHARED | MAP_ANON, -1, 0);
 	igt_assert(shared != MAP_FAILED);
 
-	igt_require(set_fb_on_crtc(display, pipe, &fb_info));
+	igt_require((output = set_fb_on_crtc(display, pipe, &fb_info)));
+	vrefresh = igt_output_get_mode(output)->vrefresh;
 
 	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
 	set_cursor_on_pipe(display, pipe, &cursor_fb);
@@ -678,8 +681,8 @@ static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, in
 	} while (target);
 	igt_require(target > 1);
 
-	igt_debug("Using a target of %d cursor updates per half-vblank\n",
-		  target);
+	igt_debug("Using a target of %ld cursor updates per half-vblank (%u)\n",
+		  target, vrefresh);
 
 	for (int i = 0; i < nloops; i++) {
 		shared[0] = 0;
@@ -705,7 +708,7 @@ static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, in
 
 		igt_assert_eq(read(display->drm_fd, &vbl, sizeof(vbl)), sizeof(vbl));
 		vblank_start = vblank_last = vbl.sequence;
-		for (int n = 0; n < 60; n++) {
+		for (int n = 0; n < vrefresh; n++) {
 			flip_nonblocking(display, pipe, mode >= flip_test_atomic, &fb_info);
 
 			igt_assert_eq(read(display->drm_fd, &vbl, sizeof(vbl)), sizeof(vbl));
@@ -715,15 +718,18 @@ static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, in
 			}
 			vblank_last = vbl.sequence;
 		}
-		igt_assert_eq(vbl.sequence, vblank_start + 60);
+
+		if (mode != flip_test_atomic_transitions &&
+		    mode != flip_test_atomic_transitions_varying_size)
+			igt_assert_eq(vbl.sequence, vblank_start + vrefresh);
 
 		shared[0] = 1;
 		igt_waitchildren();
-		igt_assert_f(shared[0] > 60*target,
+		igt_assert_f(shared[0] > vrefresh*target,
 			     "completed %lu cursor updated in a period of 60 flips, "
 			     "we expect to complete approximately %lu updateds, "
 			     "with the threshold set at %lu\n",
-			     shared[0], 2*60ul*target, 60ul*target);
+			     shared[0], 2ul*vrefresh*target, vrefresh*target);
 	}
 
 	do_cleanup_display(display);
