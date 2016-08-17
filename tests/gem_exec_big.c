@@ -113,6 +113,18 @@ static void exec1(int fd, uint32_t handle, uint64_t reloc_ofs, unsigned flags, c
 	}
 }
 
+static void xchg_reloc(void *array, unsigned i, unsigned j)
+{
+	struct drm_i915_gem_relocation_entry *reloc = array;
+	struct drm_i915_gem_relocation_entry *a = &reloc[i];
+	struct drm_i915_gem_relocation_entry *b = &reloc[j];
+	struct drm_i915_gem_relocation_entry tmp;
+
+	tmp = *a;
+	*a = *b;
+	*b = tmp;
+}
+
 static void execN(int fd, uint32_t handle, uint64_t batch_size, unsigned flags, char *ptr)
 {
 #define reloc_ofs(N, T) ((((N)+1) << 12) - 4*(1 + ((N) == ((T)-1))))
@@ -154,6 +166,8 @@ static void execN(int fd, uint32_t handle, uint64_t batch_size, unsigned flags, 
 	 * presumed_offset of -1. Happens when the batch is still busy from the
 	 * last round. */
 	gem_sync(fd, handle);
+
+	igt_permute_array(gem_reloc, nreloc, xchg_reloc);
 
 	gem_execbuf(fd, &execbuf);
 	for (n = 0; n < nreloc; n++)
@@ -209,6 +223,7 @@ igt_simple_main
 		else
 			ptr = NULL;
 
+		igt_debug("Forwards (%lld)\n", (long long)batch_size);
 		for (reloc_ofs = 4096; reloc_ofs < batch_size; reloc_ofs += 4096) {
 			igt_debug("batch_size %llu, reloc_ofs %llu\n",
 				  (long long)batch_size, (long long)reloc_ofs);
@@ -216,8 +231,15 @@ igt_simple_main
 			exec1(fd, handle, reloc_ofs, I915_EXEC_SECURE, ptr);
 		}
 
-		igt_debug("batch_size %llu, all %ld relocs\n",
-			  (long long)batch_size, (long)(batch_size >> 12));
+		igt_debug("Backwards (%lld)\n", (long long)batch_size);
+		for (reloc_ofs = batch_size - 4096; reloc_ofs; reloc_ofs -= 4096) {
+			igt_debug("batch_size %llu, reloc_ofs %llu\n",
+				  (long long)batch_size, (long long)reloc_ofs);
+			exec1(fd, handle, reloc_ofs, 0, ptr);
+			exec1(fd, handle, reloc_ofs, I915_EXEC_SECURE, ptr);
+		}
+
+		igt_debug("Random (%lld)\n", (long long)batch_size);
 		execN(fd, handle, batch_size, 0, ptr);
 		execN(fd, handle, batch_size, I915_EXEC_SECURE, ptr);
 
