@@ -203,9 +203,15 @@ static int create_bo_for_fb(int fd, int width, int height, uint32_t format,
 			*is_dumb = false;
 
 		if (is_i915_device(fd)) {
+			uint32_t *ptr;
 
 			bo = gem_create(fd, size);
 			gem_set_tiling(fd, bo, tiling, stride);
+
+			/* Ensure the framebuffer is preallocated */
+			ptr = gem_mmap__gtt(fd, bo, size, PROT_READ);
+			igt_assert(*ptr == 0);
+			munmap(ptr, size);
 
 			if (size_ret)
 				*size_ret = size;
