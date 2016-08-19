@@ -236,6 +236,8 @@ static void flink_and_close(void)
 	gem_sync(fd2, flinked_bo);
 	gem_close(fd2, flinked_bo);
 
+	igt_drop_caches_set(DROP_RETIRE);
+
 	/* the flinked bo VMA should have been cleared now, so a new bo of the
 	 * same size should get the same offset
 	 */
@@ -253,40 +255,26 @@ static void flink_and_close(void)
 static void flink_and_exit(void)
 {
 	uint32_t fd, fd2, fd3;
-	uint32_t bo, bo2, flinked_bo, name;
-	char match[100];
-	int to_match;
-	bool matched;
-	int retry = 0;
-	const int retries = 50;
+	uint32_t bo, flinked_bo, name;
+	char match[20];
 
 	fd = drm_open_driver(DRIVER_INTEL);
 	igt_require(gem_uses_full_ppgtt(fd));
 
 	bo = gem_create(fd, 4096);
 	name = gem_flink(fd, bo);
-
-	to_match  = snprintf(match, sizeof(match), "(name: %u)", name);
-	igt_assert(to_match < sizeof(match));
+	snprintf(match, sizeof(match), "(name: %u)", name);
 
 	fd2 = drm_open_driver(DRIVER_INTEL);
 	flinked_bo = gem_open(fd2, name);
 
-	fd3 = drm_open_driver(DRIVER_INTEL);
-	bo2 = gem_create(fd3, 4096);
-
 	/* Verify VMA is not there yet. */
-	matched = igt_debugfs_search("i915_gem_gtt", match);
-	igt_assert_eq(matched, false);
+	igt_assert(!igt_debugfs_search("i915_gem_gtt", match));
 
 	exec_and_get_offset(fd2, flinked_bo);
-	gem_sync(fd2, flinked_bo);
 
 	/* Verify VMA has been created. */
-	matched = igt_debugfs_search("i915_gem_gtt", match);
-	igt_assert_eq(matched, true);
-
-	gem_close(fd2, flinked_bo);
+	igt_assert(igt_debugfs_search("i915_gem_gtt", match));
 
 	/* Close the context. */
 	close(fd2);
@@ -294,25 +282,13 @@ static void flink_and_exit(void)
 	/* Execute a different and unrelated (wrt object sharing) context to
 	 * ensure engine drops its last context reference.
 	 */
-	exec_and_get_offset(fd3, bo2);
-
-retry:
-	/* Give cleanup some time to run. */
-	usleep(100000);
-
-	/* The flinked bo VMA should have been cleared now, so list of VMAs
-	 * in debugfs should not contain the one for the imported object.
-	 */
-	matched = igt_debugfs_search("i915_gem_gtt", match);
-	if (matched && retry++ < retries)
-		goto retry;
-
-	igt_assert_eq(matched, false);
-
-	gem_close(fd3, bo2);
+	fd3 = drm_open_driver(DRIVER_INTEL);
+	exec_and_get_offset(fd3, gem_create(fd3, 4096));
 	close(fd3);
 
-	gem_close(fd, bo);
+	igt_drop_caches_set(DROP_ACTIVE | DROP_RETIRE);
+	igt_assert(!igt_debugfs_search("i915_gem_gtt", match));
+
 	close(fd);
 }
 
