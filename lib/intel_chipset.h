@@ -147,6 +147,7 @@ void intel_check_pch(void);
 
 #define IS_IRONLAKE(devid)	(intel_get_device_info(devid)->is_ironlake)
 #define IS_ARRANDALE(devid)	(intel_get_device_info(devid)->is_arrandale)
+#define IS_SANDYBRIDGE(devid)	(intel_get_device_info(devid)->is_sandybridge)
 #define IS_IVYBRIDGE(devid)	(intel_get_device_info(devid)->is_ivybridge)
 #define IS_VALLEYVIEW(devid)	(intel_get_device_info(devid)->is_valleyview)
 #define IS_HASWELL(devid)	(intel_get_device_info(devid)->is_haswell)
