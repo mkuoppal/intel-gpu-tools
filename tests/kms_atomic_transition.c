@@ -105,6 +105,12 @@ static drmEventContext drm_events = {
 	.page_flip_handler = ev_page_flip
 };
 
+enum transition_type {
+	TRANSITION_PLANES,
+	TRANSITION_MODESET,
+	TRANSITION_MODESET_DISABLE,
+};
+
 /*
  * 1. Set primary plane to a known fb.
  * 2. Make sure getcrtc returns the correct fb id.
@@ -115,10 +121,10 @@ static drmEventContext drm_events = {
  * so test this and make sure it works.
  */
 static void
-run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output, bool modeset, bool nonblocking)
+run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output, enum transition_type type, bool nonblocking)
 {
 	struct igt_fb fb, argb_fb;
-	drmModeModeInfo *mode;
+	drmModeModeInfo *mode, override_mode;
 	igt_plane_t *plane;
 	uint64_t cursor_width, cursor_height;
 	uint32_t n_planes = display->pipes[pipe].n_planes;
@@ -130,10 +136,12 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	if (nonblocking)
 		flags |= DRM_MODE_ATOMIC_NONBLOCK;
 
-	if (modeset)
+	if (type >= TRANSITION_MODESET)
 		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
 
 	mode = igt_output_get_mode(output);
+	override_mode = *mode;
+	override_mode.flags |= DRM_MODE_FLAG_HSKEW;
 
 	igt_create_fb(display->drm_fd, mode->hdisplay, mode->vdisplay,
 		      DRM_FORMAT_XRGB8888, LOCAL_DRM_FORMAT_MOD_NONE, &fb);
@@ -153,10 +161,11 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 
 	wm_setup_plane(display, pipe, 0, NULL);
 
-	if (nonblocking && modeset && (skip_test = skip_on_unsupported_nonblocking_modeset(display)))
-		goto cleanup;
+	if (flags & DRM_MODE_ATOMIC_ALLOW_MODESET) {
+		skip_test = nonblocking && skip_on_unsupported_nonblocking_modeset(display);
+		if (skip_test)
+			goto cleanup;
 
-	if (modeset) {
 		igt_output_set_pipe(output, PIPE_NONE);
 
 		igt_display_commit2(display, COMMIT_ATOMIC);
@@ -215,7 +224,6 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 
 		if (!ret)
 			igt_skip("Cannot run tests without proper size sprite planes\n");
-
 	}
 
 	for (i = 0; i < iter_max; i++) {
@@ -226,7 +234,7 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 		igt_display_commit_atomic(display, flags, (void *)(unsigned long)i);
 		drmHandleEvent(display->drm_fd, &drm_events);
 
-		if (modeset) {
+		if (type == TRANSITION_MODESET_DISABLE) {
 			igt_output_set_pipe(output, PIPE_NONE);
 
 			wm_setup_plane(display, pipe, 0, parms);
@@ -241,10 +249,16 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 			for (j = iter_max - 1; j > i + 1; j--) {
 				wm_setup_plane(display, pipe, j, parms);
 
+				if (type == TRANSITION_MODESET)
+					igt_output_override_mode(output, &override_mode);
+
 				igt_display_commit_atomic(display, flags, (void *)(unsigned long)j);
 				drmHandleEvent(display->drm_fd, &drm_events);
 
 				wm_setup_plane(display, pipe, i, parms);
+				if (type == TRANSITION_MODESET)
+					igt_output_override_mode(output, NULL);
+
 				igt_display_commit_atomic(display, flags, (void *)(unsigned long)i);
 				drmHandleEvent(display->drm_fd, &drm_events);
 			}
@@ -568,15 +582,19 @@ igt_main
 
 	igt_subtest("plane-all-transition")
 		for_each_pipe_with_valid_output(&display, pipe, output)
-			run_transition_test(&display, pipe, output, false, false);
+			run_transition_test(&display, pipe, output, TRANSITION_PLANES, false);
 
 	igt_subtest("plane-all-transition-nonblocking")
 		for_each_pipe_with_valid_output(&display, pipe, output)
-			run_transition_test(&display, pipe, output, false, true);
+			run_transition_test(&display, pipe, output, TRANSITION_PLANES, true);
 
-	igt_subtest("plane-modeset-transition")
+	igt_subtest("plane-all-modeset-transition")
 		for_each_pipe_with_valid_output(&display, pipe, output)
-			run_transition_test(&display, pipe, output, true, false);
+			run_transition_test(&display, pipe, output, TRANSITION_MODESET, false);
+
+	igt_subtest("plane-toggle-modeset-transition")
+		for_each_pipe_with_valid_output(&display, pipe, output)
+			run_transition_test(&display, pipe, output, TRANSITION_MODESET_DISABLE, false);
 
 	for (i = 1; i <= I915_MAX_PIPES; i++) {
 		igt_subtest_f("%ix-modeset-transitions", i)
