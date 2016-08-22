@@ -26,8 +26,6 @@
 
 #include <sys/poll.h>
 
-#define BASIC	0x10
-
 IGT_TEST_DESCRIPTION("Basic check of polling for prime/vgem fences.");
 
 static void test_read(int vgem, int i915)
@@ -671,7 +669,6 @@ igt_main
 	int i915 = -1;
 	int vgem = -1;
 	int gen = 0;
-	unsigned int flags = 0x0;
 
 	igt_skip_on_simulation();
 
@@ -696,7 +693,7 @@ igt_main
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%ssync-%s",
-			      e->exec_id == 0 && (flags & BASIC) ? "basic-" : "",
+			      e->exec_id == 0 ? "basic-" : "",
 			      e->name) {
 			gem_require_ring(i915, e->exec_id | e->flags);
 			igt_skip_on_f(gen == 6 &&
@@ -709,7 +706,7 @@ igt_main
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%sbusy-%s",
-			      e->exec_id == 0 && (flags & BASIC) ? "basic-" : "",
+			      e->exec_id == 0 ? "basic-" : "",
 			      e->name) {
 			gem_require_ring(i915, e->exec_id | e->flags);
 			igt_skip_on_f(gen == 6 &&
@@ -722,7 +719,7 @@ igt_main
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%swait-%s",
-			      e->exec_id == 0 && (flags & BASIC) ? "basic-" : "",
+			      e->exec_id == 0 ? "basic-" : "",
 			      e->name) {
 			gem_require_ring(i915, e->exec_id | e->flags);
 			igt_skip_on_f(gen == 6 &&
@@ -746,7 +743,7 @@ igt_main
 
 		for (e = intel_execution_engines; e->name; e++) {
 			igt_subtest_f("%sfence-wait-%s",
-					e->exec_id == 0 && (flags & BASIC) ? "basic-" : "",
+					e->exec_id == 0 ? "basic-" : "",
 					e->name) {
 				gem_require_ring(i915, e->exec_id | e->flags);
 				igt_skip_on_f(gen == 6 &&
@@ -757,7 +754,7 @@ igt_main
 			}
 		}
 
-		igt_subtest_f("%sfence-flip", flags & BASIC ? "basic-" : "")
+		igt_subtest("basic-fence-flip")
 			test_flip(i915, vgem, 0);
 
 		igt_subtest_group {
