@@ -470,7 +470,7 @@ static void reset_display(data_t *data)
 	igt_display_t *display = &data->display;
 
 	for_each_connected_output(display, data->output) {
-		if (data->output->valid) {
+		if (data->output->valid > 0) {
 			data->primary =  igt_output_get_plane(data->output, IGT_PLANE_PRIMARY);
 			igt_plane_set_fb(data->primary, NULL);
 		}

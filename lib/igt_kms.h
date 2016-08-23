@@ -297,7 +297,7 @@ typedef struct {
 	uint32_t id;					/* KMS id */
 	struct kmstest_connector_config config;
 	char *name;
-	bool valid;
+	int valid; /* -1 == never probed */
 	unsigned long pending_crtc_idx_mask;
 	bool use_override_mode;
 	drmModeModeInfo override_mode;

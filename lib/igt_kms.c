@@ -1217,7 +1217,6 @@ static void igt_display_log_shift(igt_display_t *display, int shift)
 static void igt_output_refresh(igt_output_t *output)
 {
 	igt_display_t *display = output->display;
-	bool ret;
 	unsigned long crtc_idx_mask;
 
 	/* we mask out the pipes already in use */
@@ -1225,14 +1224,11 @@ static void igt_output_refresh(igt_output_t *output)
 
 	kmstest_free_connector_config(&output->config);
 
-	ret = kmstest_get_connector_config(display->drm_fd,
-					   output->id,
-					   crtc_idx_mask,
-					   &output->config);
-	if (ret)
-		output->valid = true;
-	else
-		output->valid = false;
+	output->valid = _kmstest_connector_config(display->drm_fd,
+						  output->id,
+						  crtc_idx_mask,
+						  &output->config,
+						  output->valid < 0);
 
 	if (!output->name && output->config.connector) {
 		drmModeConnector *c = output->config.connector;
@@ -1502,6 +1498,7 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		 * We don't assign each output a pipe unless
 		 * a pipe is set with igt_output_set_pipe().
 		 */
+		output->valid = -1;
 		output->pending_crtc_idx_mask = 0;
 		output->id = resources->connectors[i];
 		output->display = display;
@@ -1538,7 +1535,7 @@ static void igt_pipe_fini(igt_pipe_t *pipe)
 
 static void igt_output_fini(igt_output_t *output)
 {
-	if (output->valid)
+	if (output->valid > 0)
 		kmstest_free_connector_config(&output->config);
 	free(output->name);
 }
@@ -2243,7 +2240,7 @@ static int do_display_commit(igt_display_t *display,
 			igt_pipe_t *pipe_obj = &display->pipes[pipe];
 			igt_output_t *output = igt_pipe_get_output(pipe_obj);
 
-			if (output && output->valid)
+			if (output && output->valid > 0)
 				valid_outs++;
 
 			ret = igt_pipe_commit(pipe_obj, s, fail_on_error);
@@ -2442,6 +2439,8 @@ void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 {
 	igt_display_t *display = output->display;
 	igt_pipe_t *old_pipe;
+
+	igt_assert(output->valid != -1);
 
 	if (output->pending_crtc_idx_mask) {
 		old_pipe = igt_output_get_driving_pipe(output);
