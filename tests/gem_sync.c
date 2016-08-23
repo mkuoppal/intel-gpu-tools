@@ -724,13 +724,11 @@ igt_main
 	const struct intel_execution_engine *e;
 	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	int fd = -1;
-	uint32_t devid;
 
 	igt_skip_on_simulation();
 
 	igt_fixture {
 		fd = drm_open_driver(DRIVER_INTEL);
-		devid = intel_get_drm_devid(fd);
 		print_welcome(fd);
 
 		igt_fork_hang_detector(fd);
@@ -751,12 +749,8 @@ igt_main
 
 	igt_subtest("basic-each")
 		sync_ring(fd, ~0u, 1);
-
-	igt_subtest("basic-store-each") {
-		igt_skip_on(IS_BROADWELL(devid));
+	igt_subtest("basic-store-each")
 		store_ring(fd, ~0u, 1);
-	}
-
 	igt_subtest("basic-many-each")
 		store_many(fd, ~0u, 10);
 	igt_subtest("forked-each")
