@@ -621,35 +621,19 @@ static void sighandler(int sig)
 {
 }
 
-static void test_flip(int i915, int vgem, unsigned hang)
+static void flip_to_vgem(int i915, int vgem,
+			 struct vgem_bo *bo,
+			 uint32_t fb_id,
+			 uint32_t crtc_id,
+			 unsigned hang,
+			 const char *name)
 {
-	struct drm_event_vblank vbl;
-	uint32_t fb_id, crtc_id;
-	uint32_t handle, fence;
 	struct pollfd pfd;
-	struct vgem_bo bo;
+	struct drm_event_vblank vbl;
+	uint32_t fence;
 
-	signal(SIGALRM, sighandler);
-
-	bo.width = 1024;
-	bo.height = 768;
-	bo.bpp = 32;
-	vgem_create(vgem, &bo);
-
-	pfd.fd = prime_handle_to_fd(vgem, bo.handle);
-	handle = prime_fd_to_handle(i915, pfd.fd);
-	igt_assert(handle);
-	close(pfd.fd);
-
-	do_or_die(__kms_addfb(i915, handle, bo.width, bo.height, bo.pitch,
-			      DRM_FORMAT_XRGB8888, I915_TILING_NONE,
-			      LOCAL_DRM_MODE_FB_MODIFIERS, &fb_id));
-	igt_assert(fb_id);
-	igt_require((crtc_id = set_fb_on_crtc(i915, 0, &bo, fb_id)));
-
-	/* Schedule a flip to wait upon vgem being written */
 	igt_fork(child, 1) {
-		fence = vgem_fence_attach(vgem, &bo, VGEM_FENCE_WRITE | hang);
+		fence = vgem_fence_attach(vgem, bo, VGEM_FENCE_WRITE | hang);
 		do_or_die(drmModePageFlip(i915, crtc_id, fb_id,
 					  DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
 		kill(getppid(), SIGALRM);
@@ -658,7 +642,9 @@ static void test_flip(int i915, int vgem, unsigned hang)
 		pfd.fd = i915;
 		pfd.events = POLLIN;
 		for (int n = 0; n < 5; n++) {
-			igt_assert_eq(poll(&pfd, 1, 0), 0);
+			igt_assert_f(poll(&pfd, 1, 0) == 0,
+				     "flip to %s completed whilst busy\n",
+				      name);
 			get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
 		}
 		igt_assert_eq(poll(&pfd, 1, 20000), 1);
@@ -670,7 +656,7 @@ static void test_flip(int i915, int vgem, unsigned hang)
 		struct timespec tv = { 1, 0 };
 
 		igt_assert_f(nanosleep(&tv, NULL) == -1,
-			     "flip to busy vgem blocked\n");
+			     "flip to busy %s blocked\n", name);
 
 		memset(&wait, 0, sizeof(wait));
 		wait.request.type = DRM_VBLANK_RELATIVE | pipe_select(0);
@@ -687,10 +673,55 @@ static void test_flip(int i915, int vgem, unsigned hang)
 	igt_reset_timeout();
 
 	igt_waitchildren();
+}
 
-	do_or_die(drmModeRmFB(i915, fb_id));
-	gem_close(i915, handle);
-	gem_close(vgem, bo.handle);
+static void test_flip(int i915, int vgem, unsigned hang)
+{
+	struct vgem_bo bo[2];
+	uint32_t fb_id[2], handle[2], crtc_id;
+	int fd;
+
+	signal(SIGALRM, sighandler);
+
+	for (int i = 0; i < 2; i++) {
+		bo[i].width = 1024;
+		bo[i].height = 768;
+		bo[i].bpp = 32;
+		vgem_create(vgem, &bo[i]);
+
+		fd = prime_handle_to_fd(vgem, bo[i].handle);
+		handle[i] = prime_fd_to_handle(i915, fd);
+		igt_assert(handle[i]);
+		close(fd);
+		do_or_die(__kms_addfb(i915, handle[i],
+				      bo[i].width, bo[i].height, bo[i].pitch,
+				      DRM_FORMAT_XRGB8888, I915_TILING_NONE,
+				      LOCAL_DRM_MODE_FB_MODIFIERS, &fb_id[i]));
+		igt_assert(fb_id[i]);
+	}
+
+	igt_require((crtc_id = set_fb_on_crtc(i915, 0, &bo[0], fb_id[0])));
+
+	/* Bind both fb for use by flipping */
+	for (int i = 1; i >= 0; i--) {
+		struct drm_event_vblank vbl;
+
+		do_or_die(drmModePageFlip(i915, crtc_id, fb_id[i],
+					  DRM_MODE_PAGE_FLIP_EVENT, &fb_id[i]));
+		igt_assert_eq(read(i915, &vbl, sizeof(vbl)), sizeof(vbl));
+	}
+
+	/* Schedule a flip to wait upon the frontbuffer vgem being written */
+	flip_to_vgem(i915, vgem, &bo[0], fb_id[0], crtc_id, hang, "front");
+
+	/* Schedule a flip to wait upon the backbuffer vgem being written */
+	flip_to_vgem(i915, vgem, &bo[1], fb_id[1], crtc_id, hang, "back");
+
+	for (int i = 0; i < 2; i++) {
+		do_or_die(drmModeRmFB(i915, fb_id[i]));
+		gem_close(i915, handle[i]);
+		gem_close(vgem, bo[i].handle);
+	}
 
 	signal(SIGALRM, SIG_DFL);
 }
