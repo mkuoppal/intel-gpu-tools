@@ -25,6 +25,8 @@
 #include "igt_vgem.h"
 
 #include <sys/poll.h>
+#include <signal.h>
+#include <time.h>
 
 IGT_TEST_DESCRIPTION("Basic check of polling for prime/vgem fences.");
 
@@ -615,6 +617,10 @@ static unsigned get_vblank(int fd, int pipe, unsigned flags)
 	return vbl.reply.sequence;
 }
 
+static void sighandler(int sig)
+{
+}
+
 static void test_flip(int i915, int vgem, unsigned hang)
 {
 	struct drm_event_vblank vbl;
@@ -622,6 +628,8 @@ static void test_flip(int i915, int vgem, unsigned hang)
 	uint32_t handle, fence;
 	struct pollfd pfd;
 	struct vgem_bo bo;
+
+	signal(SIGALRM, sighandler);
 
 	bo.width = 1024;
 	bo.height = 768;
@@ -640,20 +648,35 @@ static void test_flip(int i915, int vgem, unsigned hang)
 	igt_require((crtc_id = set_fb_on_crtc(i915, 0, &bo, fb_id)));
 
 	/* Schedule a flip to wait upon vgem being written */
-	fence = vgem_fence_attach(vgem, &bo, VGEM_FENCE_WRITE | hang);
-	do_or_die(drmModePageFlip(i915, crtc_id, fb_id,
-				  DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
+	igt_fork(child, 1) {
+		fence = vgem_fence_attach(vgem, &bo, VGEM_FENCE_WRITE | hang);
+		do_or_die(drmModePageFlip(i915, crtc_id, fb_id,
+					  DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
+		kill(getppid(), SIGALRM);
 
-	/* Check we don't flip before the fence is ready */
-	pfd.fd = i915;
-	pfd.events = POLLIN;
-	for (int n = 0; n < 5; n++) {
-		igt_assert_eq(poll(&pfd, 1, 0), 0);
-		get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
+		/* Check we don't flip before the fence is ready */
+		pfd.fd = i915;
+		pfd.events = POLLIN;
+		for (int n = 0; n < 5; n++) {
+			igt_assert_eq(poll(&pfd, 1, 0), 0);
+			get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
+		}
+		igt_assert_eq(poll(&pfd, 1, 20000), 1);
 	}
 
 	/* And then the flip is completed as soon as it is ready */
 	if (!hang) {
+		union drm_wait_vblank wait;
+		struct timespec tv = { 1, 0 };
+
+		igt_assert_f(nanosleep(&tv, NULL) == -1,
+			     "flip to busy vgem blocked\n");
+
+		memset(&wait, 0, sizeof(wait));
+		wait.request.type = DRM_VBLANK_RELATIVE | pipe_select(0);
+		wait.request.sequence = 10;
+		do_or_die(drmIoctl(i915, DRM_IOCTL_WAIT_VBLANK, &wait));
+
 		vgem_fence_signal(vgem, fence);
 		get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
 		igt_assert_eq(poll(&pfd, 1, 0), 1);
@@ -663,9 +686,13 @@ static void test_flip(int i915, int vgem, unsigned hang)
 	igt_assert_eq(read(i915, &vbl, sizeof(vbl)), sizeof(vbl));
 	igt_reset_timeout();
 
+	igt_waitchildren();
+
 	do_or_die(drmModeRmFB(i915, fb_id));
 	gem_close(i915, handle);
 	gem_close(vgem, bo.handle);
+
+	signal(SIGALRM, SIG_DFL);
 }
 
 igt_main
