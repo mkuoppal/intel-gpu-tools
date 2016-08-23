@@ -244,7 +244,7 @@ static enum pipe find_connected_pipe(igt_display_t *display, bool second)
 	if (first_output)
 		igt_require_f(found, "No second valid output found\n");
 	else
-		igt_require_f(found, "No valid outputs found");
+		igt_require_f(found, "No valid outputs found\n");
 
 	return pipe;
 }
