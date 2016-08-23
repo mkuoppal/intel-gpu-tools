@@ -544,12 +544,17 @@ static uint32_t set_fb_on_crtc(int fd, int pipe, struct vgem_bo *bo, uint32_t fb
 
 		memset(&conn, 0, sizeof(conn));
 		conn.connector_id = resources->connectors[o];
-		conn.count_modes = 4096;
-		conn.modes_ptr = (uintptr_t)modes;
-		conn.count_encoders = 32;
-		conn.encoders_ptr = (uintptr_t)encoders;
-
 		drmIoctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn);
+		if (!conn.count_modes)
+			continue;
+
+		igt_assert(conn.count_modes <= 4096);
+		igt_assert(conn.count_encoders <= 32);
+
+		conn.modes_ptr = (uintptr_t)modes;
+		conn.encoders_ptr = (uintptr_t)encoders;
+		conn.count_props = 0;
+		do_or_die(drmIoctl(fd, DRM_IOCTL_MODE_GETCONNECTOR, &conn));
 
 		for (e = 0; e < conn.count_encoders; e++) {
 			struct drm_mode_get_encoder enc;
@@ -564,8 +569,8 @@ static uint32_t set_fb_on_crtc(int fd, int pipe, struct vgem_bo *bo, uint32_t fb
 			continue;
 
 		for (m = 0; m < conn.count_modes; m++) {
-			if (modes[m].hdisplay == bo->width &&
-			    modes[m].vdisplay == bo->height)
+			if (modes[m].hdisplay <= bo->width &&
+			    modes[m].vdisplay <= bo->height)
 				break;
 		}
 		if (m == conn.count_modes)
