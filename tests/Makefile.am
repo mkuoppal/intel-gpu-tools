@@ -54,7 +54,7 @@ EXTRA_DIST = $(common_files) $(check_SCRIPTS)
 
 CLEANFILES = $(EXTRA_PROGRAMS) test-list.txt test-list-full.txt .gitignore
 
-AM_CFLAGS = $(DRM_CFLAGS) $(CWARNFLAGS) $(DEBUG_CFLAGS)\
+AM_CFLAGS = $(DRM_CFLAGS) $(CWARNFLAGS) -Wno-unused-result $(DEBUG_CFLAGS)\
 	-I$(srcdir)/.. \
 	-I$(srcdir)/../lib \
 	-include "$(srcdir)/../lib/check-ndebug.h" \
