@@ -25,14 +25,22 @@
 # Check that command line handling works consistently across all tests
 #
 
+if [ -z "$top_builddir" ]; then
+	top_builddir="$(dirname $0)/../.."
+fi
+
 TESTLIST=`cat $top_builddir/tests/test-list.txt`
 if [ $? -ne 0 ]; then
 	echo "Error: Could not read test lists"
 	exit 99
 fi
 
-for test in $TESTLIST; do
+fail () {
+	echo "FAIL: $1"
+	exit 1
+}
 
+for test in $TESTLIST; do
 	if [ "$test" = "TESTLIST" -o "$test" = "END" ]; then
 		continue
 	fi
@@ -48,29 +56,29 @@ for test in $TESTLIST; do
 
 	# check invalid option handling
 	echo "  Checking invalid option handling..."
-	./$test --invalid-option 2> /dev/null && exit 1
+	./$test --invalid-option 2> /dev/null && fail $test
 
 	# check valid options succeed
 	echo "  Checking valid option handling..."
-	./$test --help > /dev/null || exit 1
+	./$test --help > /dev/null || fail $test
 
 	# check --list-subtests works correctly
 	echo "  Checking subtest enumeration..."
 	LIST=`./$test --list-subtests`
 	RET=$?
 	if [ $RET -ne 0 -a $RET -ne 79 ]; then
-		exit 1
+		fail $test
 	fi
 
 	if [ $RET -eq 79 -a -n "$LIST" ]; then
-		exit 1
+		fail $test
 	fi
 
 	if [ $RET -eq 0 -a -z "$LIST" ]; then
-		exit 1
+		fail $test
 	fi
 
 	# check invalid subtest handling
 	echo "  Checking invalid subtest handling..."
-	./$test --run-subtest invalid-subtest > /dev/null 2>&1 && exit 1
+	./$test --run-subtest invalid-subtest > /dev/null 2>&1 && fail $test
 done
