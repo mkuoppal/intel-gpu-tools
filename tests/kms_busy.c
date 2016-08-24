@@ -230,7 +230,7 @@ static void test_flip(igt_display_t *dpy, unsigned ring, int pipe)
 
 igt_main
 {
-	igt_display_t display = { .drm_fd = -1 };
+	igt_display_t display = { .drm_fd = -1, .n_pipes = I915_MAX_PIPES };
 	const struct intel_execution_engine *e;
 
 	igt_skip_on_simulation();
@@ -255,14 +255,14 @@ igt_main
 		}
 
 		for (e = intel_execution_engines; e->name; e++) {
-			if (!gem_has_ring(display.drm_fd,
-					  e->exec_id | e->flags))
-				continue;
-
 			igt_subtest_f("%sflip-%s-%s",
 				      e->exec_id == 0 ? "basic-" : "",
-				      e->name, kmstest_pipe_name(n))
+				      e->name, kmstest_pipe_name(n)) {
+				igt_require(gem_has_ring(display.drm_fd,
+							e->exec_id | e->flags));
+
 				test_flip(&display, e->exec_id | e->flags, n);
+			}
 		}
 	}
 
