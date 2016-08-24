@@ -1098,6 +1098,179 @@ static void print_backtrace(void)
 		       (unsigned int) off);
 	}
 }
+
+static const char hex[] = "0123456789abcdef";
+
+static void
+xputch(int c)
+{
+	write(STDERR_FILENO, (const void *) &c, 1);
+}
+
+static int
+xpow(int base, int pow)
+{
+	int i, r = 1;
+
+	for (i = 0; i < pow; i++)
+		r *= base;
+
+	return r;
+}
+
+static void
+printnum(unsigned long long num, unsigned base)
+{
+	int i = 0;
+	unsigned long long __num;
+
+	/* determine from where we should start dividing */
+	do {
+		__num /= base;
+		i++;
+	} while (__num);
+
+	while (i--)
+		xputch(hex[num / xpow(base, i) % base]);
+}
+
+static size_t
+xstrlcpy(char *dst, const char *src, size_t size)
+{
+	char *dst_in;
+
+	dst_in = dst;
+	if (size > 0) {
+		while (--size > 0 && *src != '\0')
+			*dst++ = *src++;
+		*dst = '\0';
+	}
+
+	return dst - dst_in;
+}
+
+static void
+xprintfmt(const char *fmt, va_list ap)
+{
+	const char *p;
+	int ch, base;
+	unsigned long long num;
+
+	while (1) {
+		while ((ch = *(unsigned char *) fmt++) != '%') {
+			if (ch == '\0') {
+				return;
+			}
+			xputch(ch);
+		}
+
+		ch = *(unsigned char *) fmt++;
+		switch (ch) {
+		/* character */
+		case 'c':
+			xputch(va_arg(ap, int));
+			break;
+		/* string */
+		case 's':
+			if ((p = va_arg(ap, char *)) == NULL) {
+				p = "(null)";
+			}
+
+			for (; (ch = *p++) != '\0';) {
+				if (ch < ' ' || ch > '~') {
+					xputch('?');
+				} else {
+					xputch(ch);
+				}
+			}
+			break;
+		/* (signed) decimal */
+		case 'd':
+			num = va_arg(ap, int);
+			if ((long long) num < 0) {
+				xputch('-');
+				num = -(long long) num;
+			}
+			base = 10;
+			goto number;
+		/* unsigned decimal */
+		case 'u':
+			num = va_arg(ap, unsigned int);
+			base = 10;
+			goto number;
+		/* (unsigned) hexadecimal */
+		case 'x':
+			num = va_arg(ap, unsigned int);
+			base = 16;
+number:
+			printnum(num, base);
+			break;
+
+		/* The following are not implemented */
+
+		/* width field */
+		case '1': case '2':
+		case '3': case '4':
+		case '5': case '6':
+		case '7': case '8':
+		case '9':
+		case '.': case '#':
+		/* long */
+		case 'l':
+		/* octal */
+		case 'o':
+		/* pointer */
+		case 'p':
+		/* float */
+		case 'f':
+			abort();
+		/* escaped '%' character */
+		case '%':
+			xputch(ch);
+			break;
+		/* unrecognized escape sequence - just print it literally */
+		default:
+			xputch('%');
+			for (fmt--; fmt[-1] != '%'; fmt--)
+				; /* do nothing */
+			break;
+		}
+	}
+}
+
+/* async-safe printf */
+static void
+xprintf(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	xprintfmt(fmt, ap);
+	va_end(ap);
+}
+
+static void print_backtrace_sig_safe(void)
+{
+	unw_cursor_t cursor;
+	unw_context_t uc;
+	int stack_num = 0;
+
+	write(STDERR_FILENO, "Stack trace: \n", 15);
+
+	unw_getcontext(&uc);
+	unw_init_local(&cursor, &uc);
+	while (unw_step(&cursor) > 0) {
+		char name[255];
+		unw_word_t off;
+
+		if (unw_get_proc_name(&cursor, name, 255, &off) < 0)
+			xstrlcpy(name, "<unknown>", 9);
+
+		xprintf(" #%d [%s+0x%x]\n", stack_num++, name,
+				(unsigned int) off);
+
+	}
+}
 #endif
 
 void __igt_fail_assert(const char *domain, const char *file, const int line,
@@ -1482,7 +1655,8 @@ static bool exit_handler_disabled;
 #define SILENT(x) { x, NULL, 0 }
 static const struct { int number; const char *name; size_t name_len; } handled_signals[] =
 	{ SILENT(SIGINT), SILENT(SIGHUP), SILENT(SIGTERM), SILENT(SIGQUIT),
-	  SILENT(SIGPIPE), SIGDEF(SIGABRT), SIGDEF(SIGSEGV), SIGDEF(SIGBUS) };
+	  SILENT(SIGPIPE), SIGDEF(SIGABRT), SIGDEF(SIGSEGV), SIGDEF(SIGBUS),
+	  SIGDEF(SIGFPE) };
 #undef SILENT
 #undef SIGDEF
 
@@ -1542,6 +1716,7 @@ static bool crash_signal(int sig)
 	switch (sig) {
 	case SIGILL:
 	case SIGBUS:
+	case SIGFPE:
 	case SIGSEGV:
 		return true;
 	default:
@@ -1571,7 +1746,7 @@ static void fatal_sig_handler(int sig)
 				igt_exitcode = 128 + sig;
 
 			failed_one = true;
-
+			print_backtrace_sig_safe();
 			exit_subtest("CRASH");
 		}
 		break;
