@@ -865,16 +865,6 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	if (!connector)
 		goto err2;
 
-	if (connector->connection != DRM_MODE_CONNECTED)
-		goto err3;
-
-	if (!connector->count_modes) {
-		igt_warn("connector %d/%s-%d has no modes\n", connector_id,
-			 kmstest_connector_type_str(connector->connector_type),
-			 connector->connector_type_id);
-		goto err3;
-	}
-
 	if (connector->connector_id != connector_id) {
 		igt_warn("connector id doesn't match (%d != %d)\n",
 			 connector->connector_id, connector_id);
@@ -888,8 +878,10 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	 */
 	_kmstest_connector_config_crtc_mask(drm_fd, connector, config);
 
-	if (!kmstest_get_connector_default_mode(drm_fd, connector,
-						&config->default_mode))
+	if (!connector->count_modes)
+		memset(&config->default_mode, 0, sizeof(config->default_mode));
+	else if (!kmstest_get_connector_default_mode(drm_fd, connector,
+						     &config->default_mode))
 		goto err3;
 
 	config->connector = connector;
@@ -904,8 +896,17 @@ static bool _kmstest_connector_config(int drm_fd, uint32_t connector_id,
 	config->encoder = _kmstest_connector_config_find_encoder(drm_fd, connector, config->pipe);
 	config->crtc = drmModeGetCrtc(drm_fd, resources->crtcs[config->pipe]);
 
-	drmModeFreeResources(resources);
+	if (connector->connection != DRM_MODE_CONNECTED)
+		goto err2;
 
+	if (!connector->count_modes) {
+		igt_warn("connector %d/%s-%d has no modes\n", connector_id,
+			 kmstest_connector_type_str(connector->connector_type),
+			 connector->connector_type_id);
+		goto err2;
+	}
+
+	drmModeFreeResources(resources);
 	return true;
 err3:
 	drmModeFreeConnector(connector);
