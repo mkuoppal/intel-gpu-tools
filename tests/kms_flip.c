@@ -1352,8 +1352,10 @@ static void run_test_on_crtc_set(struct test_output *o, int *crtc_idxs,
 
 	/* 256 MB is usually the maximum mappable aperture,
 	 * (make it 4x times that to ensure failure) */
-	if (o->flags & TEST_BO_TOOBIG)
-		bo_size = 4*256*1024*1024;
+	if (o->flags & TEST_BO_TOOBIG) {
+		bo_size = 4*gem_mappable_aperture_size();
+		igt_require(bo_size < gem_global_aperture_size(drm_fd));
+	}
 
 	o->fb_ids[0] = igt_create_fb(drm_fd, o->fb_width, o->fb_height,
 					 igt_bpp_depth_to_drm_format(o->bpp, o->depth),
@@ -1401,11 +1403,7 @@ static void run_test_on_crtc_set(struct test_output *o, int *crtc_idxs,
 	if (o->flags & TEST_CHECK_TS)
 		sleep(1);
 
-	if (o->flags & TEST_BO_TOOBIG) {
-		igt_assert_eq(do_page_flip(o, o->fb_ids[1], true), -E2BIG);
-		goto out;
-	} else
-		igt_assert_eq(do_page_flip(o, o->fb_ids[1], true), 0);
+	igt_assert_eq(do_page_flip(o, o->fb_ids[1], true), 0);
 	wait_for_events(o);
 
 	o->current_fb_id = 1;
