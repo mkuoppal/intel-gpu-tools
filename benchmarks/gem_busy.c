@@ -55,7 +55,8 @@
 
 #define WRITE 0x1
 #define IDLE 0x2
-#define DMABUF 0x2
+#define DMABUF 0x4
+#define WAIT 0x8
 
 static bool gem_busy(int fd, uint32_t handle)
 {
@@ -67,6 +68,21 @@ static bool gem_busy(int fd, uint32_t handle)
 	do_ioctl(fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
 
 	return busy.busy != 0;
+}
+
+static bool gem_wait__busy(int fd, uint32_t handle)
+{
+	struct drm_i915_gem_wait wait;
+	int ret;
+
+	memset(&wait, 0, sizeof(wait));
+	wait.bo_handle = handle;
+
+	ret = 0;
+	if (igt_ioctl(fd, DRM_IOCTL_I915_GEM_WAIT, &wait))
+		ret = -errno;
+
+	return ret == -ETIME;
 }
 
 static double elapsed(const struct timespec *start,
@@ -196,6 +212,9 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 					struct pollfd pfd = { .fd = dmabuf, .events = POLLOUT };
 					for (int inner = 0; inner < 1024; inner++)
 						poll(&pfd, 1, 0);
+				} else if (flags & WAIT) {
+					for (int inner = 0; inner < 1024; inner++)
+						gem_wait__busy(fd, obj[0].handle);
 				} else {
 					for (int inner = 0; inner < 1024; inner++)
 						gem_busy(fd, obj[0].handle);
@@ -227,7 +246,7 @@ int main(int argc, char **argv)
 	int ncpus = 1;
 	int c;
 
-	while ((c = getopt (argc, argv, "e:r:dfWI")) != -1) {
+	while ((c = getopt (argc, argv, "e:r:dfwWI")) != -1) {
 		switch (c) {
 		case 'e':
 			if (strcmp(optarg, "rcs") == 0)
@@ -256,6 +275,10 @@ int main(int argc, char **argv)
 
 		case 'd':
 			flags |= DMABUF;
+			break;
+
+		case 'w':
+			flags |= WAIT;
 			break;
 
 		case 'W':

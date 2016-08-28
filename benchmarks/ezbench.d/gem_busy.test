@@ -11,6 +11,14 @@ while read label mode; do
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -f -e $ring -r \$1 ; }"
 
+    name="gem:busy:$label:$ring:wait"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -w -e $ring -r \$1 ; }"
+
+    name="gem:busy:$label:$ring:wait:forked"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -w -f -e $ring -r \$1 ; }"
+
     name="gem:busy:$label:$ring:dmabuf"
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -d -e $ring -r \$1 ; }"
