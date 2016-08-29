@@ -291,21 +291,19 @@ void intel_require_memory(uint64_t count, uint64_t size, unsigned mode)
 	igt_skip_on_simulation();
 }
 
-void
-intel_purge_vm_caches(void)
+void intel_purge_vm_caches(void)
 {
-	static int once;
 	int fd;
 
-	fd = open("/proc/sys/vm/drop_caches", O_RDWR);
+	fd = open("/proc/sys/vm/drop_caches", O_WRONLY);
 	if (fd < 0)
 		return;
 
-	if (!once) {
-		igt_assert_eq(write(fd, "4\n", 2), 2); /* Be quiet! */
-		once = 1;
-	}
-	igt_assert_eq(write(fd, "3\n", 2), 2); /* Drop page/slab caches */
+	/* BIT(0): Drop page cache
+	 * BIT(1): Drop slab cache
+	 * BIT(2): Be quiet in future
+	 */
+	igt_ignore_warn(write(fd, "7\n", 2));
 	close(fd);
 }
 
