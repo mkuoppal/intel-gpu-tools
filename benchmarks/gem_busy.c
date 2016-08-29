@@ -45,6 +45,8 @@
 #include "intel_chipset.h"
 #include "igt_stats.h"
 
+#define LOCAL_IOCTL_I915_GEM_EXECBUFFER2_WR       DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_EXECBUFFER2, struct drm_i915_gem_execbuffer2)
+
 #define LOCAL_I915_EXEC_NO_RELOC (1<<11)
 #define LOCAL_I915_EXEC_HANDLE_LUT (1<<12)
 
@@ -57,6 +59,7 @@
 #define IDLE 0x2
 #define DMABUF 0x4
 #define WAIT 0x8
+#define SYNC 0x10
 
 static bool gem_busy(int fd, uint32_t handle)
 {
@@ -68,6 +71,20 @@ static bool gem_busy(int fd, uint32_t handle)
 	do_ioctl(fd, DRM_IOCTL_I915_GEM_BUSY, &busy);
 
 	return busy.busy != 0;
+}
+
+static int __gem_execbuf_wr(int fd, struct drm_i915_gem_execbuffer2 *execbuf)
+{
+	int err = 0;
+	if (igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_EXECBUFFER2_WR, execbuf))
+		err = -errno;
+	errno = 0;
+	return err;
+}
+
+static void gem_execbuf_wr(int fd, struct drm_i915_gem_execbuffer2 *execbuf)
+{
+	igt_assert_eq(__gem_execbuf_wr(fd, execbuf), 0);
 }
 
 static bool gem_wait__busy(int fd, uint32_t handle)
@@ -174,6 +191,7 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 		reloc[1].write_domain = I915_GEM_DOMAIN_RENDER;
 
 	while (reps--) {
+		int fence = -1;
 		memset(shared, 0, 4096);
 
 		gem_set_domain(fd, obj[1].handle,
@@ -196,9 +214,18 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 
 		if ((flags & IDLE) == 0) {
 			for (int n = 0; n < nengine; n++) {
+				execbuf.flags &= ~(3 << 16);
+				if (flags & SYNC) {
+					execbuf.rsvd2 = fence;
+					if (fence != -1)
+						execbuf.flags |= 1 << 16;
+					execbuf.flags |= 1 << 17;
+				}
 				execbuf.flags &= ~ENGINE_FLAGS;
 				execbuf.flags |= engines[n];
-				gem_execbuf(fd, &execbuf);
+				gem_execbuf_wr(fd, &execbuf);
+				if (execbuf.flags & (1 << 17))
+					fence = execbuf.rsvd2 >> 32;
 			}
 		}
 
@@ -210,6 +237,10 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 			do {
 				if (flags & DMABUF) {
 					struct pollfd pfd = { .fd = dmabuf, .events = POLLOUT };
+					for (int inner = 0; inner < 1024; inner++)
+						poll(&pfd, 1, 0);
+				} else if (flags & SYNC) {
+					struct pollfd pfd = { .fd = fence, .events = POLLOUT };
 					for (int inner = 0; inner < 1024; inner++)
 						poll(&pfd, 1, 0);
 				} else if (flags & WAIT) {
@@ -230,6 +261,8 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 		igt_waitchildren();
 
 		batch[0] = MI_BATCH_BUFFER_END;
+		if (fence != -1)
+			close(fence);
 
 		for (int child = 0; child < ncpus; child++)
 			shared[ncpus] += shared[child];
@@ -246,7 +279,7 @@ int main(int argc, char **argv)
 	int ncpus = 1;
 	int c;
 
-	while ((c = getopt (argc, argv, "e:r:dfwWI")) != -1) {
+	while ((c = getopt (argc, argv, "e:r:dfswWI")) != -1) {
 		switch (c) {
 		case 'e':
 			if (strcmp(optarg, "rcs") == 0)
@@ -279,6 +312,10 @@ int main(int argc, char **argv)
 
 		case 'w':
 			flags |= WAIT;
+			break;
+
+		case 's':
+			flags |= SYNC;
 			break;
 
 		case 'W':

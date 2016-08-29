@@ -26,6 +26,14 @@ while read label mode; do
     name="gem:busy:$label:$ring:dmabuf:forked"
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -d -f -e $ring -r \$1 ; }"
+
+    name="gem:busy:$label:$ring:sync-file"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -s -e $ring -r \$1 ; }"
+
+    name="gem:busy:$label:$ring:sync-file:forked"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_busy $mode -s -f -e $ring -r \$1 ; }"
 done<<MODES
 read
 write		-W
