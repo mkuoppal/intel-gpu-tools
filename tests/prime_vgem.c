@@ -632,11 +632,12 @@ static void flip_to_vgem(int i915, int vgem,
 	struct drm_event_vblank vbl;
 	uint32_t fence;
 
+	fence = vgem_fence_attach(vgem, bo, VGEM_FENCE_WRITE | hang);
+
 	igt_fork(child, 1) {
-		fence = vgem_fence_attach(vgem, bo, VGEM_FENCE_WRITE | hang);
 		do_or_die(drmModePageFlip(i915, crtc_id, fb_id,
 					  DRM_MODE_PAGE_FLIP_EVENT, &fb_id));
-		kill(getppid(), SIGALRM);
+		kill(getppid(), SIGHUP);
 
 		/* Check we don't flip before the fence is ready */
 		pfd.fd = i915;
@@ -679,11 +680,12 @@ static void test_flip(int i915, int vgem, unsigned hang)
 {
 	struct vgem_bo bo[2];
 	uint32_t fb_id[2], handle[2], crtc_id;
-	int fd;
 
-	signal(SIGALRM, sighandler);
+	signal(SIGHUP, sighandler);
 
 	for (int i = 0; i < 2; i++) {
+		int fd;
+
 		bo[i].width = 1024;
 		bo[i].height = 768;
 		bo[i].bpp = 32;
@@ -693,6 +695,7 @@ static void test_flip(int i915, int vgem, unsigned hang)
 		handle[i] = prime_fd_to_handle(i915, fd);
 		igt_assert(handle[i]);
 		close(fd);
+
 		do_or_die(__kms_addfb(i915, handle[i],
 				      bo[i].width, bo[i].height, bo[i].pitch,
 				      DRM_FORMAT_XRGB8888, I915_TILING_NONE,
@@ -723,7 +726,7 @@ static void test_flip(int i915, int vgem, unsigned hang)
 		gem_close(vgem, bo[i].handle);
 	}
 
-	signal(SIGALRM, SIG_DFL);
+	signal(SIGHUP, SIG_DFL);
 }
 
 igt_main
