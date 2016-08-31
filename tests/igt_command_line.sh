@@ -26,13 +26,18 @@
 #
 
 if [ -z "$top_builddir" ]; then
-	top_builddir="$(dirname $0)/../.."
+	top_builddir="$(dirname $0)"
 fi
 
-TESTLIST=`cat $top_builddir/tests/test-list.txt`
+# allow to run this script from top directory
+TESTLIST=`cat $top_builddir/test-list.txt`
 if [ $? -ne 0 ]; then
-	echo "Error: Could not read test lists"
-	exit 99
+	# distcheck requires this hack
+	TESTLIST=$(cat test-list.txt)
+	if [ $? -ne 0 ]; then
+		echo "Error: Could not read test lists"
+		exit 99
+	fi
 fi
 
 fail () {
@@ -45,11 +50,12 @@ for test in $TESTLIST; do
 		continue
 	fi
 
-	if [ -x $top_builddir/tests/$test ]; then
-		test=$top_builddir/tests/$test
-	else
-		# if the test is a script, it will be in $srcdir
-		test=$top_srcdir/tests/$test
+	# top_builddir is empty for distcheck
+	test=$top_builddir/$test
+
+	# distcheck requires this hack
+	if [ ! -x "$test" ]; then
+		continue
 	fi
 
 	echo "$test:"

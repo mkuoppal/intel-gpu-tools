@@ -15,10 +15,6 @@ check_prog_list = \
 	igt_exit_handler \
 	$(NULL)
 
-check_script_list = \
-	igt_command_line.sh \
-	$(NULL)
-
 TESTS = \
 	$(check_prog_list) \
 	$(check_script_list) \

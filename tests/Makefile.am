@@ -50,7 +50,7 @@ all-local: .gitignore
 pkgdata_DATA = test-list.txt test-list-full.txt
 
 EXTRA_PROGRAMS = $(HANG)
-EXTRA_DIST = $(common_files)
+EXTRA_DIST = $(common_files) $(check_SCRIPTS)
 
 CLEANFILES = $(EXTRA_PROGRAMS) test-list.txt test-list-full.txt .gitignore
 

@@ -304,6 +304,12 @@ testdisplay_SOURCES = \
 
 TESTS_progs += testdisplay
 
+check_SCRIPTS = igt_command_line.sh \
+	$(NULL)
+
+TESTS = $(check_SCRIPTS) \
+	$(NULL)
+
 common_files = \
 	       eviction_common.c \
 	       $(NULL)
