@@ -628,6 +628,7 @@ static void flip_to_vgem(int i915, int vgem,
 			 unsigned hang,
 			 const char *name)
 {
+	const struct timespec tv = { 1, 0 };
 	struct pollfd pfd;
 	struct drm_event_vblank vbl;
 	uint32_t fence;
@@ -648,16 +649,14 @@ static void flip_to_vgem(int i915, int vgem,
 				      name);
 			get_vblank(i915, 0, DRM_VBLANK_NEXTONMISS);
 		}
-		igt_assert_eq(poll(&pfd, 1, 20000), 1);
 	}
+
+	igt_assert_f(nanosleep(&tv, NULL) == -1,
+		     "flip to busy %s blocked\n", name);
 
 	/* And then the flip is completed as soon as it is ready */
 	if (!hang) {
 		union drm_wait_vblank wait;
-		struct timespec tv = { 1, 0 };
-
-		igt_assert_f(nanosleep(&tv, NULL) == -1,
-			     "flip to busy %s blocked\n", name);
 
 		memset(&wait, 0, sizeof(wait));
 		wait.request.type = DRM_VBLANK_RELATIVE | pipe_select(0);
