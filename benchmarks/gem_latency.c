@@ -41,12 +41,17 @@
 #include <sys/stat.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
+#include <sys/poll.h>
 #include <sys/resource.h>
 #include "drm.h"
+
+#define I915_EXEC_FENCE_OUT (1 << 17)
+#define LOCAL_IOCTL_I915_GEM_EXECBUFFER2_WR       DRM_IOWR(DRM_COMMAND_BASE + DRM_I915_GEM_EXECBUFFER2, struct drm_i915_gem_execbuffer2)
 
 #define CONTEXT		0x1
 #define REALTIME	0x2
 #define CMDPARSER	0x4
+#define FENCE_OUT	0x8
 
 static int done;
 static int fd;
@@ -95,6 +100,20 @@ inline static uint32_t read_timestamp(void)
 	return *timestamp_reg;
 }
 #endif
+
+static int __gem_execbuf_wr(int _fd, struct drm_i915_gem_execbuffer2 *execbuf)
+{
+	int err = 0;
+	if (igt_ioctl(_fd, LOCAL_IOCTL_I915_GEM_EXECBUFFER2_WR, execbuf))
+		err = -errno;
+	errno = 0;
+	return err;
+}
+
+static void gem_execbuf_wr(int _fd, struct drm_i915_gem_execbuffer2 *execbuf)
+{
+	igt_assert_eq(__gem_execbuf_wr(_fd, execbuf), 0);
+}
 
 struct consumer {
 	pthread_t thread;
@@ -268,6 +287,8 @@ static void setup_latency(struct producer *p, int gen, unsigned flags)
 	if (flags & CMDPARSER)
 		eb->batch_len = sizeof(*map) * ((i + 1) & ~1);
 	eb->flags = I915_EXEC_BLT | LOCAL_EXEC_NO_RELOC;
+	if (flags & FENCE_OUT)
+		eb->flags |= I915_EXEC_FENCE_OUT;
 	eb->rsvd1 = p->ctx;
 }
 
@@ -297,9 +318,18 @@ static void setup_nop(struct producer *p, uint32_t batch, unsigned flags)
 	eb->rsvd1 = p->ctx;
 }
 
+static void fence_wait(int fence)
+{
+	struct pollfd pfd = { .fd = fence, .events = POLLIN };
+	poll(&pfd, 1, -1);
+}
+
 static void measure_latency(struct producer *p, struct igt_mean *mean)
 {
-	gem_sync(fd, p->latency_dispatch.exec[0].handle);
+	if (!(p->latency_dispatch.execbuf.flags & I915_EXEC_FENCE_OUT))
+		gem_sync(fd, p->latency_dispatch.exec[0].handle);
+	else
+		fence_wait(p->latency_dispatch.execbuf.rsvd2 >> 32);
 	igt_mean_add(mean, read_timestamp() - *p->last_timestamp);
 }
 
@@ -332,7 +362,10 @@ static void *producer(void *arg)
 		/* Finally, execute a batch that just reads the current
 		 * TIMESTAMP so we can measure the latency.
 		 */
-		gem_execbuf(fd, &p->latency_dispatch.execbuf);
+		if (p->latency_dispatch.execbuf.flags & I915_EXEC_FENCE_OUT)
+			gem_execbuf_wr(fd, &p->latency_dispatch.execbuf);
+		else
+			gem_execbuf(fd, &p->latency_dispatch.execbuf);
 
 		/* Wake all the associated clients to wait upon our batch */
 		p->wait = p->nconsumers;
@@ -354,6 +387,9 @@ static void *producer(void *arg)
 		pthread_mutex_unlock(&p->lock);
 
 		p->complete++;
+
+		if (p->latency_dispatch.execbuf.flags & I915_EXEC_FENCE_OUT)
+			close(p->latency_dispatch.execbuf.rsvd2 >> 32);
 	}
 
 	pthread_mutex_lock(&p->lock);
@@ -566,7 +602,7 @@ int main(int argc, char **argv)
 	unsigned flags = 0;
 	int c;
 
-	while ((c = getopt(argc, argv, "Cp:c:n:w:t:f:sR")) != -1) {
+	while ((c = getopt(argc, argv, "Cp:c:n:w:t:f:sRF")) != -1) {
 		switch (c) {
 		case 'p':
 			/* How many threads generate work? */
@@ -628,6 +664,10 @@ int main(int argc, char **argv)
 		case 'C':
 			/* Don't hide from the command parser (gen7) */
 			flags |= CMDPARSER;
+			break;
+
+		case 'F':
+			flags |= FENCE_OUT;
 			break;
 
 		default:
