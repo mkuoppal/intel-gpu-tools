@@ -1,3 +1,93 @@
+Release 1.16 (2016-09-02)
+-------------------------
+
+- Build automatically tests required when issueing a make check, Tests/subtests
+that receive a crash signal should print a backtrace when i-g-t is built with
+libunwind support (Marius Vlad)
+
+- lib/igt_kms: Force connector probing on first use (Chris Wilson)
+
+- vc4: Add a test for BO lookup failure error path (Eric Anholt)
+
+- tests/gem_mocs_settings: Remove direct register tests,
+and added RC6 tests (Peter Antoine)
+
+- Check for libdrm_intel and build if present, Add stubs for intel_bufmgr
+(Robert Foss)
+
+- igt/gem_mmap_gtt: Add a test to detect non-WC access (Chris Wilson)
+
+- Various documentation improvements (Daniel Vetter)
+
+- Added new tests: tests/kms_rmfb and tests/kms_atomic_transition, a test for
+fastboot, tests/kms_panel_fitting, and a test that only tries to set the
+current property values back, tests/kms_properties. Various improvements to
+tests/kms_cursor_legacy (Maarten Lankhorst)
+
+- lib/igt_kms: Use pipes for committing, not outputs and assign pipe properties
+in pipe init and many other improvements (Maarten Lankhorst)
+
+- tests/gem_workarounds: read test added as a basic test, fix assertion of num
+of regs (Mika Kuoppala)
+
+- Various improvements to tools/intel_bios_reader and tools/intel_reg (Ville
+Syrjälä)
+
+- lib: Add x86 cpuid based feature detection (Chris Wilson)
+
+- demos/intel_sprite_on: Instead of looping until the first disconnected port
+is found, now go through all possible connectors, drawing the sprite on any
+connected display. (Jim Bride)
+
+- Multiple improvements to lib/igt_kms (Robert Foss)
+
+- lib/igt_aux: Framework for measuring latency in raising signals (Chris
+Wilson)
+
+- Various modifications to intel_chipset: Replace lookup of GT size with
+computation, remove unused PCI_CHIP ids, converting platforms names using
+device info (Chris Wilson)
+
+- tests/kms_chv_cursor_fail: Run the tests with fewer steps
+(Maarten Lankhorst)
+
+- lib/intel_chipset: Add more Kabylake PCI IDs and removed PCI IDs that are no
+longer listed as Kabylake (Rodrigo Vivi)
+
+- Basic framework for GVT-g testing has landed (Chris Wilson)
+
+- Various improvements to tests/kms_flip (Ville Syrjälä)
+
+- igt/kms_cursor_legacy: Add a rudimentary test to detect stalled cursors,
+detect pageflip errors and check that cursor updates do not stall flips
+(Chris Wilson)
+
+- vGEM support: lib and added tests/vgem_basic, tests/vgem_slow and
+tests/vgem_reload_basic (Chris Wilson)
+
+- Various fixes to tests/kms_frontbuffer_tracking: prefer BLT drawing, recreate
+FBS at every subtest and properly handle mixing GTT and WC mmaps (Paulo Zanoni)
+
+- Replace drv_missed_irq_hang script with a C-equivalent: tests/drv_missed_irq
+(Chris Wilson)
+
+- Added a test case for polling dma-buf fences: tests/prime_busy (Chris Wilson)
+
+- lib/igt_gt: Omit illegal instruction on gen8+ and time
+constrains on hang detection (igt/gem_reset_stats) (Mika Kuoppala)
+
+- Added tests/kms_invalid_dotclock, a test that makes sure every modeset gets
+rejected by the kernel if the requested dotclock is beyond the hardware
+capabilities (Ville Syrjälä)
+
+- tests/gem_stolen: Verify contents of stolen-backed objects across
+hibernation, fix for no_mmap subtest and check for available stolen memory size
+(Ankitprasad Sharma)
+
+- tests/core_prop_blob: Add invalid tests to set fb props (Daniel Vetter)
+
+- Many more fixes and improvements.
+
 Release 1.15 (2016-05-31)
 -------------------------
 
