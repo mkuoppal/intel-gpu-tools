@@ -1746,7 +1746,9 @@ static void fatal_sig_handler(int sig)
 				igt_exitcode = 128 + sig;
 
 			failed_one = true;
+#ifdef HAVE_LIBUNWIND
 			print_backtrace_sig_safe();
+#endif
 			exit_subtest("CRASH");
 		}
 		break;
