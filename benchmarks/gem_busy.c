@@ -109,6 +109,37 @@ static double elapsed(const struct timespec *start,
 		(end->tv_nsec - start->tv_nsec);
 }
 
+struct sync_merge_data {
+	char    name[32];
+	__s32   fd2;
+	__s32   fence;
+	__u32   flags;
+	__u32   pad;
+};
+
+#define SYNC_IOC_MAGIC         '>'
+#define SYNC_IOC_MERGE         _IOWR(SYNC_IOC_MAGIC, 3, struct sync_merge_data)
+
+static int sync_merge(int fd1, int fd2)
+{
+	struct sync_merge_data data;
+
+	if (fd1 == -1)
+		return dup(fd2);
+
+	if (fd2 == -1)
+		return dup(fd1);
+
+	memset(&data, 0, sizeof(data));
+	data.fd2 = fd2;
+	strcpy(data.name, "i965");
+
+	if (ioctl(fd1, SYNC_IOC_MERGE, &data))
+		return -errno;
+
+	return data.fence;
+}
+
 static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
@@ -215,17 +246,13 @@ static int loop(unsigned ring, int reps, int ncpus, unsigned flags)
 		if ((flags & IDLE) == 0) {
 			for (int n = 0; n < nengine; n++) {
 				execbuf.flags &= ~(3 << 16);
-				if (flags & SYNC) {
-					execbuf.rsvd2 = fence;
-					if (fence != -1)
-						execbuf.flags |= 1 << 16;
+				if (flags & SYNC)
 					execbuf.flags |= 1 << 17;
-				}
 				execbuf.flags &= ~ENGINE_FLAGS;
 				execbuf.flags |= engines[n];
 				gem_execbuf_wr(fd, &execbuf);
 				if (execbuf.flags & (1 << 17))
-					fence = execbuf.rsvd2 >> 32;
+					fence = sync_merge(fence, execbuf.rsvd2 >> 32);
 			}
 		}
 
