@@ -1,6 +1,7 @@
 LOCAL_PATH := $(call my-dir)
 
 include $(LOCAL_PATH)/Makefile.sources
+IGT_LOCAL_C_INCLUDES = $(LOCAL_PATH)/../lib
 
 #================#
 
@@ -9,6 +10,7 @@ define add_benchmark
 
     LOCAL_SRC_FILES := $1.c
 
+    LOCAL_C_INCLUDES = ${IGT_LOCAL_C_INCLUDES}
     LOCAL_CFLAGS += -DHAVE_STRUCT_SYSINFO_TOTALRAM
     LOCAL_CFLAGS += -DANDROID -UNDEBUG -include "check-ndebug.h"
     LOCAL_CFLAGS += -std=gnu99
