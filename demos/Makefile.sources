@@ -1,7 +1,7 @@
 demos_prog_list =		\
 	$(NULL)
 
-HAVE_LIBDRM_INTEL_BIN =		\
+LIBDRM_INTEL_BIN =		\
 	intel_sprite_on		\
 	$(NULL)
 
