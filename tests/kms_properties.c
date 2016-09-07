@@ -275,6 +275,102 @@ static void connector_properties(igt_display_t *display, bool atomic)
 			run_connector_property_tests(display, PIPE_NONE, &display->outputs[i], atomic);
 }
 
+static void test_invalid_properties(int fd,
+				    uint32_t id1,
+				    uint32_t type1,
+				    uint32_t id2,
+				    uint32_t type2,
+				    bool atomic)
+{
+	drmModeObjectPropertiesPtr props1 =
+		drmModeObjectGetProperties(fd, id1, type1);
+	drmModeObjectPropertiesPtr props2 =
+		drmModeObjectGetProperties(fd, id2, type2);
+
+	int i, j, ret;
+	drmModeAtomicReqPtr req;
+
+	igt_assert(props1 && props2);
+
+	for (i = 0; i < props2->count_props; i++) {
+		uint32_t prop_id = props2->props[i];
+		uint64_t prop_value = props2->prop_values[i];
+		drmModePropertyPtr prop = drmModeGetProperty(fd, prop_id);
+		bool found = false;
+
+		igt_assert(prop);
+
+		for (j = 0; j < props1->count_props; j++)
+			if (props1->props[j] == prop_id) {
+				found = true;
+				break;
+			}
+
+		if (found)
+			continue;
+
+		igt_debug("Testing property \"%s\" on [%x:%u]\n", prop->name, type1, id1);
+
+		if (!atomic) {
+			ret = drmModeObjectSetProperty(fd, id1, type1, prop_id, prop_value);
+
+			igt_assert_eq(ret, -EINVAL);
+		} else {
+			req = drmModeAtomicAlloc();
+			igt_assert(req);
+
+			ret = drmModeAtomicAddProperty(req, id1, prop_id, prop_value);
+			igt_assert(ret >= 0);
+
+			ret = drmModeAtomicCommit(fd, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+			igt_assert_eq(ret, -EINVAL);
+
+			drmModeAtomicFree(req);
+		}
+
+		drmModeFreeProperty(prop);
+	}
+
+	drmModeFreeObjectProperties(props1);
+	drmModeFreeObjectProperties(props2);
+}
+static void test_object_invalid_properties(igt_display_t *display,
+					   uint32_t id, uint32_t type, bool atomic)
+{
+	igt_output_t *output;
+	igt_plane_t *plane;
+	enum pipe pipe;
+	int i;
+
+	for_each_pipe(display, pipe)
+		test_invalid_properties(display->drm_fd, id, type, display->pipes[pipe].crtc_id, DRM_MODE_OBJECT_CRTC, atomic);
+
+	for_each_pipe(display, pipe)
+		for_each_plane_on_pipe(display, pipe, plane)
+			test_invalid_properties(display->drm_fd, id, type, plane->drm_plane->plane_id, DRM_MODE_OBJECT_PLANE, atomic);
+
+	for (i = 0, output = &display->outputs[0]; i < display->n_outputs; output = &display->outputs[++i])
+		test_invalid_properties(display->drm_fd, id, type, output->id, DRM_MODE_OBJECT_CONNECTOR, atomic);
+}
+
+static void invalid_properties(igt_display_t *display, bool atomic)
+{
+	igt_output_t *output;
+	igt_plane_t *plane;
+	enum pipe pipe;
+	int i;
+
+	for_each_pipe(display, pipe)
+		test_object_invalid_properties(display, display->pipes[pipe].crtc_id, DRM_MODE_OBJECT_CRTC, atomic);
+
+	for_each_pipe(display, pipe)
+		for_each_plane_on_pipe(display, pipe, plane)
+			test_object_invalid_properties(display, plane->drm_plane->plane_id, DRM_MODE_OBJECT_PLANE, atomic);
+
+	for (i = 0, output = &display->outputs[0]; i < display->n_outputs; output = &display->outputs[++i])
+		test_object_invalid_properties(display, output->id, DRM_MODE_OBJECT_CONNECTOR, atomic);
+}
+
 igt_main
 {
 	igt_display_t display;
@@ -306,6 +402,12 @@ igt_main
 
 	igt_subtest("connector-properties-atomic")
 		connector_properties(&display, true);
+
+	igt_subtest("invalid-properties-legacy")
+		invalid_properties(&display, false);
+
+	igt_subtest("invalid-properties-atomic")
+		invalid_properties(&display, true);
 
 	igt_fixture {
 		igt_display_fini(&display);
