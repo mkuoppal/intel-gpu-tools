@@ -252,7 +252,7 @@ static void series(int fd, uint32_t handle, int timeout)
 
 	time = elapsed(&start, &now) / count;
 	igt_info("All (%d engines): %'lu cycles, average %.3fus per cycle [expected ideal %.3fus]\n",
-		 nengine, count, 1e6*time, 1e6*max/nengine);
+		 nengine, count, 1e6*time, 1e6*((max-min)/nengine+min));
 
 	/* The rate limiting step should be how fast the slowest engine can
 	 * execute its queue of requests, as when we wait upon a full ring all
