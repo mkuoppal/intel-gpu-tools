@@ -143,33 +143,41 @@ igt_main
 {
 	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
 	const struct intel_execution_engine *e;
-	uint32_t handle = 0;
+	uint32_t light = 0, heavy;
 	int fd = -1;
 
 	igt_fixture {
 		const uint32_t bbe = MI_BATCH_BUFFER_END;
 
 		fd = drm_open_driver(DRIVER_INTEL);
-		handle = gem_create(fd, 4096);
-		gem_write(fd, handle, 0, &bbe, sizeof(bbe));
+		light = gem_create(fd, 4096);
+		gem_write(fd, light, 0, &bbe, sizeof(bbe));
+
+		heavy = gem_create(fd, 4096*1024);
+		gem_write(fd, heavy, 4096*1024-sizeof(bbe), &bbe, sizeof(bbe));
 
 		igt_fork_hang_detector(fd);
 	}
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%s%s", e->exec_id == 0 ? "basic-" : "", e->name)
-			single(fd, handle, e, 0, 1);
+			single(fd, light, e, 0, 1);
+		igt_subtest_f("%s%s-heavy", e->exec_id == 0 ? "basic-" : "", e->name)
+			single(fd, heavy, e, 0, 1);
 		igt_subtest_f("%s-interruptible", e->name)
-			single(fd, handle, e, INTERRUPTIBLE, 1);
+			single(fd, light, e, INTERRUPTIBLE, 1);
 		igt_subtest_f("forked-%s", e->name)
-			single(fd, handle, e, 0, ncpus);
+			single(fd, light, e, 0, ncpus);
+		igt_subtest_f("forked-%s-heavy", e->name)
+			single(fd, heavy, e, 0, ncpus);
 		igt_subtest_f("forked-%s-interruptible", e->name)
-			single(fd, handle, e, INTERRUPTIBLE, ncpus);
+			single(fd, light, e, INTERRUPTIBLE, ncpus);
 	}
 
 	igt_fixture {
 		igt_stop_hang_detector();
-		gem_close(fd, handle);
+		gem_close(fd, heavy);
+		gem_close(fd, light);
 		close(fd);
 	}
 }
