@@ -323,7 +323,7 @@ static void test_invalid_properties(int fd,
 			igt_assert(ret >= 0);
 
 			ret = drmModeAtomicCommit(fd, req, DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
-			igt_assert_eq(ret, -EINVAL);
+			igt_assert_eq(ret, -ENOENT);
 
 			drmModeAtomicFree(req);
 		}
