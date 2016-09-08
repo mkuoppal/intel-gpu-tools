@@ -184,17 +184,25 @@ static void all(int fd, uint32_t handle, int timeout)
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 
 	time = elapsed(&start, &now) / count;
-	igt_info("All (%d engines): %'lu cycles, average %.3fus per cycle\n",
-		 nengine, count, 1e6*time);
+	igt_info("All (%d engines): %'lu cycles, average %.3fus per cycle [expected ideal %.3fus]\n",
+		 nengine, count, 1e6*time, 1e6*max/nengine);
 
-	/* The rate limiting step is how fast the slowest engine can
-	 * its queue of requests, if we wait upon a full ring all dispatch
-	 * is frozen. So in general we cannot go faster than the slowest
-	 * engine, but we should equally not go any slower.
+	/* The rate limiting step should be how fast the slowest engine can
+	 * execute its queue of requests, as when we wait upon a full ring all
+	 * dispatch is frozen. So in general we cannot go faster than the
+	 * slowest engine (but as all engines are in lockstep, they should all
+	 * be executing in parallel and so the average should be max/nengines),
+	 * but we should equally not go any slower.
+	 *
+	 * However, that depends upon being able to submit fast enough, and
+	 * that in turns depends upon debugging turned off and no bottlenecks
+	 * within the driver. We cannot assert that we hit ideal conditions
+	 * across all engines, so we only look for an outrageous error
+	 * condition.
 	 */
-	igt_assert_f(time < max + 10*min/9, /* ensure parallel execution */
-		     "Average time (%.3fus) exceeds expecation for parallel execution (min %.3fus, max %.3fus; limit set at %.3fus)\n",
-		     1e6*time, 1e6*min, 1e6*max, 1e6*(max + 10*min/9));
+	igt_assert_f(time < 2*sum,
+		     "Average time (%.3fus) exceeds expectation for parallel execution (min %.3fus, max %.3fus; limit set at %.3fus)\n",
+		     1e6*time, 1e6*min, 1e6*max, 1e6*sum*2);
 }
 
 static void print_welcome(int fd)
