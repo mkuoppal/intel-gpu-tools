@@ -120,7 +120,74 @@ static bool ignore_engine(int fd, unsigned engine)
 	return false;
 }
 
-static void all(int fd, uint32_t handle, int timeout)
+static void parallel(int fd, uint32_t handle, int timeout)
+{
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_exec_object2 obj;
+	struct timespec start, now;
+	unsigned engines[16];
+	const char *names[16];
+	unsigned nengine;
+	unsigned engine;
+	unsigned long count;
+	double time, sum;
+
+	sum = 0;
+	nengine = 0;
+	for_each_engine(fd, engine) {
+		if (ignore_engine(fd, engine))
+			continue;
+
+		engines[nengine] = engine;
+		names[nengine] = e__->name;
+		nengine++;
+
+		time = nop_on_ring(fd, handle, engine, 1, &count) / count;
+		sum += time;
+		igt_debug("%s: %.3fus\n", e__->name, 1e6*time);
+	}
+	igt_require(nengine);
+	igt_info("average (individually): %.3fus\n", sum/nengine*1e6);
+
+	memset(&obj, 0, sizeof(obj));
+	obj.handle = handle;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 1;
+	execbuf.flags |= LOCAL_I915_EXEC_HANDLE_LUT;
+	execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
+	if (__gem_execbuf(fd, &execbuf)) {
+		execbuf.flags = 0;
+		gem_execbuf(fd, &execbuf);
+	}
+	gem_sync(fd, handle);
+	intel_detect_and_clear_missed_interrupts(fd);
+
+	igt_fork(child, nengine) {
+		execbuf.flags &= ~ENGINE_FLAGS;
+		execbuf.flags |= engines[child];
+
+		count = 0;
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		do {
+			for (int loop = 0; loop < 1024; loop++)
+				gem_execbuf(fd, &execbuf);
+			count += 1024;
+			clock_gettime(CLOCK_MONOTONIC, &now);
+		} while (elapsed(&start, &now) < timeout);
+		gem_sync(fd, handle);
+		clock_gettime(CLOCK_MONOTONIC, &now);
+		time = elapsed(&start, &now) / count;
+		igt_info("%s: %ld cycles, %.3fus\n", names[child], count, 1e6*time);
+	}
+
+	igt_waitchildren();
+	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
+
+}
+
+static void series(int fd, uint32_t handle, int timeout)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
@@ -252,15 +319,21 @@ igt_main
 		igt_fork_hang_detector(device);
 	}
 
-	igt_subtest("basic")
-		all(device, handle, 10);
+	igt_subtest("basic-series")
+		series(device, handle, 10);
+
+	igt_subtest("basic-parallel")
+		parallel(device, handle, 10);
 
 	for (e = intel_execution_engines; e->name; e++)
 		igt_subtest_f("%s", e->name)
 			single(device, handle, e->exec_id | e->flags, e->name);
 
-	igt_subtest("all")
-		all(device, handle, 150);
+	igt_subtest("series")
+		series(device, handle, 150);
+
+	igt_subtest("parallel")
+		parallel(device, handle, 150);
 
 	igt_fixture {
 		igt_stop_hang_detector();
