@@ -414,7 +414,7 @@ static void print_welcome(int fd)
 	}
 
 	active = igt_sysfs_get_boolean(dir, "semaphores");
-	igt_info("Using Legacy submission %s\n",
+	igt_info("Using Legacy submission%s\n",
 		 active ? ", with semaphores" : "");
 
 out:

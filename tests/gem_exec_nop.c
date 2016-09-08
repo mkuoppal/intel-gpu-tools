@@ -76,7 +76,6 @@ static double nop_on_ring(int fd, uint32_t handle, unsigned ring_id,
 		execbuf.flags = ring_id;
 		gem_execbuf(fd, &execbuf);
 	}
-	gem_sync(fd, handle);
 	intel_detect_and_clear_missed_interrupts(fd);
 
 	count = 0;
@@ -88,8 +87,6 @@ static double nop_on_ring(int fd, uint32_t handle, unsigned ring_id,
 		count += 1024;
 		clock_gettime(CLOCK_MONOTONIC, &now);
 	} while (elapsed(&start, &now) < timeout);
-	gem_sync(fd, handle);
-	clock_gettime(CLOCK_MONOTONIC, &now);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 
 	*out = count;
@@ -124,7 +121,6 @@ static void parallel(int fd, uint32_t handle, int timeout)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
-	struct timespec start, now;
 	unsigned engines[16];
 	const char *names[16];
 	unsigned nengine;
@@ -161,10 +157,11 @@ static void parallel(int fd, uint32_t handle, int timeout)
 		execbuf.flags = 0;
 		gem_execbuf(fd, &execbuf);
 	}
-	gem_sync(fd, handle);
 	intel_detect_and_clear_missed_interrupts(fd);
 
 	igt_fork(child, nengine) {
+		struct timespec start, now;
+
 		execbuf.flags &= ~ENGINE_FLAGS;
 		execbuf.flags |= engines[child];
 
@@ -176,8 +173,6 @@ static void parallel(int fd, uint32_t handle, int timeout)
 			count += 1024;
 			clock_gettime(CLOCK_MONOTONIC, &now);
 		} while (elapsed(&start, &now) < timeout);
-		gem_sync(fd, handle);
-		clock_gettime(CLOCK_MONOTONIC, &now);
 		time = elapsed(&start, &now) / count;
 		igt_info("%s: %ld cycles, %.3fus\n", names[child], count, 1e6*time);
 	}
@@ -191,7 +186,7 @@ static void series(int fd, uint32_t handle, int timeout)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
-	struct timespec start, now;
+	struct timespec start, now, sync;
 	unsigned engines[16];
 	unsigned nengine;
 	unsigned engine;
@@ -215,8 +210,8 @@ static void series(int fd, uint32_t handle, int timeout)
 		engines[nengine++] = engine;
 	}
 	igt_require(nengine);
-	igt_info("Maximum execution latency on %s, %.3fus, total %.3fus per cycle\n",
-		 name, max*1e6, sum*1e6);
+	igt_info("Maximum execution latency on %s, %.3fus, min %.3fus, total %.3fus per cycle, average %.3fus\n",
+		 name, max*1e6, min*1e6, sum*1e6, sum/nengine*1e6);
 
 	memset(&obj, 0, sizeof(obj));
 	obj.handle = handle;
@@ -230,7 +225,6 @@ static void series(int fd, uint32_t handle, int timeout)
 		execbuf.flags = 0;
 		gem_execbuf(fd, &execbuf);
 	}
-	gem_sync(fd, handle);
 	intel_detect_and_clear_missed_interrupts(fd);
 
 	count = 0;
@@ -247,11 +241,12 @@ static void series(int fd, uint32_t handle, int timeout)
 		clock_gettime(CLOCK_MONOTONIC, &now);
 	} while (elapsed(&start, &now) < timeout); /* Hang detection ~120s */
 	gem_sync(fd, handle);
-	clock_gettime(CLOCK_MONOTONIC, &now);
+	clock_gettime(CLOCK_MONOTONIC, &sync);
+	igt_debug("sync time: %.3fus\n", elapsed(&now, &sync)*1e6);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 
 	time = elapsed(&start, &now) / count;
-	igt_info("All (%d engines): %'lu cycles, average %.3fus per cycle [expected ideal %.3fus]\n",
+	igt_info("All (%d engines): %'lu cycles, average %.3fus per cycle [expected %.3fus]\n",
 		 nengine, count, 1e6*time, 1e6*((max-min)/nengine+min));
 
 	/* The rate limiting step should be how fast the slowest engine can
@@ -294,7 +289,7 @@ static void print_welcome(int fd)
 	}
 
 	active = igt_sysfs_get_boolean(dir, "semaphores");
-	igt_info("Using Legacy submission %s\n",
+	igt_info("Using Legacy submission%s\n",
 		 active ? ", with semaphores" : "");
 
 out:
