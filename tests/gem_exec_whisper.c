@@ -115,6 +115,7 @@ static bool ignore_engine(int gen, unsigned engine)
 #define FDS 0x2
 #define INTERRUPTIBLE 0x4
 #define CHAIN 0x8
+#define FORKED 0x10
 
 static void whisper(int fd, unsigned engine, unsigned flags)
 {
@@ -151,245 +152,250 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 	}
 	igt_require(nengine);
 
-	memset(&scratch, 0, sizeof(scratch));
-	scratch.handle = gem_create(fd, 4096);
-	scratch.flags = EXEC_OBJECT_WRITE;
+	intel_detect_and_clear_missed_interrupts(fd);
+	igt_fork(child, flags & FORKED ? sysconf(_SC_NPROCESSORS_ONLN) : 1)  {
+		memset(&scratch, 0, sizeof(scratch));
+		scratch.handle = gem_create(fd, 4096);
+		scratch.flags = EXEC_OBJECT_WRITE;
 
-	memset(&store, 0, sizeof(store));
-	store.handle = gem_create(fd, 4096);
-	store.relocs_ptr = (uintptr_t)&reloc;
-	store.relocation_count = 1;
+		memset(&store, 0, sizeof(store));
+		store.handle = gem_create(fd, 4096);
+		store.relocs_ptr = (uintptr_t)&reloc;
+		store.relocation_count = 1;
 
-	memset(&reloc, 0, sizeof(reloc));
-	reloc.offset = sizeof(uint32_t);
-	if (gen < 8 && gen >= 4)
-		reloc.offset += sizeof(uint32_t);
-	loc = 8;
-	if (gen >= 4)
-		loc += 4;
-	reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
-	reloc.write_domain = I915_GEM_DOMAIN_INSTRUCTION;
+		memset(&reloc, 0, sizeof(reloc));
+		reloc.offset = sizeof(uint32_t);
+		if (gen < 8 && gen >= 4)
+			reloc.offset += sizeof(uint32_t);
+		loc = 8;
+		if (gen >= 4)
+			loc += 4;
+		reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+		reloc.write_domain = I915_GEM_DOMAIN_INSTRUCTION;
 
-	{
-		tmp[0] = scratch;
-		tmp[1] = store;
-		gem_write(fd, store.handle, 0, &bbe, sizeof(bbe));
+		{
+			tmp[0] = scratch;
+			tmp[1] = store;
+			gem_write(fd, store.handle, 0, &bbe, sizeof(bbe));
 
-		memset(&execbuf, 0, sizeof(execbuf));
-		execbuf.buffers_ptr = (uintptr_t)tmp;
-		execbuf.buffer_count = 2;
-		execbuf.flags = LOCAL_I915_EXEC_HANDLE_LUT;
-		execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
-		if (gen < 6)
-			execbuf.flags |= I915_EXEC_SECURE;
-		igt_require(__gem_execbuf(fd, &execbuf) == 0);
-		scratch = tmp[0];
-		store = tmp[1];
-	}
-
-	i = 0;
-	batch[i] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
-	if (gen >= 8) {
-		batch[++i] = store.offset + loc;
-		batch[++i] = (store.offset + loc) >> 32;
-	} else if (gen >= 4) {
-		batch[++i] = 0;
-		batch[++i] = store.offset + loc;
-	} else {
-		batch[i]--;
-		batch[++i] = store.offset + loc;
-	}
-	batch[++i] = 0xc0ffee;
-	igt_assert(loc == sizeof(uint32_t) * i);
-	batch[++i] = MI_BATCH_BUFFER_END;
-
-	if (flags & CONTEXTS) {
-		igt_require(__gem_context_create(fd, &contexts[0]) == 0);
-		for (n = 1; n < 64; n++)
-			contexts[n] = gem_context_create(fd);
-	}
-	if (flags & FDS) {
-		igt_require(gen >= 6);
-		for (n = 0; n < 64; n++)
-			fds[n] = drm_open_driver(DRIVER_INTEL);
-	}
-
-	memset(batches, 0, sizeof(batches));
-	for (n = 0; n < 1024; n++) {
-		batches[n].handle = gem_create(fd, 4096);
-		gem_write(fd, batches[n].handle, 0, &bbe, sizeof(bbe));
-	}
-	execbuf.buffers_ptr = (uintptr_t)batches;
-	execbuf.buffer_count = 1024;
-	gem_execbuf(fd, &execbuf);
-
-	execbuf.buffers_ptr = (uintptr_t)tmp;
-	execbuf.buffer_count = 2;
-
-	old_offset = store.offset;
-	for (n = 0; n < 1024; n++) {
-		if (gen >= 8) {
-			batch[1] = old_offset + loc;
-			batch[2] = (old_offset + loc) >> 32;
-		} else if (gen >= 4) {
-			batch[2] = old_offset + loc;
-		} else {
-			batch[1] = old_offset + loc;
+			memset(&execbuf, 0, sizeof(execbuf));
+			execbuf.buffers_ptr = (uintptr_t)tmp;
+			execbuf.buffer_count = 2;
+			execbuf.flags = LOCAL_I915_EXEC_HANDLE_LUT;
+			execbuf.flags |= LOCAL_I915_EXEC_NO_RELOC;
+			if (gen < 6)
+				execbuf.flags |= I915_EXEC_SECURE;
+			igt_require(__gem_execbuf(fd, &execbuf) == 0);
+			scratch = tmp[0];
+			store = tmp[1];
 		}
 
-		inter[n] = reloc;
-		inter[n].presumed_offset = old_offset;
-		inter[n].delta = loc;
-		batches[n].relocs_ptr = (uintptr_t)&inter[n];
-		batches[n].relocation_count = 1;
-		gem_write(fd, batches[n].handle, 0, batch, sizeof(batch));
+		i = 0;
+		batch[i] = MI_STORE_DWORD_IMM | (gen < 6 ? 1 << 22 : 0);
+		if (gen >= 8) {
+			batch[++i] = store.offset + loc;
+			batch[++i] = (store.offset + loc) >> 32;
+		} else if (gen >= 4) {
+			batch[++i] = 0;
+			batch[++i] = store.offset + loc;
+		} else {
+			batch[i]--;
+			batch[++i] = store.offset + loc;
+		}
+		batch[++i] = 0xc0ffee;
+		igt_assert(loc == sizeof(uint32_t) * i);
+		batch[++i] = MI_BATCH_BUFFER_END;
 
-		old_offset = batches[n].offset;
-	}
+		if (flags & CONTEXTS) {
+			igt_require(__gem_context_create(fd, &contexts[0]) == 0);
+			for (n = 1; n < 64; n++)
+				contexts[n] = gem_context_create(fd);
+		}
+		if (flags & FDS) {
+			igt_require(gen >= 6);
+			for (n = 0; n < 64; n++)
+				fds[n] = drm_open_driver(DRIVER_INTEL);
+		}
 
-	intel_detect_and_clear_missed_interrupts(fd);
-	igt_while_interruptible(flags & INTERRUPTIBLE) {
-		for (pass = 0; pass < 1024; pass++) {
-			uint64_t offset;
+		memset(batches, 0, sizeof(batches));
+		for (n = 0; n < 1024; n++) {
+			batches[n].handle = gem_create(fd, 4096);
+			gem_write(fd, batches[n].handle, 0, &bbe, sizeof(bbe));
+		}
+		execbuf.buffers_ptr = (uintptr_t)batches;
+		execbuf.buffer_count = 1024;
+		gem_execbuf(fd, &execbuf);
 
-			write_seqno(pass);
+		execbuf.buffers_ptr = (uintptr_t)tmp;
+		execbuf.buffer_count = 2;
 
-			if (flags & CHAIN) {
-				execbuf.flags &= ~ENGINE_MASK;
-				execbuf.flags |= engines[rand() % nengine];
-			}
-
-			reloc.presumed_offset = scratch.offset;
-			reloc.delta = 4*pass;
-			offset = reloc.presumed_offset + reloc.delta;
-
-			i = 0;
+		old_offset = store.offset;
+		for (n = 0; n < 1024; n++) {
 			if (gen >= 8) {
-				batch[++i] = offset;
-				batch[++i] = offset >> 32;
+				batch[1] = old_offset + loc;
+				batch[2] = (old_offset + loc) >> 32;
 			} else if (gen >= 4) {
-				batch[++i] = 0;
-				batch[++i] = offset;
+				batch[2] = old_offset + loc;
 			} else {
-				batch[++i] = offset;
+				batch[1] = old_offset + loc;
 			}
-			batch[++i] = ~pass;
-			gem_write(fd, store.handle, 0, batch, sizeof(batch));
 
-			tmp[0] = scratch;
-			igt_assert(tmp[0].flags & EXEC_OBJECT_WRITE);
-			tmp[1] = store;
-			verify_reloc(fd, store.handle, &reloc);
-			execbuf.buffers_ptr = (uintptr_t)tmp;
-			gem_execbuf(fd, &execbuf);
-			igt_assert_eq_u64(reloc.presumed_offset, tmp[0].offset);
-			scratch = tmp[0];
+			inter[n] = reloc;
+			inter[n].presumed_offset = old_offset;
+			inter[n].delta = loc;
+			batches[n].relocs_ptr = (uintptr_t)&inter[n];
+			batches[n].relocation_count = 1;
+			gem_write(fd, batches[n].handle, 0, batch, sizeof(batch));
 
-			gem_write(fd, batches[1023].handle, loc, &pass, sizeof(pass));
-			for (n = 1024; --n >= 1; ) {
-				int this_fd = fd;
-				uint32_t handle[2];
+			old_offset = batches[n].offset;
+		}
 
-				execbuf.buffers_ptr = (uintptr_t)&batches[n-1];
-				reloc_migrations += batches[n-1].offset != inter[n].presumed_offset;
-				batches[n-1].offset = inter[n].presumed_offset;
-				old_offset = inter[n].presumed_offset;
-				batches[n-1].relocation_count = 0;
-				batches[n-1].flags |= EXEC_OBJECT_WRITE;
-				verify_reloc(fd, batches[n].handle, &inter[n]);
+		igt_while_interruptible(flags & INTERRUPTIBLE) {
+			for (pass = 0; pass < 1024; pass++) {
+				uint64_t offset;
 
-				if (flags & FDS) {
-					this_fd = fds[rand() % 64];
-					handle[0] = batches[n-1].handle;
-					handle[1] = batches[n].handle;
-					batches[n-1].handle =
-						gem_open(this_fd,
-							 gem_flink(fd, handle[0]));
-					batches[n].handle =
-						gem_open(this_fd,
-							 gem_flink(fd, handle[1]));
-				}
+				if (child == 0)
+					write_seqno(pass);
 
-				if (!(flags & CHAIN)) {
+				if (flags & CHAIN) {
 					execbuf.flags &= ~ENGINE_MASK;
 					execbuf.flags |= engines[rand() % nengine];
 				}
-				if (flags & CONTEXTS)
-					execbuf.rsvd1 = contexts[rand() % 64];
-				gem_execbuf(this_fd, &execbuf);
-				if (inter[n].presumed_offset == -1) {
+
+				reloc.presumed_offset = scratch.offset;
+				reloc.delta = 4*pass;
+				offset = reloc.presumed_offset + reloc.delta;
+
+				i = 0;
+				if (gen >= 8) {
+					batch[++i] = offset;
+					batch[++i] = offset >> 32;
+				} else if (gen >= 4) {
+					batch[++i] = 0;
+					batch[++i] = offset;
+				} else {
+					batch[++i] = offset;
+				}
+				batch[++i] = ~pass;
+				gem_write(fd, store.handle, 0, batch, sizeof(batch));
+
+				tmp[0] = scratch;
+				igt_assert(tmp[0].flags & EXEC_OBJECT_WRITE);
+				tmp[1] = store;
+				verify_reloc(fd, store.handle, &reloc);
+				execbuf.buffers_ptr = (uintptr_t)tmp;
+				gem_execbuf(fd, &execbuf);
+				igt_assert_eq_u64(reloc.presumed_offset, tmp[0].offset);
+				scratch = tmp[0];
+
+				gem_write(fd, batches[1023].handle, loc, &pass, sizeof(pass));
+				for (n = 1024; --n >= 1; ) {
+					int this_fd = fd;
+					uint32_t handle[2];
+
+					execbuf.buffers_ptr = (uintptr_t)&batches[n-1];
+					reloc_migrations += batches[n-1].offset != inter[n].presumed_offset;
+					batches[n-1].offset = inter[n].presumed_offset;
+					old_offset = inter[n].presumed_offset;
+					batches[n-1].relocation_count = 0;
+					batches[n-1].flags |= EXEC_OBJECT_WRITE;
+					verify_reloc(fd, batches[n].handle, &inter[n]);
+
+					if (flags & FDS) {
+						this_fd = fds[rand() % 64];
+						handle[0] = batches[n-1].handle;
+						handle[1] = batches[n].handle;
+						batches[n-1].handle =
+							gem_open(this_fd,
+									gem_flink(fd, handle[0]));
+						batches[n].handle =
+							gem_open(this_fd,
+									gem_flink(fd, handle[1]));
+					}
+
+					if (!(flags & CHAIN)) {
+						execbuf.flags &= ~ENGINE_MASK;
+						execbuf.flags |= engines[rand() % nengine];
+					}
+					if (flags & CONTEXTS)
+						execbuf.rsvd1 = contexts[rand() % 64];
+					gem_execbuf(this_fd, &execbuf);
+					if (inter[n].presumed_offset == -1) {
+						reloc_interruptions++;
+						inter[n].presumed_offset = batches[n-1].offset;
+					}
+					igt_assert_eq_u64(inter[n].presumed_offset, batches[n-1].offset);
+					relocations += inter[n].presumed_offset != old_offset;
+
+					batches[n-1].relocation_count = 1;
+					batches[n-1].flags &= ~EXEC_OBJECT_WRITE;
+
+					if (this_fd != fd) {
+						gem_close(this_fd, batches[n-1].handle);
+						batches[n-1].handle = handle[0];
+
+						gem_close(this_fd, batches[n].handle);
+						batches[n].handle = handle[1];
+					}
+				}
+				execbuf.flags &= ~ENGINE_MASK;
+				execbuf.rsvd1 = 0;
+				execbuf.buffers_ptr = (uintptr_t)&tmp;
+
+				tmp[0] = tmp[1];
+				tmp[0].relocation_count = 0;
+				tmp[0].flags = EXEC_OBJECT_WRITE;
+				reloc_migrations += tmp[0].offset != inter[0].presumed_offset;
+				tmp[0].offset = inter[0].presumed_offset;
+				old_offset = tmp[0].offset;
+				tmp[1] = batches[0];
+				verify_reloc(fd, batches[0].handle, &inter[0]);
+				gem_execbuf(fd, &execbuf);
+				if (inter[0].presumed_offset == -1) {
 					reloc_interruptions++;
-					inter[n].presumed_offset = batches[n-1].offset;
+					inter[0].presumed_offset = tmp[0].offset;
 				}
-				igt_assert_eq_u64(inter[n].presumed_offset, batches[n-1].offset);
-				relocations += inter[n].presumed_offset != old_offset;
+				igt_assert_eq_u64(inter[0].presumed_offset, tmp[0].offset);
+				relocations += inter[0].presumed_offset != old_offset;
+				batches[0] = tmp[1];
 
-				batches[n-1].relocation_count = 1;
-				batches[n-1].flags &= ~EXEC_OBJECT_WRITE;
-
-				if (this_fd != fd) {
-					gem_close(this_fd, batches[n-1].handle);
-					batches[n-1].handle = handle[0];
-
-					gem_close(this_fd, batches[n].handle);
-					batches[n].handle = handle[1];
-				}
+				tmp[1] = tmp[0];
+				tmp[0] = scratch;
+				igt_assert(tmp[0].flags & EXEC_OBJECT_WRITE);
+				igt_assert_eq_u64(reloc.presumed_offset, tmp[0].offset);
+				igt_assert(tmp[1].relocs_ptr == (uintptr_t)&reloc);
+				tmp[1].relocation_count = 1;
+				tmp[1].flags &= ~EXEC_OBJECT_WRITE;
+				verify_reloc(fd, store.handle, &reloc);
+				gem_execbuf(fd, &execbuf);
+				eb_migrations += tmp[0].offset != scratch.offset;
+				eb_migrations += tmp[1].offset != store.offset;
+				igt_assert_eq_u64(reloc.presumed_offset, tmp[0].offset);
+				store = tmp[1];
+				scratch = tmp[0];
 			}
-			execbuf.flags &= ~ENGINE_MASK;
-			execbuf.rsvd1 = 0;
-			execbuf.buffers_ptr = (uintptr_t)&tmp;
-
-			tmp[0] = tmp[1];
-			tmp[0].relocation_count = 0;
-			tmp[0].flags = EXEC_OBJECT_WRITE;
-			reloc_migrations += tmp[0].offset != inter[0].presumed_offset;
-			tmp[0].offset = inter[0].presumed_offset;
-			old_offset = tmp[0].offset;
-			tmp[1] = batches[0];
-			verify_reloc(fd, batches[0].handle, &inter[0]);
-			gem_execbuf(fd, &execbuf);
-			if (inter[0].presumed_offset == -1) {
-				reloc_interruptions++;
-				inter[0].presumed_offset = tmp[0].offset;
-			}
-			igt_assert_eq_u64(inter[0].presumed_offset, tmp[0].offset);
-			relocations += inter[0].presumed_offset != old_offset;
-			batches[0] = tmp[1];
-
-			tmp[1] = tmp[0];
-			tmp[0] = scratch;
-			igt_assert(tmp[0].flags & EXEC_OBJECT_WRITE);
-			igt_assert_eq_u64(reloc.presumed_offset, tmp[0].offset);
-			igt_assert(tmp[1].relocs_ptr == (uintptr_t)&reloc);
-			tmp[1].relocation_count = 1;
-			tmp[1].flags &= ~EXEC_OBJECT_WRITE;
-			verify_reloc(fd, store.handle, &reloc);
-			gem_execbuf(fd, &execbuf);
-			eb_migrations += tmp[0].offset != scratch.offset;
-			eb_migrations += tmp[1].offset != store.offset;
-			igt_assert_eq_u64(reloc.presumed_offset, tmp[0].offset);
-			store = tmp[1];
-			scratch = tmp[0];
 		}
-	}
-	igt_info("Number of migrations for execbuf: %d\n", eb_migrations);
-	igt_info("Number of migrations for reloc: %d, interrupted %d, patched %d\n", reloc_migrations, reloc_interruptions, relocations);
+		igt_info("Number of migrations for execbuf: %d\n", eb_migrations);
+		igt_info("Number of migrations for reloc: %d, interrupted %d, patched %d\n", reloc_migrations, reloc_interruptions, relocations);
 
-	check_bo(fd, scratch.handle);
+		check_bo(fd, scratch.handle);
+		gem_close(fd, scratch.handle);
+		gem_close(fd, store.handle);
+
+		if (flags & FDS) {
+			for (n = 0; n < 64; n++)
+				close(fds[n]);
+		}
+		if (flags & CONTEXTS) {
+			for (n = 0; n < 64; n++)
+				gem_context_destroy(fd, contexts[n]);
+		}
+		for (n = 0; n < 1024; n++)
+			gem_close(fd, batches[n].handle);
+	}
+
+	igt_waitchildren();
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
-	gem_close(fd, scratch.handle);
-	gem_close(fd, store.handle);
-
-	if (flags & FDS) {
-		for (n = 0; n < 64; n++)
-			close(fds[n]);
-	}
-	if (flags & CONTEXTS) {
-		for (n = 0; n < 64; n++)
-			gem_context_destroy(fd, contexts[n]);
-	}
-	for (n = 0; n < 1024; n++)
-		gem_close(fd, batches[n].handle);
 }
 
 static void print_welcome(int fd)
@@ -429,12 +435,17 @@ igt_main
 	} modes[] = {
 		{ "normal", 0 },
 		{ "interruptible", INTERRUPTIBLE },
+		{ "forked", FORKED },
 		{ "chain", CHAIN },
+		{ "chain-forked", CHAIN | FORKED },
+		{ "chain-interruptible", CHAIN | INTERRUPTIBLE },
 		{ "contexts", CONTEXTS },
 		{ "contexts-interruptible", CONTEXTS | INTERRUPTIBLE},
+		{ "contexts-forked", CONTEXTS | FORKED},
 		{ "contexts-chain", CONTEXTS | CHAIN },
 		{ "fds", FDS },
 		{ "fds-interruptible", FDS | INTERRUPTIBLE},
+		{ "fds-forked", FDS | FORKED},
 		{ "fds-chain", FDS | CHAIN},
 		{ NULL }
 	};
