@@ -234,11 +234,11 @@ static uint32_t blob_duplicate(int fd, uint32_t id_orig)
 	igt_assert_eq(errno, err); \
 }
 
-#define crtc_commit_atomic(crtc, plane, req, relax) { \
+#define crtc_commit_atomic(crtc, plane, req, relax, flags) { \
 	drmModeAtomicSetCursor(req, 0); \
 	crtc_populate_req(crtc, req); \
 	plane_populate_req(plane, req); \
-	do_atomic_commit((crtc)->state->desc->fd, req, 0); \
+	do_atomic_commit((crtc)->state->desc->fd, req, flags); \
 	crtc_check_current_state(crtc, plane, relax); \
 	plane_check_current_state(plane, relax); \
 }
@@ -928,10 +928,10 @@ static void plane_primary(struct kms_atomic_crtc_state *crtc,
 
 	/* Flip the primary plane using the atomic API, and double-check
 	 * state is what we think it should be. */
-	crtc_commit_atomic(crtc, &plane, req, ATOMIC_RELAX_NONE);
+	crtc_commit_atomic(crtc, &plane, req, ATOMIC_RELAX_NONE, 0);
 
 	/* Restore the primary plane and check the state matches the old. */
-	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE);
+	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE, 0);
 
 	/* Re-enable the plane through the legacy CRTC/primary-plane API, and
 	 * verify through atomic. */
@@ -942,7 +942,7 @@ static void plane_primary(struct kms_atomic_crtc_state *crtc,
 	crtc_commit_legacy(crtc, plane_old, CRTC_RELAX_MODE);
 
 	/* Finally, restore to the original state. */
-	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE);
+	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE, 0);
 
 	drmModeAtomicFree(req);
 }
@@ -1117,7 +1117,7 @@ static void crtc_invalid_params(struct kms_atomic_crtc_state *crtc_old,
 	                       ATOMIC_RELAX_NONE, EINVAL);
 
 	crtc.mode.id = crtc_old->mode.id;
-	crtc_commit_atomic(&crtc, plane, req, ATOMIC_RELAX_NONE);
+	crtc_commit_atomic(&crtc, plane, req, ATOMIC_RELAX_NONE, 0);
 
 	/* Create a blob which is the wrong size to be a valid mode. */
 	do_or_die(drmModeCreatePropertyBlob(crtc.state->desc->fd,
@@ -1136,7 +1136,7 @@ static void crtc_invalid_params(struct kms_atomic_crtc_state *crtc_old,
 	                       ATOMIC_RELAX_NONE, EINVAL);
 
 	/* Restore the CRTC and check the state matches the old. */
-	crtc_commit_atomic(crtc_old, plane, req, ATOMIC_RELAX_NONE);
+	crtc_commit_atomic(crtc_old, plane, req, ATOMIC_RELAX_NONE, 0);
 
 	drmModeAtomicFree(req);
 }
