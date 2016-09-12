@@ -907,6 +907,55 @@ static void dump_edp(struct context *context,
 	}
 }
 
+static void dump_psr(struct context *context,
+		     const struct bdb_block *block)
+{
+	const struct bdb_psr *psr = block->data;
+	int i;
+
+	/* The same block ID was used for something else before? */
+	if (context->bdb->version < 165)
+		return;
+
+	for (i = 0; i < 16; i++) {
+		if (i != context->panel_type && !context->dump_all_panel_types)
+			continue;
+
+		printf("\tPanel %d%s\n", i, context->panel_type == i ? " *" : "");
+
+		printf("\t\tFull link: %s\n", YESNO(psr->psr[i].full_link));
+		printf("\t\tRequire AUX to wakeup: %s\n", YESNO(psr->psr[i].require_aux_to_wakeup));
+
+		switch (psr->psr[i].lines_to_wait) {
+		case 0:
+		case 1:
+			printf("\t\tLines to wait before link standby: %d\n",
+			       psr->psr[i].lines_to_wait);
+			break;
+		case 2:
+		case 3:
+			printf("\t\tLines to wait before link standby: %d\n",
+			       1 << psr->psr[i].lines_to_wait);
+			break;
+		default:
+			printf("\t\tLines to wait before link standby: (unknown) (0x%x)\n",
+			       psr->psr[i].lines_to_wait);
+			break;
+		}
+
+		printf("\t\tIdle frames to for PSR enable: %d\n",
+		       psr->psr[i].idle_frames);
+
+		printf("\t\tTP1 wakeup time: %d usec (0x%x)\n",
+		       psr->psr[i].tp1_wakeup_time * 100,
+		       psr->psr[i].tp1_wakeup_time);
+
+		printf("\t\tTP2/TP3 wakeup time: %d usec (0x%x)\n",
+		       psr->psr[i].tp2_tp3_wakeup_time * 100,
+		       psr->psr[i].tp2_tp3_wakeup_time);
+	}
+}
+
 static void
 print_detail_timing_data(const struct lvds_dvo_timing2 *dvo_timing)
 {
@@ -1517,6 +1566,11 @@ struct dumper dumpers[] = {
 		.id = BDB_EDP,
 		.name = "eDP block",
 		.dump = dump_edp,
+	},
+	{
+		.id = BDB_PSR,
+		.name = "PSR block",
+		.dump = dump_psr,
 	},
 	{
 		.id = BDB_MIPI_CONFIG,

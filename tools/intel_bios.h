@@ -63,6 +63,7 @@ struct bdb_header {
 #define BDB_SWF_IO		  7
 #define BDB_SWF_MMIO		  8
 #define BDB_DOT_CLOCK_TABLE	  9
+#define BDB_PSR			  9
 #define BDB_MODE_REMOVAL_TABLE	 10
 #define BDB_CHILD_DEVICE_TABLE	 11
 #define BDB_DRIVER_FEATURES	 12
@@ -691,6 +692,20 @@ struct bdb_edp { /* 155 */
 	struct edp_full_link_params full_link_params[16]; /* 199 */
 } __attribute__ ((packed));
 
+struct psr_params {
+	uint8_t full_link:1;
+	uint8_t require_aux_to_wakeup:1;
+	uint8_t rsvd1:6;
+	uint8_t idle_frames:4;
+	uint8_t lines_to_wait:3;
+	uint8_t rsvd2:1;
+	uint16_t tp1_wakeup_time;
+	uint16_t tp2_tp3_wakeup_time;
+} __attribute__ ((packed));
+
+struct bdb_psr {
+	struct psr_params psr[16];
+} __attribute__ ((packed));
 
 /* Block 52 contains MiPi Panel info
  * 6 such enteries will there. Index into correct
