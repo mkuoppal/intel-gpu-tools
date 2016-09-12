@@ -910,6 +910,8 @@ static void plane_primary(struct kms_atomic_crtc_state *crtc,
 	uint32_t format = plane_get_igt_format(&plane);
 	drmModeAtomicReq *req = drmModeAtomicAlloc();
 	struct igt_fb fb;
+	uint32_t flags = 0;
+	int ret;
 
 	igt_require(format != 0);
 
@@ -926,12 +928,21 @@ static void plane_primary(struct kms_atomic_crtc_state *crtc,
 					    plane.crtc_w, plane.crtc_h,
 					    format, I915_TILING_NONE, &fb);
 
+	drmModeAtomicSetCursor(req, 0);
+	crtc_populate_req(crtc, req);
+	plane_populate_req(&plane, req);
+	ret = drmModeAtomicCommit(crtc->state->desc->fd, req,
+				  DRM_MODE_ATOMIC_TEST_ONLY, NULL);
+	/* Try harder in case the failure is caused by disallowing modeset. */
+	if (ret == -EINVAL)
+		flags |= DRM_MODE_ATOMIC_ALLOW_MODESET;
+
 	/* Flip the primary plane using the atomic API, and double-check
 	 * state is what we think it should be. */
-	crtc_commit_atomic(crtc, &plane, req, ATOMIC_RELAX_NONE, 0);
+	crtc_commit_atomic(crtc, &plane, req, ATOMIC_RELAX_NONE, flags);
 
 	/* Restore the primary plane and check the state matches the old. */
-	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE, 0);
+	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE, flags);
 
 	/* Re-enable the plane through the legacy CRTC/primary-plane API, and
 	 * verify through atomic. */
@@ -942,7 +953,7 @@ static void plane_primary(struct kms_atomic_crtc_state *crtc,
 	crtc_commit_legacy(crtc, plane_old, CRTC_RELAX_MODE);
 
 	/* Finally, restore to the original state. */
-	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE, 0);
+	crtc_commit_atomic(crtc, plane_old, req, ATOMIC_RELAX_NONE, flags);
 
 	drmModeAtomicFree(req);
 }
