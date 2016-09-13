@@ -450,7 +450,95 @@ static unsigned get_vblank(int fd, int pipe, unsigned flags)
 	return vbl.reply.sequence;
 }
 
-static void basic_flip_vs_cursor(igt_display_t *display, enum flip_test mode, int nloops)
+enum basic_flip_cursor {
+	FLIP_BEFORE_CURSOR,
+	FLIP_AFTER_CURSOR
+};
+
+static void basic_flip_cursor(igt_display_t *display,
+			      enum flip_test mode,
+			      enum basic_flip_cursor order)
+{
+	struct drm_mode_cursor arg[2];
+	struct drm_event_vblank vbl;
+	struct igt_fb fb_info, cursor_fb, cursor_fb2, argb_fb;
+	unsigned vblank_start;
+	enum pipe pipe = find_connected_pipe(display, false);
+
+	if (mode >= flip_test_atomic)
+		igt_require(display->is_atomic);
+
+	igt_require(set_fb_on_crtc(display, pipe, &fb_info));
+
+	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
+	set_cursor_on_pipe(display, pipe, &cursor_fb);
+	populate_cursor_args(display, pipe, arg, &cursor_fb);
+
+	prepare_flip_test(display, mode, pipe, pipe, arg, &fb_info, &argb_fb, &cursor_fb2);
+
+	igt_display_commit2(display, display->is_atomic ? COMMIT_ATOMIC : COMMIT_LEGACY);
+
+	/* Quick sanity check that we can update a cursor in a single vblank */
+	vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
+	igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+	do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[0]);
+	igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+
+	/* Bind the cursor first to warm up */
+	do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[0]);
+
+	/* Start with a synchronous query to align with the vblank */
+	vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
+
+	switch (order) {
+	case FLIP_BEFORE_CURSOR:
+		switch (mode) {
+		default:
+			flip_nonblocking(display, pipe, mode >= flip_test_atomic, &fb_info);
+			break;
+		case flip_test_atomic_transitions:
+		case flip_test_atomic_transitions_varying_size:
+			transition_nonblocking(display, pipe, &fb_info, &argb_fb, 0);
+			break;
+		}
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+
+		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[0]);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+		break;
+
+	case FLIP_AFTER_CURSOR:
+		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[0]);
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+
+		switch (mode) {
+		default:
+			flip_nonblocking(display, pipe, mode >= flip_test_atomic, &fb_info);
+			break;
+		case flip_test_atomic_transitions:
+		case flip_test_atomic_transitions_varying_size:
+			transition_nonblocking(display, pipe, &fb_info, &argb_fb, 0);
+			break;
+		}
+		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+	}
+
+	igt_set_timeout(1, "Stuck page flip");
+	igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
+	igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start + 1);
+	igt_reset_timeout();
+
+	do_cleanup_display(display);
+	igt_remove_fb(display->drm_fd, &fb_info);
+	igt_remove_fb(display->drm_fd, &cursor_fb);
+
+	if (argb_fb.gem_handle)
+		igt_remove_fb(display->drm_fd, &argb_fb);
+	if (cursor_fb2.gem_handle)
+		igt_remove_fb(display->drm_fd, &cursor_fb2);
+}
+
+static void flip_vs_cursor(igt_display_t *display, enum flip_test mode, int nloops)
 {
 	struct drm_mode_cursor arg[2];
 	struct drm_event_vblank vbl;
@@ -646,7 +734,7 @@ cleanup:
 		igt_skip("Nonblocking modeset is not supported by this kernel\n");
 }
 
-static void basic_cursor_vs_flip(igt_display_t *display, enum flip_test mode, int nloops)
+static void cursor_vs_flip(igt_display_t *display, enum flip_test mode, int nloops)
 {
 	struct drm_mode_cursor arg[2];
 	struct drm_event_vblank vbl;
@@ -1039,14 +1127,16 @@ igt_main
 		default: break;
 		}
 
-		igt_subtest_f("%sflip-vs-cursor-%s", prefix, modes[i])
-			basic_flip_vs_cursor(&display, i, 0);
-		igt_subtest_f("long-flip-vs-cursor-%s", modes[i])
-			basic_flip_vs_cursor(&display, i, 150);
-		igt_subtest_f("%scursor-vs-flip-%s", prefix, modes[i])
-			basic_cursor_vs_flip(&display, i, 4);
-		igt_subtest_f("long-cursor-vs-flip-%s", modes[i])
-			basic_cursor_vs_flip(&display, i, 150);
+		igt_subtest_f("%sflip-before-cursor-%s", prefix, modes[i])
+			basic_flip_cursor(&display, i, FLIP_BEFORE_CURSOR);
+
+		igt_subtest_f("%sflip-after-cursor-%s", prefix, modes[i])
+			basic_flip_cursor(&display, i, FLIP_AFTER_CURSOR);
+
+		igt_subtest_f("flip-vs-cursor-%s", modes[i])
+			flip_vs_cursor(&display, i, 150);
+		igt_subtest_f("cursor-vs-flip-%s", modes[i])
+			cursor_vs_flip(&display, i, 150);
 
 		igt_subtest_f("cursorA-vs-flipA-%s", modes[i])
 			flip(&display, 0, 0, 10, i);
