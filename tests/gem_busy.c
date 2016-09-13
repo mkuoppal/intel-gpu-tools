@@ -604,90 +604,97 @@ igt_main
 		fd = drm_open_driver_master(DRIVER_INTEL);
 	}
 
-	igt_fixture {
-		igt_fork_hang_detector(fd);
-	}
-	for (e = intel_execution_engines; e->name; e++) {
+	igt_subtest_group {
+		igt_fixture {
+			igt_fork_hang_detector(fd);
+		}
+
+		for (e = intel_execution_engines; e->name; e++) {
+			igt_subtest_group {
+				igt_subtest_f("%sbusy-%s",
+					      e->exec_id == 0 ? "basic-" : "",
+					      e->name) {
+					igt_require(gem_has_ring(fd, e->exec_id | e->flags));
+					gem_quiescent_gpu(fd);
+					basic(fd, e->exec_id | e->flags, 0);
+				}
+			}
+		}
+
 		igt_subtest_group {
-			igt_subtest_f("%sbusy-%s",
-				      e->exec_id == 0 ? "basic-" : "",
-				      e->name) {
-				igt_require(gem_has_ring(fd, e->exec_id | e->flags));
-				gem_quiescent_gpu(fd);
-				basic(fd, e->exec_id | e->flags, 0);
+			int gen = 0;
+
+			igt_fixture {
+				igt_require(has_extended_busy_ioctl(fd));
+				gem_require_mmap_wc(fd);
+				gen = intel_gen(intel_get_drm_devid(fd));
+			}
+
+			for (e = intel_execution_engines; e->name; e++) {
+				/* default exec-id is purely symbolic */
+				if (e->exec_id == 0)
+					continue;
+
+				igt_subtest_f("extended-%s", e->name) {
+					gem_require_ring(fd, e->exec_id | e->flags);
+					igt_skip_on_f(gen == 6 &&
+						      e->exec_id == I915_EXEC_BSD,
+						      "MI_STORE_DATA broken on gen6 bsd\n");
+					gem_quiescent_gpu(fd);
+					one(fd, e->exec_id, e->flags, 0);
+					gem_quiescent_gpu(fd);
+				}
+			}
+
+			for (e = intel_execution_engines; e->name; e++) {
+				/* default exec-id is purely symbolic */
+				if (e->exec_id == 0)
+					continue;
+
+				igt_subtest_f("extended-parallel-%s", e->name) {
+					gem_require_ring(fd, e->exec_id | e->flags);
+					igt_skip_on_f(gen == 6 &&
+						      e->exec_id == I915_EXEC_BSD,
+						      "MI_STORE_DATA broken on gen6 bsd\n");
+					gem_quiescent_gpu(fd);
+					one(fd, e->exec_id, e->flags, PARALLEL);
+					gem_quiescent_gpu(fd);
+				}
 			}
 		}
-	}
 
-	igt_subtest_group {
-		int gen = 0;
+		igt_subtest_group {
+			igt_fixture {
+				igt_require(has_extended_busy_ioctl(fd));
+				igt_require(has_semaphores(fd));
+			}
 
-		igt_fixture {
-			igt_require(has_extended_busy_ioctl(fd));
-			gem_require_mmap_wc(fd);
-			gen = intel_gen(intel_get_drm_devid(fd));
-		}
+			for (e = intel_execution_engines; e->name; e++) {
+				/* default exec-id is purely symbolic */
+				if (e->exec_id == 0)
+					continue;
 
-		for (e = intel_execution_engines; e->name; e++) {
-			/* default exec-id is purely symbolic */
-			if (e->exec_id == 0)
-				continue;
-
-			igt_subtest_f("extended-%s", e->name) {
-				gem_require_ring(fd, e->exec_id | e->flags);
-				igt_skip_on_f(gen == 6 &&
-					      e->exec_id == I915_EXEC_BSD,
-					      "MI_STORE_DATA broken on gen6 bsd\n");
-				gem_quiescent_gpu(fd);
-				one(fd, e->exec_id, e->flags, 0);
-				gem_quiescent_gpu(fd);
+				igt_subtest_f("extended-semaphore-%s", e->name)
+					semaphore(fd, e->exec_id, e->flags);
 			}
 		}
 
-		for (e = intel_execution_engines; e->name; e++) {
-			/* default exec-id is purely symbolic */
-			if (e->exec_id == 0)
-				continue;
-
-			igt_subtest_f("extended-parallel-%s", e->name) {
-				gem_require_ring(fd, e->exec_id | e->flags);
-				igt_skip_on_f(gen == 6 &&
-					      e->exec_id == I915_EXEC_BSD,
-					      "MI_STORE_DATA broken on gen6 bsd\n");
-				gem_quiescent_gpu(fd);
-				one(fd, e->exec_id, e->flags, PARALLEL);
-				gem_quiescent_gpu(fd);
-			}
-		}
-	}
-
-	igt_subtest_group {
-		igt_fixture {
-			igt_require(has_extended_busy_ioctl(fd));
-			igt_require(has_semaphores(fd));
-		}
-
-		for (e = intel_execution_engines; e->name; e++) {
-			/* default exec-id is purely symbolic */
-			if (e->exec_id == 0)
-				continue;
-
-			igt_subtest_f("extended-semaphore-%s", e->name)
-				semaphore(fd, e->exec_id, e->flags);
-		}
-	}
-
-	igt_subtest_group {
 		igt_subtest("close-race")
 			close_race(fd);
+
+		igt_fixture {
+			igt_stop_hang_detector();
+		}
 	}
 
-	igt_fixture {
-		igt_stop_hang_detector();
-	}
+	igt_subtest_group {
+		igt_hang_t hang;
 
-	for (e = intel_execution_engines; e->name; e++) {
-		igt_subtest_group {
+		igt_fixture {
+			hang = igt_allow_hang(fd, 0, 0);
+		}
+
+		for (e = intel_execution_engines; e->name; e++) {
 			igt_subtest_f("%shang-%s",
 				      e->exec_id == 0 ? "basic-" : "",
 				      e->name) {
@@ -696,31 +703,35 @@ igt_main
 				basic(fd, e->exec_id | e->flags, HANG);
 			}
 		}
-	}
 
-	igt_subtest_group {
-		int gen = 0;
+		igt_subtest_group {
+			int gen = 0;
 
-		igt_fixture {
-			igt_require(has_extended_busy_ioctl(fd));
-			gem_require_mmap_wc(fd);
-			gen = intel_gen(intel_get_drm_devid(fd));
+			igt_fixture {
+				igt_require(has_extended_busy_ioctl(fd));
+				gem_require_mmap_wc(fd);
+				gen = intel_gen(intel_get_drm_devid(fd));
+			}
+
+			for (e = intel_execution_engines; e->name; e++) {
+				/* default exec-id is purely symbolic */
+				if (e->exec_id == 0)
+					continue;
+
+				igt_subtest_f("extended-hang-%s", e->name) {
+					gem_require_ring(fd, e->exec_id | e->flags);
+					igt_skip_on_f(gen == 6 &&
+						      e->exec_id == I915_EXEC_BSD,
+						      "MI_STORE_DATA broken on gen6 bsd\n");
+					gem_quiescent_gpu(fd);
+					one(fd, e->exec_id, e->flags, HANG);
+					gem_quiescent_gpu(fd);
+				}
+			}
 		}
 
-		for (e = intel_execution_engines; e->name; e++) {
-			/* default exec-id is purely symbolic */
-			if (e->exec_id == 0)
-				continue;
-
-			igt_subtest_f("extended-hang-%s", e->name) {
-				gem_require_ring(fd, e->exec_id | e->flags);
-				igt_skip_on_f(gen == 6 &&
-					      e->exec_id == I915_EXEC_BSD,
-					      "MI_STORE_DATA broken on gen6 bsd\n");
-				gem_quiescent_gpu(fd);
-				one(fd, e->exec_id, e->flags, HANG);
-				gem_quiescent_gpu(fd);
-			}
+		igt_fixture {
+			igt_disallow_hang(fd, hang);
 		}
 	}
 

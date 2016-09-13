@@ -790,12 +790,12 @@ static void set_y_tiling(struct test_output *o, int fb_idx)
 	drmFree(r);
 }
 
-static igt_hang_ring_t hang_gpu(int fd)
+static igt_hang_t hang_gpu(int fd)
 {
 	return igt_hang_ring(fd, I915_EXEC_DEFAULT);
 }
 
-static void unhang_gpu(int fd, igt_hang_ring_t hang)
+static void unhang_gpu(int fd, igt_hang_t hang)
 {
 	igt_post_hang_ring(fd, hang);
 }
@@ -842,7 +842,7 @@ static unsigned int run_test_step(struct test_output *o)
 	bool do_vblank;
 	struct vblank_reply vbl_reply;
 	unsigned int target_seq;
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 
 	target_seq = o->vblank_state.seq_step;
 	/* Absolute waits only works once we have a frame counter. */
@@ -1253,7 +1253,7 @@ static unsigned int wait_for_events(struct test_output *o)
 static unsigned event_loop(struct test_output *o, unsigned duration_ms)
 {
 	unsigned long start, end;
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 	int count = 0;
 
 	memset(&hang, 0, sizeof(hang));

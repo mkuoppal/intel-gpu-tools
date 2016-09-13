@@ -136,7 +136,7 @@ static int __gem_wait(int fd, uint32_t handle, int64_t timeout)
 
 static void test_wait(int fd)
 {
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 
 	/* If the request we wait on completes due to a hang (even for
 	 * that request), the user expects the return value to 0 (success).

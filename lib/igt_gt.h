@@ -28,25 +28,28 @@
 
 void igt_require_hang_ring(int fd, int ring);
 
-typedef struct igt_hang_ring {
+typedef struct igt_hang {
 	unsigned handle;
 	unsigned ctx;
 	unsigned ban;
 	unsigned flags;
-} igt_hang_ring_t;
+} igt_hang_t;
+
+igt_hang_t igt_allow_hang(int fd, unsigned ctx, unsigned flags);
+void igt_disallow_hang(int fd, igt_hang_t arg);
 
 #define HANG_POISON 0xc5c5c5c5
 
-struct igt_hang_ring igt_hang_ctx(int fd,
-				  uint32_t ctx,
-				  int ring,
-				  unsigned flags,
-				  uint64_t *offset);
+igt_hang_t igt_hang_ctx(int fd,
+			uint32_t ctx,
+			int ring,
+			unsigned flags,
+			uint64_t *offset);
 #define HANG_ALLOW_BAN 1
 #define HANG_ALLOW_CAPTURE 2
 
-struct igt_hang_ring igt_hang_ring(int fd, int ring);
-void igt_post_hang_ring(int fd, struct igt_hang_ring arg);
+igt_hang_t igt_hang_ring(int fd, int ring);
+void igt_post_hang_ring(int fd, igt_hang_t arg);
 
 void igt_force_gpu_reset(void);
 

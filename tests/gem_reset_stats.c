@@ -156,7 +156,7 @@ static void inject_hang(int fd, uint32_t ctx,
 			const struct intel_execution_engine *e,
 			unsigned flags)
 {
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 
 	clock_gettime(CLOCK_MONOTONIC, &ts_injected);
 
@@ -547,7 +547,7 @@ static void test_close_pending_fork(const struct intel_execution_engine *e,
 				    const bool reverse)
 {
 	int fd = drm_open_driver(DRIVER_INTEL);
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 	int pid;
 
 	assert_reset_status(fd, fd, 0, RS_NO_ERROR);

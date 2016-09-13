@@ -88,7 +88,7 @@ static void run_test(int fd, unsigned ring, unsigned flags)
 	struct drm_i915_gem_exec_object2 obj[2];
 	struct drm_i915_gem_relocation_entry reloc[1024];
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	uint32_t *batch, *b;
 	int i;
 

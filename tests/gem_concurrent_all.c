@@ -856,7 +856,7 @@ static void buffers_fini(struct buffers *b)
 }
 
 typedef void (*do_copy)(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src);
-typedef struct igt_hang_ring (*do_hang)(void);
+typedef igt_hang_t (*do_hang)(void);
 
 static void render_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 {
@@ -940,27 +940,27 @@ static void wc_copy_bo(struct buffers *b, drm_intel_bo *dst, drm_intel_bo *src)
 	munmap(s, size);
 }
 
-static struct igt_hang_ring no_hang(void)
+static igt_hang_t no_hang(void)
 {
-	return (struct igt_hang_ring){0, 0};
+	return (igt_hang_t){0, 0};
 }
 
-static struct igt_hang_ring bcs_hang(void)
+static igt_hang_t bcs_hang(void)
 {
 	return igt_hang_ring(fd, I915_EXEC_BLT);
 }
 
-static struct igt_hang_ring rcs_hang(void)
+static igt_hang_t rcs_hang(void)
 {
 	return igt_hang_ring(fd, I915_EXEC_RENDER);
 }
 
-static struct igt_hang_ring all_hang(void)
+static igt_hang_t all_hang(void)
 {
 	uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	unsigned engine;
 
 	memset(&obj, 0, sizeof(obj));
@@ -992,7 +992,7 @@ static void do_basic0(struct buffers *buffers,
 
 	buffers->mode->set_bo(buffers, buffers->src[0], 0xdeadbeef);
 	for (int i = 0; i < buffers->count; i++) {
-		struct igt_hang_ring hang = do_hang_func();
+		igt_hang_t hang = do_hang_func();
 
 		do_copy_func(buffers, buffers->dst[i], buffers->src[0]);
 		buffers->mode->cmp_bo(buffers, buffers->dst[i], 0xdeadbeef);
@@ -1008,7 +1008,7 @@ static void do_basic1(struct buffers *buffers,
 	gem_quiescent_gpu(fd);
 
 	for (int i = 0; i < buffers->count; i++) {
-		struct igt_hang_ring hang = do_hang_func();
+		igt_hang_t hang = do_hang_func();
 
 		buffers->mode->set_bo(buffers, buffers->src[i], i);
 		buffers->mode->set_bo(buffers, buffers->dst[i], ~i);
@@ -1025,7 +1025,7 @@ static void do_basicN(struct buffers *buffers,
 		      do_copy do_copy_func,
 		      do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 
 	gem_quiescent_gpu(fd);
 
@@ -1051,7 +1051,7 @@ static void do_overwrite_source(struct buffers *buffers,
 				do_copy do_copy_func,
 				do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1075,7 +1075,7 @@ static void do_overwrite_source_read(struct buffers *buffers,
 				     int do_rcs)
 {
 	const int half = buffers->count/2;
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1119,7 +1119,7 @@ static void do_overwrite_source__rev(struct buffers *buffers,
 				     do_copy do_copy_func,
 				     do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1141,7 +1141,7 @@ static void do_overwrite_source__one(struct buffers *buffers,
 				     do_copy do_copy_func,
 				     do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 
 	gem_quiescent_gpu(fd);
 	buffers->mode->set_bo(buffers, buffers->src[0], 0);
@@ -1159,7 +1159,7 @@ static void do_intermix(struct buffers *buffers,
 			int do_rcs)
 {
 	const int half = buffers->count/2;
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1213,7 +1213,7 @@ static void do_early_read(struct buffers *buffers,
 			  do_copy do_copy_func,
 			  do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1231,7 +1231,7 @@ static void do_read_read_bcs(struct buffers *buffers,
 			     do_copy do_copy_func,
 			     do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1252,7 +1252,7 @@ static void do_write_read_bcs(struct buffers *buffers,
 			      do_copy do_copy_func,
 			      do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1272,7 +1272,7 @@ static void do_read_read_rcs(struct buffers *buffers,
 			     do_copy do_copy_func,
 			     do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1293,7 +1293,7 @@ static void do_write_read_rcs(struct buffers *buffers,
 			      do_copy do_copy_func,
 			      do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);
@@ -1313,7 +1313,7 @@ static void do_gpu_read_after_write(struct buffers *buffers,
 				    do_copy do_copy_func,
 				    do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 	int i;
 
 	gem_quiescent_gpu(fd);

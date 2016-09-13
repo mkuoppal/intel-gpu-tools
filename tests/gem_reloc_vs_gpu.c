@@ -184,18 +184,18 @@ static void reloc_and_emit(int fd, drm_intel_bo *target_bo, bool faulting_reloc)
 	gem_close(fd, handle_relocs);
 }
 
-static struct igt_hang_ring no_hang(int fd)
+static igt_hang_t no_hang(int fd)
 {
-	return (struct igt_hang_ring){0};
+	return (igt_hang_t){0};
 }
 
-static struct igt_hang_ring bcs_hang(int fd)
+static igt_hang_t bcs_hang(int fd)
 {
 	return igt_hang_ring(fd, I915_EXEC_BLT);
 }
 
 static void do_test(int fd, bool faulting_reloc,
-		    struct igt_hang_ring (*do_hang)(int fd))
+		    igt_hang_t (*do_hang)(int fd))
 {
 	uint32_t tiling_mode = I915_TILING_X;
 	unsigned long pitch, act_size;
@@ -214,7 +214,7 @@ static void do_test(int fd, bool faulting_reloc,
 	create_special_bo();
 
 	for (i = 0; i < NUM_TARGET_BOS; i++) {
-		struct igt_hang_ring hang;
+		igt_hang_t hang;
 
 		pc_target_bo[i] = drm_intel_bo_alloc(bufmgr, "special batch", 4096, 4096);
 		emit_dummy_load(pitch);

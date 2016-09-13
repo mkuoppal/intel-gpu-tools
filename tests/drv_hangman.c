@@ -139,7 +139,7 @@ const uint32_t *batch;
 static uint64_t submit_hang(int fd, unsigned ring_id)
 {
 	uint64_t offset;
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 
 	hang = igt_hang_ctx(fd, 0, ring_id, HANG_ALLOW_CAPTURE, &offset);
 

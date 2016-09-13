@@ -70,6 +70,19 @@ static bool has_gpu_reset(int fd)
 	return once;
 }
 
+static void eat_error_state(void)
+{
+	int fd, ret;
+
+	fd = igt_debugfs_open("i915_error_state", O_WRONLY);
+	do {
+		ret = write(fd, "", 1);
+		if (ret < 0)
+			ret = -errno;
+	} while (ret == -EINTR || ret == -EAGAIN);
+	close(fd);
+}
+
 /**
  * igt_require_hang_ring:
  * @fd: open i915 drm file descriptor
@@ -110,6 +123,62 @@ void igt_require_hang_ring(int fd, int ring)
 		igt_require(has_gpu_reset(fd));
 }
 
+igt_hang_t igt_allow_hang(int fd, unsigned ctx, unsigned flags)
+{
+	struct local_i915_gem_context_param param;
+	unsigned ban;
+
+	if (!igt_check_boolean_env_var("IGT_HANG", true))
+		igt_skip("hang injection disabled by user");
+	gem_context_require_ban_period(fd);
+	if (!igt_check_boolean_env_var("IGT_HANG_WITHOUT_RESET", false))
+		igt_require(has_gpu_reset(fd));
+
+	param.context = ctx;
+	param.size = 0;
+
+	if ((flags & HANG_ALLOW_CAPTURE) == 0) {
+		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
+		param.value = 1;
+		/* Older kernels may not have NO_ERROR_CAPTURE, in which case
+		 * we just eat the error state in post-hang (and hope we eat
+		 * the right one).
+		 */
+		__gem_context_set_param(fd, &param);
+	}
+
+	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+	param.value = 0;
+	gem_context_get_param(fd, &param);
+	ban = param.value;
+
+	if ((flags & HANG_ALLOW_BAN) == 0) {
+		param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+		param.value = 0;
+		gem_context_set_param(fd, &param);
+	}
+
+	return (struct igt_hang){ 0, ctx, ban, flags };
+}
+
+void igt_disallow_hang(int fd, igt_hang_t arg)
+{
+	struct local_i915_gem_context_param param;
+
+	param.context = arg.ctx;
+	param.size = 0;
+	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+	param.value = arg.ban;
+	gem_context_set_param(fd, &param);
+
+	if ((arg.flags & HANG_ALLOW_CAPTURE) == 0) {
+		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
+		param.value = 0;
+		if (__gem_context_set_param(fd, &param))
+			eat_error_state();
+	}
+}
+
 /**
  * igt_hang_ring_ctx:
  * @fd: open i915 drm file descriptor
@@ -118,18 +187,18 @@ void igt_require_hang_ring(int fd, int ring)
  * @flags: set of flags to control execution
  *
  * This helper function injects a hanging batch associated with @ctx into @ring.
- * It returns a #igt_hang_ring_t structure which must be passed to
+ * It returns a #igt_hang_t structure which must be passed to
  * igt_post_hang_ring() for hang post-processing (after the gpu hang
  * interaction has been tested.
  *
  * Returns:
  * Structure with helper internal state for igt_post_hang_ring().
  */
-igt_hang_ring_t igt_hang_ctx(int fd,
-			     uint32_t ctx,
-			     int ring,
-			     unsigned flags,
-			     uint64_t *offset)
+igt_hang_t igt_hang_ctx(int fd,
+			uint32_t ctx,
+			int ring,
+			unsigned flags,
+			uint64_t *offset)
 {
 	struct drm_i915_gem_relocation_entry reloc;
 	struct drm_i915_gem_execbuffer2 execbuf;
@@ -214,7 +283,7 @@ igt_hang_ring_t igt_hang_ctx(int fd,
 	if (offset)
 		*offset = exec.offset;
 
-	return (struct igt_hang_ring){ exec.handle, ctx, ban, flags };
+	return (igt_hang_t){ exec.handle, ctx, ban, flags };
 }
 
 /**
@@ -223,28 +292,15 @@ igt_hang_ring_t igt_hang_ctx(int fd,
  * @ring: execbuf ring flag
  *
  * This helper function injects a hanging batch into @ring. It returns a
- * #igt_hang_ring_t structure which must be passed to igt_post_hang_ring() for
+ * #igt_hang_t structure which must be passed to igt_post_hang_ring() for
  * hang post-processing (after the gpu hang interaction has been tested.
  *
  * Returns:
  * Structure with helper internal state for igt_post_hang_ring().
  */
-igt_hang_ring_t igt_hang_ring(int fd, int ring)
+igt_hang_t igt_hang_ring(int fd, int ring)
 {
 	return igt_hang_ctx(fd, 0, ring, 0, NULL);
-}
-
-static void eat_error_state(void)
-{
-	int fd, ret;
-
-	fd = igt_debugfs_open("i915_error_state", O_WRONLY);
-	do {
-		ret = write(fd, "", 1);
-		if (ret < 0)
-			ret = -errno;
-	} while (ret == -EINTR || ret == -EAGAIN);
-	close(fd);
 }
 
 /**
@@ -255,7 +311,7 @@ static void eat_error_state(void)
  * This function does the necessary post-processing after a gpu hang injected
  * with igt_hang_ring().
  */
-void igt_post_hang_ring(int fd, struct igt_hang_ring arg)
+void igt_post_hang_ring(int fd, igt_hang_t arg)
 {
 	struct local_i915_gem_context_param param;
 

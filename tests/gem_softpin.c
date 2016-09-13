@@ -348,7 +348,7 @@ static void test_evict_hang(int fd)
 	const uint32_t bbe = MI_BATCH_BUFFER_END;
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 object;
-	igt_hang_ring_t hang;
+	igt_hang_t hang;
 	uint64_t expected;
 
 	memset(&object, 0, sizeof(object));

@@ -118,14 +118,14 @@ verify_small_read(drm_intel_bo *bo, uint32_t val)
 	}
 }
 
-typedef struct igt_hang_ring (*do_hang)(int fd);
+typedef igt_hang_t (*do_hang)(int fd);
 
-static struct igt_hang_ring no_hang(int fd)
+static igt_hang_t no_hang(int fd)
 {
-	return (struct igt_hang_ring){0};
+	return (igt_hang_t){0};
 }
 
-static struct igt_hang_ring bcs_hang(int fd)
+static igt_hang_t bcs_hang(int fd)
 {
 	return igt_hang_ring(fd, batch->gen >= 6 ? I915_EXEC_BLT : I915_EXEC_DEFAULT);
 }
@@ -136,7 +136,7 @@ static void do_test(int fd, int cache_level,
 		    drm_intel_bo *tmp[2],
 		    int loop, do_hang do_hang_func)
 {
-	struct igt_hang_ring hang;
+	igt_hang_t hang;
 
 	if (cache_level != -1) {
 		gem_set_caching(fd, tmp[0]->handle, cache_level);
