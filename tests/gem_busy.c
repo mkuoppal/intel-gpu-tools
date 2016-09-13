@@ -439,6 +439,8 @@ static void close_race(int fd)
 
 	munmap(handles, N_HANDLES * sizeof(*handles));
 	munmap(control, 4096);
+
+	gem_quiescent_gpu(fd);
 }
 
 static bool has_semaphores(int fd)
@@ -691,7 +693,7 @@ igt_main
 				      e->name) {
 				igt_require(gem_has_ring(fd, e->exec_id | e->flags));
 				gem_quiescent_gpu(fd);
-				basic(fd, e->exec_id | e->flags, 0);
+				basic(fd, e->exec_id | e->flags, HANG);
 			}
 		}
 	}
