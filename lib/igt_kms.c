@@ -2708,16 +2708,18 @@ void igt_wait_for_vblank(int drm_fd, enum pipe pipe)
 void igt_enable_connectors(void)
 {
 	drmModeRes *res;
-	drmModeConnector *c;
 	int drm_fd;
 
 	drm_fd = drm_open_driver(DRIVER_ANY);
 
 	res = drmModeGetResources(drm_fd);
+	igt_assert(res != NULL);
 
 	for (int i = 0; i < res->count_connectors; i++) {
+		drmModeConnector *c;
 
-		c = drmModeGetConnectorCurrent(drm_fd, res->connectors[i]);
+		/* Do a probe. This may be the first action after booting */
+		c = drmModeGetConnector(drm_fd, res->connectors[i]);
 
 		/* don't attempt to force connectors that are already connected
 		 */
@@ -2734,6 +2736,7 @@ void igt_enable_connectors(void)
 
 		drmModeFreeConnector(c);
 	}
+
 	close(drm_fd);
 }
 
