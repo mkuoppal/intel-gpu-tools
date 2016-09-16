@@ -87,7 +87,17 @@ typedef struct {
 	char dri_path[128];
 } igt_debugfs_t;
 
-static const char *__debugfs_mount(void)
+
+/**
+ * igt_debugfs_mount:
+ *
+ * This attempts to locate where debugfs is mounted on the filesystem,
+ * and if not found, will then try to mount debugfs at /sys/kernel/debug.
+ *
+ * Returns:
+ * The path to the debugfs mount point (e.g. /sys/kernel/debug)
+ */
+const char *igt_debugfs_mount(void)
 {
 	struct stat st;
 
@@ -107,7 +117,7 @@ static bool __igt_debugfs_init(igt_debugfs_t *debugfs)
 	struct stat st;
 	int n;
 
-	strcpy(debugfs->root, __debugfs_mount());
+	strcpy(debugfs->root, igt_debugfs_mount());
 	for (n = 0; n < 16; n++) {
 		int len = sprintf(debugfs->dri_path, "%s/dri/%d", debugfs->root, n);
 		sprintf(debugfs->dri_path + len, "/i915_error_state");
@@ -800,7 +810,8 @@ int igt_debugfs_dir(int device)
 	if (fstat(device, &st) || !S_ISCHR(st.st_mode))
 		return -1;
 
-	sprintf(path, "%s/dri/%d", __debugfs_mount(), (int)(st.st_rdev & 0xff));
+	sprintf(path, "%s/dri/%d",
+		igt_debugfs_mount(), (int)(st.st_rdev & 0xff));
 	igt_debug("Opening debugfs dir %s\n", path);
 	return open(path, O_RDONLY);
 }

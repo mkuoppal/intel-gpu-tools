@@ -31,6 +31,8 @@
 
 enum pipe;
 
+const char *igt_debugfs_mount(void);
+
 int igt_debugfs_open(const char *filename, int mode);
 FILE *igt_debugfs_fopen(const char *filename,
 			const char *mode);
