@@ -1122,7 +1122,7 @@ static void
 printnum(unsigned long long num, unsigned base)
 {
 	int i = 0;
-	unsigned long long __num;
+	unsigned long long __num = num;
 
 	/* determine from where we should start dividing */
 	do {
@@ -1264,7 +1264,7 @@ static void print_backtrace_sig_safe(void)
 		unw_word_t off;
 
 		if (unw_get_proc_name(&cursor, name, 255, &off) < 0)
-			xstrlcpy(name, "<unknown>", 9);
+			xstrlcpy(name, "<unknown>", 10);
 
 		xprintf(" #%d [%s+0x%x]\n", stack_num++, name,
 				(unsigned int) off);
@@ -1740,7 +1740,7 @@ static void fatal_sig_handler(int sig)
 			igt_assert_eq(write(STDERR_FILENO, ".\n", 2), 2);
 		}
 
-		if (in_subtest && crash_signal(sig)) {
+		if (crash_signal(sig)) {
 			/* Linux standard to return exit code as 128 + signal */
 			if (!failed_one)
 				igt_exitcode = 128 + sig;
@@ -1749,7 +1749,8 @@ static void fatal_sig_handler(int sig)
 #ifdef HAVE_LIBUNWIND
 			print_backtrace_sig_safe();
 #endif
-			exit_subtest("CRASH");
+			if (in_subtest)
+				exit_subtest("CRASH");
 		}
 		break;
 	}
