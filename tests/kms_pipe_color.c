@@ -652,6 +652,13 @@ static void test_pipe_legacy_gamma_reset(data_t *data,
 	free(gamma_zero);
 }
 
+static bool crc_equal(igt_crc_t *a, igt_crc_t *b)
+{
+  int i;
+
+  return memcmp(a->crc, b->crc, sizeof(a->crc[0]) * a->n_words) == 0;
+}
+
 /*
  * Draw 3 rectangles using before colors with the ctm matrix apply and verify
  * the CRC is equal to using after colors with an identify ctm matrix.
@@ -724,7 +731,7 @@ static bool test_pipe_ctm(data_t *data,
 		/* Verify that the CRC of the software computed output is
 		 * equal to the CRC of the CTM matrix transformation output.
 		 */
-		igt_assert_crc_equal(&crc_software, &crc_hardware);
+		ret &= crc_equal(&crc_software, &crc_hardware);
 
 		igt_output_set_pipe(output, PIPE_ANY);
 	}
