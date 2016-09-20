@@ -17,6 +17,7 @@ lib_source_list =	 	\
 	igt_gvt.c		\
 	igt_gvt.h		\
 	igt_primes.c		\
+	igt_primes.h		\
 	igt_rand.c		\
 	igt_rand.h		\
 	igt_stats.c		\
