@@ -629,7 +629,7 @@ static void flip_to_vgem(int i915, int vgem,
 			 const char *name)
 {
 	const struct timespec tv = { 1, 0 };
-	struct pollfd pfd;
+	struct pollfd pfd = { i915, POLLIN };
 	struct drm_event_vblank vbl;
 	uint32_t fence;
 
@@ -641,8 +641,6 @@ static void flip_to_vgem(int i915, int vgem,
 		kill(getppid(), SIGHUP);
 
 		/* Check we don't flip before the fence is ready */
-		pfd.fd = i915;
-		pfd.events = POLLIN;
 		for (int n = 0; n < 5; n++) {
 			igt_assert_f(poll(&pfd, 1, 0) == 0,
 				     "flip to %s completed whilst busy\n",
