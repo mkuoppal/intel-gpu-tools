@@ -820,16 +820,6 @@ static void buffers_create(struct buffers *b)
 
 static void buffers_reset(struct buffers *b, bool enable_reuse)
 {
-	buffers_destroy(b);
-
-	igt_assert(b->count == 0);
-	igt_assert(b->tmp);
-	igt_assert(b->src);
-	igt_assert(b->dst);
-
-	intel_batchbuffer_free(b->batch);
-	drm_intel_bufmgr_destroy(b->bufmgr);
-
 	b->bufmgr = drm_intel_bufmgr_gem_init(fd, 4096);
 	igt_assert(b->bufmgr);
 
@@ -1384,7 +1374,9 @@ static void __run_forked(struct buffers *buffers,
 
 {
 	/* purge the libdrm caches before cloing the process */
-	buffers_reset(buffers, true);
+	buffers_destroy(buffers);
+	intel_batchbuffer_free(buffers->batch);
+	drm_intel_bufmgr_destroy(buffers->bufmgr);
 
 	igt_fork(child, num_children) {
 		int num_buffers;
@@ -1409,6 +1401,8 @@ static void __run_forked(struct buffers *buffers,
 	}
 	igt_waitchildren();
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
+
+	buffers_reset(buffers, true);
 }
 
 static void run_forked(struct buffers *buffers,
