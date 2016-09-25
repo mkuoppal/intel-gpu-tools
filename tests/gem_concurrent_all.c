@@ -387,12 +387,12 @@ static void
 dmabuf_set_bo(struct buffers *b, drm_intel_bo *bo, uint32_t val)
 {
 	struct dmabuf *dmabuf = bo->virtual;
-	uint32_t *v;
-	int size;
+	uint32_t *v = dmabuf->map;
+	int y;
 
 	prime_sync_start(dmabuf->fd, true);
-	for (v = dmabuf->map, size = b->npixels; size--; v++)
-		*v = val;
+	for (y = 0; y < b->height; y++)
+		v[pixel(y, b->width)] = val;
 	prime_sync_end(dmabuf->fd, true);
 }
 
@@ -400,12 +400,12 @@ static void
 dmabuf_cmp_bo(struct buffers *b, drm_intel_bo *bo, uint32_t val)
 {
 	struct dmabuf *dmabuf = bo->virtual;
-	uint32_t *v;
-	int size;
+	uint32_t *v = dmabuf->map;
+	int y;
 
 	prime_sync_start(dmabuf->fd, false);
-	for (v = dmabuf->map, size = b->npixels; size--; v++)
-		igt_assert_eq_u32(*v, val);
+	for (y = 0; y < b->height; y++)
+		igt_assert_eq_u32(v[pixel(y, b->width)], val);
 	prime_sync_end(dmabuf->fd, false);
 }
 
