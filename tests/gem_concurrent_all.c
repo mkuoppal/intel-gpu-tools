@@ -485,11 +485,10 @@ static void
 gtt_set_bo(struct buffers *b, drm_intel_bo *bo, uint32_t val)
 {
 	uint32_t *vaddr = bo->virtual;
-	int size = b->npixels;
 
 	drm_intel_gem_bo_start_gtt_access(bo, true);
-	while (size--)
-		*vaddr++ = val;
+	for (int y = 0; y < b->height; y++)
+		vaddr[pixel(y, b->width)] = val;
 }
 
 static void
