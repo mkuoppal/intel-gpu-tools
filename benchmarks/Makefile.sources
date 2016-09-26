@@ -15,6 +15,7 @@ benchmarks_prog_list =			\
 	gem_set_domain			\
 	gem_syslatency			\
 	kms_vblank			\
+	prime_lookup			\
 	vgem_mmap			\
 	$(NULL)
 
