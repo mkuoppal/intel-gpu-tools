@@ -63,6 +63,7 @@
 #include "ioctl_wrappers.h"
 #include "igt_kms.h"
 #include "igt_stats.h"
+#include "igt_sysfs.h"
 
 /**
  * SECTION:igt_aux
@@ -625,60 +626,158 @@ void igt_cleanup_aperture_trashers(void)
 	free(trash_bos);
 }
 
+static const char *suspend_state_name[] = {
+	[SUSPEND_STATE_FREEZE] = "freeze",
+	[SUSPEND_STATE_MEM] = "mem",
+	[SUSPEND_STATE_STANDBY] = "standby",
+	[SUSPEND_STATE_DISK] = "disk",
+};
+
+static const char *suspend_test_name[] = {
+	[SUSPEND_TEST_NONE] = "none",
+	[SUSPEND_TEST_FREEZER] = "freezer",
+	[SUSPEND_TEST_DEVICES] = "devices",
+	[SUSPEND_TEST_PLATFORM] = "platform",
+	[SUSPEND_TEST_PROCESSORS] = "processors",
+	[SUSPEND_TEST_CORE] = "core",
+};
+
+static enum igt_suspend_test get_suspend_test(int power_dir)
+{
+	char *test_line;
+	char *test_name;
+	enum igt_suspend_test test;
+
+	if (faccessat(power_dir, "pm_test", R_OK, 0))
+		return SUSPEND_TEST_NONE;
+
+	igt_assert((test_line = igt_sysfs_get(power_dir, "pm_test")));
+	for (test_name = strtok(test_line, " "); test_name;
+	     test_name = strtok(NULL, " "))
+		if (test_name[0] == '[') {
+			test_name[strlen(test_name) - 1] = '\0';
+			test_name++;
+			break;
+		}
+
+	for (test = SUSPEND_TEST_NONE; test < SUSPEND_TEST_NUM; test++)
+		if (strcmp(suspend_test_name[test], test_name) == 0)
+			break;
+
+	igt_assert(test < SUSPEND_TEST_NUM);
+
+	free(test_line);
+
+	return test;
+}
+
+static void set_suspend_test(int power_dir, enum igt_suspend_test test)
+{
+	igt_assert(test < SUSPEND_TEST_NUM);
+
+	if (faccessat(power_dir, "pm_test", W_OK, 0)) {
+		igt_require(test == SUSPEND_TEST_NONE);
+		return;
+	}
+
+	igt_assert(igt_sysfs_set(power_dir, "pm_test", suspend_test_name[test]));
+}
+
 #define SQUELCH ">/dev/null 2>&1"
+
+static void suspend_via_rtcwake(enum igt_suspend_state state)
+{
+	char cmd[128];
+	int delay;
+
+	igt_assert(state < SUSPEND_STATE_NUM);
+
+	delay = state == SUSPEND_STATE_DISK ? 30 : 15;
+
+	/*
+	 * Skip if rtcwake would fail for a reason not related to the kernel's
+	 * suspend functionality.
+	 */
+	snprintf(cmd, sizeof(cmd), "rtcwake -n -s %d -m %s " SQUELCH,
+		 delay, suspend_state_name[state]);
+	igt_require(system(cmd) == 0);
+
+	snprintf(cmd, sizeof(cmd), "rtcwake -s %d -m %s ",
+		 delay, suspend_state_name[state]);
+	igt_assert_f(system(cmd) == 0,
+		     "This failure means that something is wrong with "
+		     "the rtcwake tool or how your distro is set up. "
+		     "This is not a i915.ko or i-g-t bug.\n");
+}
+
+static void suspend_via_sysfs(int power_dir, enum igt_suspend_state state)
+{
+	igt_assert(state < SUSPEND_STATE_NUM);
+	igt_assert(igt_sysfs_set(power_dir, "state",
+				 suspend_state_name[state]));
+}
+
+static uint32_t get_supported_suspend_states(int power_dir)
+{
+	char *states;
+	char *state_name;
+	uint32_t state_mask;
+
+	igt_assert((states = igt_sysfs_get(power_dir, "state")));
+	state_mask = 0;
+	for (state_name = strtok(states, " "); state_name;
+	     state_name = strtok(NULL, " ")) {
+		enum igt_suspend_state state;
+
+		for (state = SUSPEND_STATE_FREEZE; state < SUSPEND_STATE_NUM;
+		     state++)
+			if (strcmp(state_name, suspend_state_name[state]) == 0)
+				break;
+		igt_assert(state < SUSPEND_STATE_NUM);
+		state_mask |= 1 << state;
+	}
+
+	free(states);
+
+	return state_mask;
+}
 
 /**
  * igt_system_suspend_autoresume:
  *
- * Execute a system suspend-to-mem cycle and automatically wake up again using
- * the firmware's resume timer.
+ * Execute a system suspend (to idle, memory, disk) cycle optionally
+ * completing the cycle at a given test point and automaically wake up again.
+ * Waking up is either achieved using the RTC wake-up alarm for a full suspend
+ * cycle or a kernel timer for a suspend test cycle.
  *
  * This is very handy for implementing any kind of suspend/resume test.
  */
-void igt_system_suspend_autoresume(void)
+void igt_system_suspend_autoresume(enum igt_suspend_state state,
+				   enum igt_suspend_test test)
 {
+	int power_dir;
+	enum igt_suspend_test orig_test;
+
 	/* FIXME: Simulation doesn't like suspend/resume, and not even a lighter
 	 * approach using /sys/power/pm_test to just test our driver's callbacks
 	 * seems to fare better. We need to investigate what's going on. */
 	igt_skip_on_simulation();
 
-	/* skip if system doesn't support suspend-to-mem */
-	igt_require(system("rtcwake -n -s 15 -m mem" SQUELCH) == 0);
+	igt_require((power_dir = open("/sys/power", O_RDONLY)) >= 0);
+	igt_require(get_supported_suspend_states(power_dir) & (1 << state));
+	igt_require(test == SUSPEND_TEST_NONE ||
+		    faccessat(power_dir, "pm_test", R_OK | W_OK, 0) == 0);
 
-	igt_assert_f(system("rtcwake -s 15 -m mem") == 0,
-		     "This failure means that something is wrong with the "
-		     "rtcwake tool or how your distro is set up. This is not "
-		     "a i915.ko or i-g-t bug.\n");
-}
+	orig_test = get_suspend_test(power_dir);
+	set_suspend_test(power_dir, test);
 
-/**
- * igt_system_hibernate_autoresume:
- *
- * Execute a system suspend-to-disk cycle and automatically wake up again using
- * the firmware's resume timer.
- *
- * This is very handy for implementing any kind of hibernate/resume test.
- */
-void igt_system_hibernate_autoresume(void)
-{
-	/* FIXME: I'm guessing simulation behaves the same way as with
-	 * suspend/resume, but it might be prudent to make sure
-	 */
-	/* FIXME: Simulation doesn't like suspend/resume, and not even a lighter
-	 * approach using /sys/power/pm_test to just test our driver's callbacks
-	 * seems to fare better. We need to investigate what's going on. */
-	igt_skip_on_simulation();
+	if (test == SUSPEND_TEST_NONE)
+		suspend_via_rtcwake(state);
+	else
+		suspend_via_sysfs(power_dir, state);
 
-	/* skip if system doesn't support suspend-to-disk */
-	igt_require(system("rtcwake -n -s 30 -m disk" SQUELCH) == 0);
-
-	/* The timeout might need to be adjusted if hibernation takes too long
-	 * or if we have to wait excessively long before resume
-	 */
-	igt_assert_f(system("rtcwake -s 30 -m disk") == 0,
-		     "This failure means that something is wrong with the "
-		     "rtcwake tool or how your distro is set up. This is not "
-		     "a i915.ko or i-g-t bug.\n");
+	set_suspend_test(power_dir, orig_test);
+	close(power_dir);
 }
 
 /**

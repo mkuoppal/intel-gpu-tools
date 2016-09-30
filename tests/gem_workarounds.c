@@ -60,7 +60,7 @@ static void test_hang_gpu(void)
 static void test_suspend_resume(void)
 {
 	igt_info("Suspending the device ...\n");
-	igt_system_suspend_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_MEM, SUSPEND_TEST_NONE);
 }
 
 static int workaround_fail_count(void)

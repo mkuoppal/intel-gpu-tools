@@ -77,9 +77,11 @@ test_fence_restore(int fd, bool tiled2untiled, bool hibernate)
 		gem_set_tiling(fd, handle_tiled, I915_TILING_X, 2048);
 
 	if (hibernate)
-		igt_system_hibernate_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+					      SUSPEND_TEST_NONE);
 	else
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 	igt_info("checking the first canary object\n");
 	for (i = 0; i < OBJECT_SIZE/sizeof(uint32_t); i++)
@@ -117,9 +119,11 @@ test_debugfs_reader(bool hibernate)
 	sleep(1);
 
 	if (hibernate)
-		igt_system_hibernate_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+					      SUSPEND_TEST_NONE);
 	else
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 	sleep(1);
 
@@ -145,9 +149,11 @@ test_sysfs_reader(bool hibernate)
 	sleep(1);
 
 	if (hibernate)
-		igt_system_hibernate_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+					      SUSPEND_TEST_NONE);
 	else
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 	sleep(1);
 
@@ -163,9 +169,11 @@ test_forcewake(bool hibernate)
 	igt_assert_lte(0, fw_fd);
 
 	if (hibernate)
-		igt_system_hibernate_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+					      SUSPEND_TEST_NONE);
 	else
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 	close (fw_fd);
 }

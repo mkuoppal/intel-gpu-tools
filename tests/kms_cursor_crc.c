@@ -140,7 +140,8 @@ static void do_single_test(data_t *data, int x, int y)
 		}
 
 		if (data->flags & TEST_SUSPEND)
-			igt_system_suspend_autoresume();
+			igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE);
 
 		igt_pipe_crc_collect_crc(pipe_crc, &crc_after);
 		igt_assert_crc_equal(&crc, &crc_after);

@@ -451,10 +451,12 @@ static void test_noreloc(int fd, enum sleep sleep)
 			case NOSLEEP:
 				break;
 			case SUSPEND:
-				igt_system_suspend_autoresume();
+				igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+							      SUSPEND_TEST_NONE);
 				break;
 			case HIBERNATE:
-				igt_system_hibernate_autoresume();
+				igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+							      SUSPEND_TEST_NONE);
 				break;
 			}
 		}

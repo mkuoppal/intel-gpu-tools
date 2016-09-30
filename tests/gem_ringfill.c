@@ -175,10 +175,12 @@ static void run_test(int fd, unsigned ring, unsigned flags)
 			fill_ring(fd, &execbuf, flags);
 
 		if (flags & SUSPEND)
-			igt_system_suspend_autoresume();
+			igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE);
 
 		if (flags & HIBERNATE)
-			igt_system_hibernate_autoresume();
+			igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+						      SUSPEND_TEST_NONE);
 
 		igt_waitchildren();
 	} else

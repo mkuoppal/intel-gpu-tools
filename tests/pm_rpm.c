@@ -1369,7 +1369,7 @@ static void __attribute__((noreturn)) stay_subtest(void)
 static void system_suspend_subtest(void)
 {
 	disable_all_screens_and_wait(&ms_data);
-	igt_system_suspend_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_MEM, SUSPEND_TEST_NONE);
 	igt_assert(wait_for_suspended());
 }
 
@@ -1401,7 +1401,7 @@ static void system_suspend_execbuf_subtest(void)
 	i915_execbuffer2_set_context_id(execbuf, 0);
 
 	disable_all_screens_and_wait(&ms_data);
-	igt_system_suspend_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_MEM, SUSPEND_TEST_NONE);
 	igt_assert(wait_for_suspended());
 
 	for (i = 0; i < 20; i++) {
@@ -1415,7 +1415,7 @@ static void system_suspend_execbuf_subtest(void)
 static void system_suspend_modeset_subtest(void)
 {
 	disable_all_screens_and_wait(&ms_data);
-	igt_system_suspend_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_MEM, SUSPEND_TEST_NONE);
 	igt_assert(wait_for_suspended());
 
 	enable_one_screen_and_wait(&ms_data);

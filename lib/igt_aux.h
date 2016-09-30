@@ -115,8 +115,29 @@ void igt_trash_aperture(void);
 void igt_cleanup_aperture_trashers(void);
 
 /* suspend/hibernate and auto-resume system */
-void igt_system_suspend_autoresume(void);
-void igt_system_hibernate_autoresume(void);
+
+enum igt_suspend_state {
+	SUSPEND_STATE_FREEZE,
+	SUSPEND_STATE_MEM,
+	SUSPEND_STATE_STANDBY,
+	SUSPEND_STATE_DISK,
+
+	SUSPEND_STATE_NUM,
+};
+
+enum igt_suspend_test {
+	SUSPEND_TEST_NONE,
+	SUSPEND_TEST_FREEZER,
+	SUSPEND_TEST_DEVICES,
+	SUSPEND_TEST_PLATFORM,
+	SUSPEND_TEST_PROCESSORS,
+	SUSPEND_TEST_CORE,
+
+	SUSPEND_TEST_NUM,
+};
+
+void igt_system_suspend_autoresume(enum igt_suspend_state state,
+				   enum igt_suspend_test test);
 
 /* dropping priviledges */
 void igt_drop_root(void);

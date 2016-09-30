@@ -328,7 +328,8 @@ test_plane_panning_with_output(data_t *data,
 	igt_display_commit(&data->display);
 
 	if (flags & TEST_SUSPEND_RESUME)
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 	igt_pipe_crc_collect_crc(data->pipe_crc, &crc);
 

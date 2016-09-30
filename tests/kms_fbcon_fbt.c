@@ -217,7 +217,8 @@ static void subtest(struct feature *feature, bool suspend)
 	igt_assert(feature->wait_until_enabled());
 
 	if (suspend) {
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 		sleep(5);
 		igt_assert(feature->wait_until_enabled());
 	}
@@ -232,7 +233,8 @@ static void subtest(struct feature *feature, bool suspend)
 	igt_assert(!feature->wait_until_enabled());
 
 	if (suspend) {
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 		sleep(5);
 		igt_assert(!feature->wait_until_enabled());
 	}

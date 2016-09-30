@@ -223,7 +223,8 @@ igt_main
 
 		igt_subtest_f("suspend-read-crc-pipe-%c", 'A'+i) {
 			igt_skip_on(i >= data.display.n_pipes);
-			igt_system_suspend_autoresume();
+			igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE);
 
 			test_read_crc(&data, i, 0);
 		}

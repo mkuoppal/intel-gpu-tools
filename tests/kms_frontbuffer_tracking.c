@@ -2865,13 +2865,13 @@ static void suspend_subtest(const struct test_mode *t)
 
 	prepare_subtest(t, NULL);
 	sleep(5);
-	igt_system_suspend_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_MEM, SUSPEND_TEST_NONE);
 	sleep(5);
 	do_assertions(0);
 
 	unset_all_crtcs();
 	sleep(5);
-	igt_system_suspend_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_MEM, SUSPEND_TEST_NONE);
 	sleep(5);
 	do_assertions(ASSERT_FBC_DISABLED | ASSERT_PSR_DISABLED |
 		      DONT_ASSERT_CRC);

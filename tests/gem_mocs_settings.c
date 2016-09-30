@@ -384,8 +384,10 @@ static void default_context_tests(unsigned mode)
 	switch (mode) {
 	case NONE:	break;
 	case RESET:	igt_force_gpu_reset();	break;
-	case SUSPEND:	igt_system_suspend_autoresume(); break;
-	case HIBERNATE:	igt_system_hibernate_autoresume(); break;
+	case SUSPEND:	igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE); break;
+	case HIBERNATE:	igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+						      SUSPEND_TEST_NONE); break;
 	}
 
 	test_mocs_values(fd);
@@ -423,8 +425,10 @@ static void default_dirty_tests(unsigned mode)
 	switch (mode) {
 	case NONE:	break;
 	case RESET:	igt_force_gpu_reset();	break;
-	case SUSPEND:	igt_system_suspend_autoresume(); break;
-	case HIBERNATE:	igt_system_hibernate_autoresume(); break;
+	case SUSPEND:	igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE); break;
+	case HIBERNATE:	igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+						      SUSPEND_TEST_NONE); break;
 	}
 
 	close(fd);
@@ -446,8 +450,10 @@ static void context_save_restore_test(unsigned mode)
 	switch (mode) {
 	case NONE:	break;
 	case RESET:	igt_force_gpu_reset();	break;
-	case SUSPEND:	igt_system_suspend_autoresume(); break;
-	case HIBERNATE:	igt_system_hibernate_autoresume(); break;
+	case SUSPEND:	igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE); break;
+	case HIBERNATE:	igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+						      SUSPEND_TEST_NONE); break;
 	}
 
 	check_control_registers(fd, I915_EXEC_RENDER, ctx_id, false);
@@ -489,8 +495,10 @@ static void context_dirty_test(unsigned mode)
 	switch (mode) {
 	case NONE:	break;
 	case RESET:	igt_force_gpu_reset();	break;
-	case SUSPEND:	igt_system_suspend_autoresume(); break;
-	case HIBERNATE:	igt_system_hibernate_autoresume(); break;
+	case SUSPEND:	igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+						      SUSPEND_TEST_NONE); break;
+	case HIBERNATE:	igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+						      SUSPEND_TEST_NONE); break;
 	}
 
 	check_control_registers(fd, I915_EXEC_RENDER, ctx_id, true);

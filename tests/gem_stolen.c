@@ -359,7 +359,7 @@ static void stolen_hibernate(int fd)
 
 	drm_intel_bo_unreference(src);
 
-	igt_system_hibernate_autoresume();
+	igt_system_suspend_autoresume(SUSPEND_STATE_DISK, SUSPEND_TEST_NONE);
 	/* Check if the object's memory contents are intact
 	 * across hibernation.
 	 */

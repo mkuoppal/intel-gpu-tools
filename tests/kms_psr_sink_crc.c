@@ -596,7 +596,8 @@ int main(int argc, char *argv[])
 		setup_test_plane(&data);
 		igt_assert(wait_psr_entry(&data));
 
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 		run_test(&data);
 		test_cleanup(&data);
@@ -607,7 +608,8 @@ int main(int argc, char *argv[])
 		data.op = PLANE_ONOFF;
 		setup_test_plane(&data);
 
-		igt_system_suspend_autoresume();
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_NONE);
 
 		igt_assert(wait_psr_entry(&data));
 		run_test(&data);
