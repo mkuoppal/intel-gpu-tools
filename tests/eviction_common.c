@@ -91,7 +91,7 @@ static int minor_evictions(int fd, struct igt_eviction_test_ops *ops,
 			igt_assert_eq(ret, 0);
 		}
 		ret = ops->copy(fd, bo[0], bo[0], bo, total_surfaces);
-		igt_assert(ret == ENOSPC);
+		igt_assert_eq(ret, -ENOSPC);
 	}
 
 	for (n = 0; n < total_surfaces; n++)

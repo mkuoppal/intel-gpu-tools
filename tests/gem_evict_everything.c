@@ -109,20 +109,12 @@ copy(int fd, uint32_t dst, uint32_t src, uint32_t *all_bo, int n_bo)
 	obj[n].relocation_count = 2;
 	obj[n].relocs_ptr = (uintptr_t)reloc;
 
+	memset(&exec, 0, sizeof(exec));
 	exec.buffers_ptr = (uintptr_t)obj;
 	exec.buffer_count = n_bo + 1;
-	exec.batch_start_offset = 0;
-	exec.batch_len = i * 4;
-	exec.DR1 = exec.DR4 = 0;
-	exec.num_cliprects = 0;
-	exec.cliprects_ptr = 0;
-	exec.flags = HAS_BLT_RING(intel_get_drm_devid(fd)) ? I915_EXEC_BLT : 0;
-	i915_execbuffer2_set_context_id(exec, 0);
-	exec.rsvd2 = 0;
-
-	ret = drmIoctl(fd, DRM_IOCTL_I915_GEM_EXECBUFFER2, &exec);
-	if (ret)
-		ret = errno;
+	if (HAS_BLT_RING(intel_get_drm_devid(fd)))
+		exec.flags |= I915_EXEC_BLT;
+	ret = __gem_execbuf(fd, &exec);
 
 	gem_close(fd, handle);
 	free(obj);

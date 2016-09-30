@@ -954,7 +954,6 @@ void gem_context_require_ban_period(int fd)
 int __gem_userptr(int fd, void *ptr, int size, int read_only, uint32_t flags, uint32_t *handle)
 {
 	struct local_i915_gem_userptr userptr;
-	int ret;
 
 	memset(&userptr, 0, sizeof(userptr));
 	userptr.user_ptr = (uintptr_t)ptr;
@@ -963,17 +962,11 @@ int __gem_userptr(int fd, void *ptr, int size, int read_only, uint32_t flags, ui
 	if (read_only)
 		userptr.flags |= LOCAL_I915_USERPTR_READ_ONLY;
 
-	ret = igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_USERPTR, &userptr);
-	if (ret)
-		ret = errno;
-	igt_skip_on_f(ret == ENODEV &&
-			(flags & LOCAL_I915_USERPTR_UNSYNCHRONIZED) == 0 &&
-			!read_only,
-			"Skipping, synchronized mappings with no kernel CONFIG_MMU_NOTIFIER?");
-	if (ret == 0)
-		*handle = userptr.handle;
+	if (igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_USERPTR, &userptr))
+		return -errno;
 
-	return ret;
+	*handle = userptr.handle;
+	return 0;
 }
 
 /**

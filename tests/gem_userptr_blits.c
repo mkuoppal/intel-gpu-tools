@@ -437,6 +437,10 @@ static int test_input_checking(int fd)
 
 static int test_access_control(int fd)
 {
+	/* CAP_SYS_ADMIN is needed for UNSYNCHRONIZED mappings. */
+	gem_userptr_test_unsynchronized();
+	igt_require(has_userptr(fd));
+
 	igt_fork(child, 1) {
 		void *ptr;
 		int ret;
@@ -444,16 +448,13 @@ static int test_access_control(int fd)
 
 		igt_drop_root();
 
-		/* CAP_SYS_ADMIN is needed for UNSYNCHRONIZED mappings. */
-		gem_userptr_test_unsynchronized();
-
 		igt_assert(posix_memalign(&ptr, PAGE_SIZE, PAGE_SIZE) == 0);
 
 		ret = __gem_userptr(fd, ptr, PAGE_SIZE, 0, userptr_flags, &handle);
 		if (ret == 0)
 			gem_close(fd, handle);
 		free(ptr);
-		igt_assert(ret == EPERM);
+		igt_assert_eq(ret, -EPERM);
 	}
 
 	igt_waitchildren();
@@ -575,35 +576,32 @@ static int test_forbidden_ops(int fd)
 {
 	struct drm_i915_gem_pread gem_pread;
 	struct drm_i915_gem_pwrite gem_pwrite;
-	void *ptr;
-	int ret;
 	uint32_t handle;
-	char buf[PAGE_SIZE];
-
-	memset(&gem_pread, 0, sizeof(gem_pread));
-	memset(&gem_pwrite, 0, sizeof(gem_pwrite));
+	void *ptr;
 
 	igt_assert(posix_memalign(&ptr, PAGE_SIZE, PAGE_SIZE) == 0);
-
 	gem_userptr(fd, ptr, PAGE_SIZE, 0, userptr_flags, &handle);
 
 	/* pread/pwrite are not always forbidden, but when they
 	 * are they should fail with EINVAL.
 	 */
 
+	memset(&gem_pread, 0, sizeof(gem_pread));
 	gem_pread.handle = handle;
 	gem_pread.offset = 0;
 	gem_pread.size = PAGE_SIZE;
-	gem_pread.data_ptr = (uintptr_t)buf;
-	ret = drmIoctl(fd, DRM_IOCTL_I915_GEM_PREAD, &gem_pread);
-	igt_assert(ret == 0 || errno == EINVAL);
+	gem_pread.data_ptr = (uintptr_t)ptr;
+	if (drmIoctl(fd, DRM_IOCTL_I915_GEM_PREAD, &gem_pread))
+		igt_assert_eq(errno, EINVAL);
 
+	memset(&gem_pwrite, 0, sizeof(gem_pwrite));
 	gem_pwrite.handle = handle;
 	gem_pwrite.offset = 0;
 	gem_pwrite.size = PAGE_SIZE;
-	gem_pwrite.data_ptr = (uintptr_t)buf;
-	ret = drmIoctl(fd, DRM_IOCTL_I915_GEM_PWRITE, &gem_pwrite);
-	igt_assert(ret == 0 || errno == EINVAL);
+	gem_pwrite.data_ptr = (uintptr_t)ptr;
+	if (drmIoctl(fd, DRM_IOCTL_I915_GEM_PWRITE, &gem_pwrite))
+		igt_assert_eq(errno, EINVAL);
+
 	gem_close(fd, handle);
 	free(ptr);
 
@@ -845,7 +843,7 @@ static int test_create_destroy(int fd, int time)
 		for (n = 0; n < 1000; n++) {
 			igt_assert(posix_memalign(&ptr, PAGE_SIZE, PAGE_SIZE) == 0);
 
-			do_or_die(__gem_userptr(fd, ptr, PAGE_SIZE, 0, userptr_flags, &handle));
+			gem_userptr(fd, ptr, PAGE_SIZE, 0, userptr_flags, &handle);
 
 			gem_close(fd, handle);
 			free(ptr);
@@ -1285,14 +1283,8 @@ int main(int argc, char **argv)
 	igt_subtest_init(argc, argv);
 
 	igt_fixture {
-		int ret;
-
 		fd = drm_open_driver(DRIVER_INTEL);
 		igt_assert(fd >= 0);
-
-		ret = has_userptr(fd);
-		igt_skip_on_f(ret == 0, "No userptr support - %s (%d)\n",
-			      strerror(errno), ret);
 
 		size = sizeof(linear);
 
@@ -1313,209 +1305,222 @@ int main(int argc, char **argv)
 		}
 	}
 
-	igt_subtest("input-checking")
-		test_input_checking(fd);
-
-	igt_subtest("usage-restrictions")
-		test_usage_restrictions(fd);
-
-	igt_subtest("invalid-null-pointer")
-		test_invalid_null_pointer(fd);
-
-	igt_subtest("invalid-gtt-mapping")
-		test_invalid_gtt_mapping(fd);
-
-	igt_subtest("forked-access")
-		test_forked_access(fd);
-
-	igt_subtest("forbidden-operations")
-		test_forbidden_ops(fd);
-
-	igt_subtest("relocations")
-		test_relocations(fd);
-
-	igt_info("Testing unsynchronized mappings...\n");
-	gem_userptr_test_unsynchronized();
-
-	igt_subtest("create-destroy-unsync")
-		test_create_destroy(fd, 5);
-
-	igt_subtest("unsync-overlap")
-		test_overlap(fd, 0);
-
-	igt_subtest("unsync-unmap")
-		test_unmap(fd, 0);
-
-	igt_subtest("unsync-unmap-cycles")
-		test_unmap_cycles(fd, 0);
-
-	igt_subtest("unsync-unmap-after-close")
-		test_unmap_after_close(fd);
-
-	igt_subtest("coherency-unsync")
-		test_coherency(fd, count);
-
-	igt_subtest("dmabuf-unsync")
-		test_dmabuf();
-
-	for (unsigned flags = 0; flags < ALL_FORKING_EVICTIONS + 1; flags++) {
-		igt_subtest_f("forked-unsync%s%s%s-%s",
-		    flags & FORKING_EVICTIONS_SWAPPING ? "-swapping" : "",
-		    flags & FORKING_EVICTIONS_DUP_DRMFD ? "-multifd" : "",
-		    flags & FORKING_EVICTIONS_MEMORY_PRESSURE ?
-				"-mempressure" : "",
-		    flags & FORKING_EVICTIONS_INTERRUPTIBLE ?
-				"interruptible" : "normal") {
-			test_forking_evictions(fd, size, count, flags);
+	igt_subtest_group {
+		igt_fixture {
+			igt_require(has_userptr(fd));
 		}
+
+		igt_subtest("input-checking")
+			test_input_checking(fd);
+
+		igt_subtest("usage-restrictions")
+			test_usage_restrictions(fd);
+
+		igt_subtest("invalid-null-pointer")
+			test_invalid_null_pointer(fd);
+
+		igt_subtest("invalid-gtt-mapping")
+			test_invalid_gtt_mapping(fd);
+
+		igt_subtest("forked-access")
+			test_forked_access(fd);
+
+		igt_subtest("forbidden-operations")
+			test_forbidden_ops(fd);
+
+		igt_subtest("relocations")
+			test_relocations(fd);
 	}
 
-	igt_subtest("mlocked-unsync-normal")
-		test_mlocked_evictions(fd, size, count);
+	igt_subtest_group {
+		gem_userptr_test_unsynchronized();
 
-	igt_subtest("swapping-unsync-normal")
-		test_swapping_evictions(fd, size, count);
-
-	igt_subtest("minor-unsync-normal")
-		test_minor_evictions(fd, size, count);
-
-	igt_subtest("major-unsync-normal") {
-		size = 200 * 1024 * 1024;
-		count = (gem_aperture_size(fd) / size) + 2;
-		test_major_evictions(fd, size, count);
-	}
-
-	igt_fixture {
-		size = sizeof(linear);
-		count = 2 * gem_aperture_size(fd) / (1024*1024) / 3;
-		if (count > total_ram * 3 / 4)
-			count = intel_get_total_ram_mb() * 3 / 4;
-	}
-
-	igt_fork_signal_helper();
-
-	igt_subtest("mlocked-unsync-interruptible")
-		test_mlocked_evictions(fd, size, count);
-
-	igt_subtest("swapping-unsync-interruptible")
-		test_swapping_evictions(fd, size, count);
-
-	igt_subtest("minor-unsync-interruptible")
-		test_minor_evictions(fd, size, count);
-
-	igt_subtest("major-unsync-interruptible") {
-		size = 200 * 1024 * 1024;
-		count = (gem_aperture_size(fd) / size) + 2;
-		test_major_evictions(fd, size, count);
-	}
-
-	igt_stop_signal_helper();
-
-	igt_info("Testing synchronized mappings...\n");
-
-	igt_fixture {
-		size = sizeof(linear);
-		count = 2 * gem_aperture_size(fd) / (1024*1024) / 3;
-		if (count > total_ram * 3 / 4)
-			count = intel_get_total_ram_mb() * 3 / 4;
-	}
-
-	gem_userptr_test_synchronized();
-
-	igt_subtest("process-exit")
-		test_process_exit(fd, 0);
-
-	igt_subtest("process-exit-gtt")
-		test_process_exit(fd, PE_GTT_MAP);
-
-	igt_subtest("process-exit-busy")
-		test_process_exit(fd, PE_BUSY);
-
-	igt_subtest("process-exit-gtt-busy")
-		test_process_exit(fd, PE_GTT_MAP | PE_BUSY);
-
-	igt_subtest("create-destroy-sync")
-		test_create_destroy(fd, 5);
-
-	igt_subtest("sync-overlap")
-		test_overlap(fd, EINVAL);
-
-	igt_subtest("sync-unmap")
-		test_unmap(fd, EFAULT);
-
-	igt_subtest("sync-unmap-cycles")
-		test_unmap_cycles(fd, EFAULT);
-
-	igt_subtest("sync-unmap-after-close")
-		test_unmap_after_close(fd);
-
-	igt_subtest("stress-mm")
-		test_stress_mm(fd);
-
-	igt_subtest("stress-mm-invalidate-close")
-		test_invalidate_close_race(fd, false);
-
-	igt_subtest("stress-mm-invalidate-close-overlap")
-		test_invalidate_close_race(fd, true);
-
-	igt_subtest("coherency-sync")
-		test_coherency(fd, count);
-
-	igt_subtest("dmabuf-sync")
-		test_dmabuf();
-
-	for (unsigned flags = 0; flags < ALL_FORKING_EVICTIONS + 1; flags++) {
-		igt_subtest_f("forked-sync%s%s%s-%s",
-		    flags & FORKING_EVICTIONS_SWAPPING ? "-swapping" : "",
-		    flags & FORKING_EVICTIONS_DUP_DRMFD ? "-multifd" : "",
-		    flags & FORKING_EVICTIONS_MEMORY_PRESSURE ?
-				"-mempressure" : "",
-		    flags & FORKING_EVICTIONS_INTERRUPTIBLE ?
-				"interruptible" : "normal") {
-			test_forking_evictions(fd, size, count, flags);
+		igt_fixture {
+			igt_require(has_userptr(fd));
 		}
+
+		igt_subtest("create-destroy-unsync")
+			test_create_destroy(fd, 5);
+
+		igt_subtest("unsync-overlap")
+			test_overlap(fd, 0);
+
+		igt_subtest("unsync-unmap")
+			test_unmap(fd, 0);
+
+		igt_subtest("unsync-unmap-cycles")
+			test_unmap_cycles(fd, 0);
+
+		igt_subtest("unsync-unmap-after-close")
+			test_unmap_after_close(fd);
+
+		igt_subtest("coherency-unsync")
+			test_coherency(fd, count);
+
+		igt_subtest("dmabuf-unsync")
+			test_dmabuf();
+
+		for (unsigned flags = 0; flags < ALL_FORKING_EVICTIONS + 1; flags++) {
+			igt_subtest_f("forked-unsync%s%s%s-%s",
+					flags & FORKING_EVICTIONS_SWAPPING ? "-swapping" : "",
+					flags & FORKING_EVICTIONS_DUP_DRMFD ? "-multifd" : "",
+					flags & FORKING_EVICTIONS_MEMORY_PRESSURE ?
+					"-mempressure" : "",
+					flags & FORKING_EVICTIONS_INTERRUPTIBLE ?
+					"interruptible" : "normal") {
+				test_forking_evictions(fd, size, count, flags);
+			}
+		}
+
+		igt_subtest("mlocked-unsync-normal")
+			test_mlocked_evictions(fd, size, count);
+
+		igt_subtest("swapping-unsync-normal")
+			test_swapping_evictions(fd, size, count);
+
+		igt_subtest("minor-unsync-normal")
+			test_minor_evictions(fd, size, count);
+
+		igt_subtest("major-unsync-normal") {
+			size = 200 * 1024 * 1024;
+			count = (gem_aperture_size(fd) / size) + 2;
+			test_major_evictions(fd, size, count);
+		}
+
+		igt_fixture {
+			size = sizeof(linear);
+			count = 2 * gem_aperture_size(fd) / (1024*1024) / 3;
+			if (count > total_ram * 3 / 4)
+				count = intel_get_total_ram_mb() * 3 / 4;
+		}
+
+		igt_fork_signal_helper();
+
+		igt_subtest("mlocked-unsync-interruptible")
+			test_mlocked_evictions(fd, size, count);
+
+		igt_subtest("swapping-unsync-interruptible")
+			test_swapping_evictions(fd, size, count);
+
+		igt_subtest("minor-unsync-interruptible")
+			test_minor_evictions(fd, size, count);
+
+		igt_subtest("major-unsync-interruptible") {
+			size = 200 * 1024 * 1024;
+			count = (gem_aperture_size(fd) / size) + 2;
+			test_major_evictions(fd, size, count);
+		}
+
+		igt_stop_signal_helper();
 	}
 
-	igt_subtest("mlocked-normal-sync")
-		test_mlocked_evictions(fd, size, count);
+	igt_subtest_group {
+		gem_userptr_test_synchronized();
 
-	igt_subtest("swapping-normal-sync")
-		test_swapping_evictions(fd, size, count);
+		igt_fixture {
+			igt_require(has_userptr(fd));
+			size = sizeof(linear);
+			count = 2 * gem_aperture_size(fd) / (1024*1024) / 3;
+			if (count > total_ram * 3 / 4)
+				count = intel_get_total_ram_mb() * 3 / 4;
+		}
 
-	igt_subtest("minor-normal-sync")
-		test_minor_evictions(fd, size, count);
+		igt_subtest("process-exit")
+			test_process_exit(fd, 0);
 
-	igt_subtest("major-normal-sync") {
-		size = 200 * 1024 * 1024;
-		count = (gem_aperture_size(fd) / size) + 2;
-		test_major_evictions(fd, size, count);
+		igt_subtest("process-exit-gtt")
+			test_process_exit(fd, PE_GTT_MAP);
+
+		igt_subtest("process-exit-busy")
+			test_process_exit(fd, PE_BUSY);
+
+		igt_subtest("process-exit-gtt-busy")
+			test_process_exit(fd, PE_GTT_MAP | PE_BUSY);
+
+		igt_subtest("create-destroy-sync")
+			test_create_destroy(fd, 5);
+
+		igt_subtest("sync-overlap")
+			test_overlap(fd, EINVAL);
+
+		igt_subtest("sync-unmap")
+			test_unmap(fd, EFAULT);
+
+		igt_subtest("sync-unmap-cycles")
+			test_unmap_cycles(fd, EFAULT);
+
+		igt_subtest("sync-unmap-after-close")
+			test_unmap_after_close(fd);
+
+		igt_subtest("stress-mm")
+			test_stress_mm(fd);
+
+		igt_subtest("stress-mm-invalidate-close")
+			test_invalidate_close_race(fd, false);
+
+		igt_subtest("stress-mm-invalidate-close-overlap")
+			test_invalidate_close_race(fd, true);
+
+		igt_subtest("coherency-sync")
+			test_coherency(fd, count);
+
+		igt_subtest("dmabuf-sync")
+			test_dmabuf();
+
+		for (unsigned flags = 0; flags < ALL_FORKING_EVICTIONS + 1; flags++) {
+			igt_subtest_f("forked-sync%s%s%s-%s",
+					flags & FORKING_EVICTIONS_SWAPPING ? "-swapping" : "",
+					flags & FORKING_EVICTIONS_DUP_DRMFD ? "-multifd" : "",
+					flags & FORKING_EVICTIONS_MEMORY_PRESSURE ?
+					"-mempressure" : "",
+					flags & FORKING_EVICTIONS_INTERRUPTIBLE ?
+					"interruptible" : "normal") {
+				test_forking_evictions(fd, size, count, flags);
+			}
+		}
+
+		igt_subtest("mlocked-normal-sync")
+			test_mlocked_evictions(fd, size, count);
+
+		igt_subtest("swapping-normal-sync")
+			test_swapping_evictions(fd, size, count);
+
+		igt_subtest("minor-normal-sync")
+			test_minor_evictions(fd, size, count);
+
+		igt_subtest("major-normal-sync") {
+			size = 200 * 1024 * 1024;
+			count = (gem_aperture_size(fd) / size) + 2;
+			test_major_evictions(fd, size, count);
+		}
+
+		igt_fixture {
+			size = 1024 * 1024;
+			count = 2 * gem_aperture_size(fd) / (1024*1024) / 3;
+			if (count > total_ram * 3 / 4)
+				count = intel_get_total_ram_mb() * 3 / 4;
+		}
+
+		igt_fork_signal_helper();
+
+		igt_subtest("mlocked-sync-interruptible")
+			test_mlocked_evictions(fd, size, count);
+
+		igt_subtest("swapping-sync-interruptible")
+			test_swapping_evictions(fd, size, count);
+
+		igt_subtest("minor-sync-interruptible")
+			test_minor_evictions(fd, size, count);
+
+		igt_subtest("major-sync-interruptible") {
+			size = 200 * 1024 * 1024;
+			count = (gem_aperture_size(fd) / size) + 2;
+			test_major_evictions(fd, size, count);
+		}
+
+		igt_stop_signal_helper();
 	}
 
-	igt_fixture {
-		size = 1024 * 1024;
-		count = 2 * gem_aperture_size(fd) / (1024*1024) / 3;
-		if (count > total_ram * 3 / 4)
-			count = intel_get_total_ram_mb() * 3 / 4;
-	}
-
-	igt_fork_signal_helper();
-
-	igt_subtest("mlocked-sync-interruptible")
-		test_mlocked_evictions(fd, size, count);
-
-	igt_subtest("swapping-sync-interruptible")
-		test_swapping_evictions(fd, size, count);
-
-	igt_subtest("minor-sync-interruptible")
-		test_minor_evictions(fd, size, count);
-
-	igt_subtest("major-sync-interruptible") {
-		size = 200 * 1024 * 1024;
-		count = (gem_aperture_size(fd) / size) + 2;
-		test_major_evictions(fd, size, count);
-	}
-
-	igt_stop_signal_helper();
 
 	igt_subtest("access-control")
 		test_access_control(fd);
