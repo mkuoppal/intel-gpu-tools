@@ -35,9 +35,11 @@ static const struct igfx_info generic_info = {
 	.gen = -1,
 };
 
+#if 0
 static const struct igfx_info i81x_info = {
 	.gen = 010,
 };
+#endif
 
 static const struct igfx_info i830_info = {
 	.gen = 020,
@@ -116,7 +118,7 @@ static const struct pci_id_match match[] = {
 #endif
 
 	INTEL_I830_IDS(&i830_info),
-	INTEL_I845G_IDS(&i830_info),
+	INTEL_I845G_IDS(&i845_info),
 	INTEL_I85X_IDS(&i855_info),
 	INTEL_I865G_IDS(&i865_info),
 
