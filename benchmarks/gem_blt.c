@@ -81,7 +81,7 @@ static int baseline(uint64_t bytes, int milliseconds)
 
 	free(mem);
 
-	return ceil(1e-3*milliseconds/elapsed(&start, &end) * (count * size) / bytes);
+	return ceil(1e-3*milliseconds/elapsed(&start, &end) * count * size / bytes);
 }
 
 static int gem_linear_blt(int fd,
