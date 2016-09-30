@@ -31,6 +31,10 @@ while read size label; do
     name="gem:blt:copy:${label}:forked"
     test_name="$test_name $name"
     eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_blt -f -S -r \$1 -s $size -b 1 ; }"
+
+    name="gem:blt:copy:${label}:raw"
+    test_name="$test_name $name"
+    eval "${name}_run() { sudo $IGT_BENCHMARKS/gem_blt -C -r \$1 -s $size -b 1 ; }"
 done<<SIZES
 4096	4KiB
 131072	128KiB

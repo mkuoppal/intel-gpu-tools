@@ -179,6 +179,7 @@ static int gem_linear_blt(int fd,
 }
 
 #define SYNC 0x1
+#define NOCMD 0x2
 
 static int run(int object, int batch, int time, int reps, int ncpus, unsigned flags)
 {
@@ -202,8 +203,8 @@ static int run(int object, int batch, int time, int reps, int ncpus, unsigned fl
 	gen = intel_gen(intel_get_drm_devid(fd));
 	has_64bit_reloc = gen >= 8;
 
-	src = gem_create(fd, object);
-	dst = gem_create(fd, object);
+	src = gem_create(fd, ALIGN(object, 4096));
+	dst = gem_create(fd, ALIGN(object, 4096));
 
 	len = gem_linear_blt(fd, buf, 0, 0, 1, object, reloc);
 	if (has_64bit_reloc)
@@ -266,6 +267,18 @@ static int run(int object, int batch, int time, int reps, int ncpus, unsigned fl
 		time *= count / 2;
 		count = 1;
 	}
+	if (flags & NOCMD) {
+		drm_i915_getparam_t gp;
+		int v;
+
+		gp.param = I915_PARAM_CMD_PARSER_VERSION;
+		gp.value = &v;
+		drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &gp);
+		if (v < 1)
+			return 77;
+
+		execbuf.batch_len = 0;
+	}
 
 	while (reps--) {
 		memset(shared, 0, 4096);
@@ -311,16 +324,21 @@ int main(int argc, char **argv)
 	unsigned flags = 0;
 	int c;
 
-	while ((c = getopt (argc, argv, "Ss:b:r:t:f")) != -1) {
+	while ((c = getopt (argc, argv, "CSs:b:r:t:f")) != -1) {
 		switch (c) {
 		case 's':
 			size = atoi(optarg);
-			if (size < 4096)
-				size = 4096;
+			size = ALIGN(size, 4);
+			if (size < 4)
+				size = 4;
 			break;
 
 		case 'S':
 			flags |= SYNC;
+			break;
+
+		case 'C':
+			flags |= NOCMD;
 			break;
 
 		case 't':
