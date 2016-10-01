@@ -116,6 +116,84 @@ static bool ignore_engine(int gen, unsigned engine)
 #define INTERRUPTIBLE 0x4
 #define CHAIN 0x8
 #define FORKED 0x10
+#define HANG 0x20
+
+struct hang {
+	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_relocation_entry reloc;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	int fd;
+};
+
+static void init_hang(struct hang *h)
+{
+	uint32_t *batch;
+	int i, gen;
+
+	h->fd = drm_open_driver(DRIVER_INTEL);
+	igt_allow_hang(h->fd, 0, 0);
+
+	gen = intel_gen(intel_get_drm_devid(h->fd));
+
+	memset(&h->execbuf, 0, sizeof(h->execbuf));
+	h->execbuf.buffers_ptr = (uintptr_t)&h->obj;
+	h->execbuf.buffer_count = 1;
+
+	memset(&h->obj, 0, sizeof(h->obj));
+	h->obj.handle = gem_create(h->fd, 4096);
+
+	h->obj.relocs_ptr = (uintptr_t)&h->reloc;
+	h->obj.relocation_count = 1;
+	memset(&h->reloc, 0, sizeof(h->reloc));
+
+	batch = gem_mmap__cpu(h->fd, h->obj.handle, 0, 4096, PROT_WRITE);
+	gem_set_domain(h->fd, h->obj.handle,
+		       I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+
+	h->reloc.target_handle = h->obj.handle; /* recurse */
+	h->reloc.presumed_offset = 0;
+	h->reloc.offset = 5*sizeof(uint32_t);
+	h->reloc.delta = 0;
+	h->reloc.read_domains = I915_GEM_DOMAIN_COMMAND;
+	h->reloc.write_domain = 0;
+
+	i = 0;
+	batch[i++] = 0xffffffff;
+	batch[i++] = 0xdeadbeef;
+	batch[i++] = 0xc00fee00;
+	batch[i++] = 0x00c00fee;
+	batch[i] = MI_BATCH_BUFFER_START;
+	if (gen >= 8) {
+		batch[i] |= 1 << 8 | 1;
+		batch[++i] = 0;
+		batch[++i] = 0;
+	} else if (gen >= 6) {
+		batch[i] |= 1 << 8;
+		batch[++i] = 0;
+	} else {
+		batch[i] |= 2 << 6;
+		batch[++i] = 0;
+		if (gen < 4) {
+			batch[i] |= 1;
+			h->reloc.delta = 1;
+		}
+	}
+	munmap(batch, 4096);
+}
+
+static void submit_hang(struct hang *h, unsigned *engines, int nengine)
+{
+	while (nengine--) {
+		h->execbuf.flags &= ~ENGINE_MASK;
+		h->execbuf.flags |= *engines++;
+		gem_execbuf(h->fd, &h->execbuf);
+	}
+}
+
+static void fini_hang(struct hang *h)
+{
+	close(h->fd);
+}
 
 static void whisper(int fd, unsigned engine, unsigned flags)
 {
@@ -127,6 +205,7 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 	struct drm_i915_gem_exec_object2 store, scratch;
 	struct drm_i915_gem_exec_object2 tmp[2];
 	struct drm_i915_gem_execbuffer2 execbuf;
+	struct hang hang;
 	int fds[64];
 	uint32_t contexts[64];
 	unsigned engines[16];
@@ -151,6 +230,9 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 		engines[nengine++] = engine;
 	}
 	igt_require(nengine);
+
+	if (flags & HANG)
+		init_hang(&hang);
 
 	intel_detect_and_clear_missed_interrupts(fd);
 	igt_fork(child, flags & FORKED ? sysconf(_SC_NPROCESSORS_ONLN) : 1)  {
@@ -256,6 +338,9 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 
 				if (child == 0)
 					write_seqno(pass);
+
+				if (flags & HANG)
+					submit_hang(&hang, engines, nengine);
 
 				if (flags & CHAIN) {
 					execbuf.flags &= ~ENGINE_MASK;
@@ -395,7 +480,11 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 	}
 
 	igt_waitchildren();
-	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
+
+	if (flags & HANG)
+		fini_hang(&hang);
+	else
+		igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 static void print_welcome(int fd)
@@ -475,6 +564,18 @@ igt_main
 
 	igt_fixture {
 		igt_stop_hang_detector();
+	}
+
+	igt_subtest_group {
+		for (const struct mode *m = modes; m->name; m++) {
+			if (m->flags & INTERRUPTIBLE)
+				continue;
+			igt_subtest_f("hang-%s", m->name)
+				whisper(fd, -1, m->flags | HANG);
+		}
+	}
+
+	igt_fixture {
 		close(fd);
 	}
 }
