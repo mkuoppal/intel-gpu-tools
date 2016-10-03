@@ -10,6 +10,12 @@ SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
 
 # no other drm service should be running, so we can just unbind
 
+# return 0 if module by name $1 is loaded according to lsmod
+function mod_loaded()
+{
+	lsmod | grep -w "^$1" &> /dev/null
+}
+
 function reload() {
 	local snd_hda_intel_unloaded
 
@@ -37,7 +43,7 @@ function reload() {
 	rmmod drm_kms_helper &> /dev/null
 	rmmod drm &> /dev/null
 
-	if lsmod | grep i915 &> /dev/null ; then
+	if mod_loaded i915; then
 		echo WARNING: i915.ko still loaded!
 		return $IGT_EXIT_FAILURE
 	else
