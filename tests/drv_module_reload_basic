@@ -36,8 +36,10 @@ function reload() {
 		rmmod snd_hda_intel && snd_hda_intel_unloaded=1
 	fi
 
-	#ignore errors in ips - gen5 only
-	rmmod intel_ips &> /dev/null
+	# gen5 only
+	if mod_loaded intel_ips; then
+		rmmod intel_ips
+	fi
 	rmmod i915 || return $IGT_EXIT_SKIP
 	#ignore errors in intel-gtt, often built-in
 	rmmod intel-gtt &> /dev/null
