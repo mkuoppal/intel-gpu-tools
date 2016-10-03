@@ -32,7 +32,9 @@ function reload() {
 	# The sound driver uses our power well
 	pkill alsactl
 	snd_hda_intel_unloaded=0
-	rmmod snd_hda_intel &> /dev/null && snd_hda_intel_unloaded=1
+	if mod_loaded snd_hda_intel; then
+		rmmod snd_hda_intel && snd_hda_intel_unloaded=1
+	fi
 
 	#ignore errors in ips - gen5 only
 	rmmod intel_ips &> /dev/null
