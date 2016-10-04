@@ -31,8 +31,10 @@
 #include "igt_gt.h"
 
 #define NOSLEEP 0
-#define SUSPEND 1
-#define HIBERNATE 2
+#define SUSPEND_DEVICES 1
+#define SUSPEND 2
+#define HIBERNATE_DEVICES 3
+#define HIBERNATE 4
 #define mode(x) ((x) & 0xff)
 
 #define LOCAL_I915_EXEC_BSD_SHIFT      (13)
@@ -205,9 +207,19 @@ static void run_test(int fd, unsigned engine, unsigned flags)
 	case NOSLEEP:
 		break;
 
+	case SUSPEND_DEVICES:
+		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
+					      SUSPEND_TEST_DEVICES);
+		break;
+
 	case SUSPEND:
 		igt_system_suspend_autoresume(SUSPEND_STATE_MEM,
 					      SUSPEND_TEST_NONE);
+		break;
+
+	case HIBERNATE_DEVICES:
+		igt_system_suspend_autoresume(SUSPEND_STATE_DISK,
+					      SUSPEND_TEST_DEVICES);
 		break;
 
 	case HIBERNATE:
@@ -248,8 +260,12 @@ igt_main
 
 	igt_subtest("basic")
 		run_test(fd, -1, NOSLEEP);
+	igt_subtest("basic-S3-devices")
+		run_test(fd, -1, SUSPEND_DEVICES);
 	igt_subtest("basic-S3")
 		run_test(fd, -1, SUSPEND);
+	igt_subtest("basic-S4-devices")
+		run_test(fd, -1, HIBERNATE_DEVICES);
 	igt_subtest("basic-S4")
 		run_test(fd, -1, HIBERNATE);
 
