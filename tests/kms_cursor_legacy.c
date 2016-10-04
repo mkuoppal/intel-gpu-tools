@@ -24,6 +24,7 @@
 
 #define _GNU_SOURCE
 #include <sched.h>
+#include <sys/poll.h>
 
 #include "igt.h"
 #include "igt_rand.h"
@@ -455,15 +456,89 @@ enum basic_flip_cursor {
 	FLIP_AFTER_CURSOR
 };
 
+static uint32_t *make_busy(int fd, uint32_t target)
+{
+	const int gen = intel_gen(intel_get_drm_devid(fd));
+	struct drm_i915_gem_exec_object2 obj[2];
+	struct drm_i915_gem_relocation_entry reloc[2];
+	struct drm_i915_gem_execbuffer2 execbuf;
+	uint32_t *batch;
+	int i;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
+	execbuf.buffer_count = 2;
+
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = target;
+	obj[1].handle = gem_create(fd, 4096);
+	batch = gem_mmap__wc(fd, obj[1].handle, 0, 4096, PROT_WRITE);
+	gem_set_domain(fd, obj[1].handle,
+			I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
+
+
+	obj[1].relocs_ptr = (uintptr_t)reloc;
+	obj[1].relocation_count = 2;
+	memset(reloc, 0, sizeof(reloc));
+
+	reloc[0].target_handle = obj[1].handle; /* recurse */
+	reloc[0].presumed_offset = 0;
+	reloc[0].offset = sizeof(uint32_t);
+	reloc[0].delta = 0;
+	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[0].write_domain = 0;
+
+	reloc[1].target_handle = target;
+	reloc[1].presumed_offset = 0;
+	reloc[1].offset = 1024;
+	reloc[1].delta = 0;
+	reloc[1].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[1].write_domain = I915_GEM_DOMAIN_COMMAND;
+
+	i = 0;
+	batch[i] = MI_BATCH_BUFFER_START;
+	if (gen >= 8) {
+		batch[i] |= 1 << 8 | 1;
+		batch[++i] = 0;
+		batch[++i] = 0;
+	} else if (gen >= 6) {
+		batch[i] |= 1 << 8;
+		batch[++i] = 0;
+	} else {
+		batch[i] |= 2 << 6;
+		batch[++i] = 0;
+		if (gen < 4) {
+			batch[i] |= 1;
+			reloc[0].delta = 1;
+		}
+	}
+	i++;
+
+	gem_execbuf(fd, &execbuf);
+	gem_close(fd, obj[1].handle);
+
+	return batch;
+}
+
+static void cancel_busy(int fd, uint32_t *busy)
+{
+	*busy = MI_BATCH_BUFFER_END;
+	munmap(busy, 4096);
+}
+
+#define BASIC_BUSY 0x1
+
 static void basic_flip_cursor(igt_display_t *display,
 			      enum flip_test mode,
-			      enum basic_flip_cursor order)
+			      enum basic_flip_cursor order,
+			      unsigned flags)
 {
 	struct drm_mode_cursor arg[2];
 	struct drm_event_vblank vbl;
 	struct igt_fb fb_info, cursor_fb, cursor_fb2, argb_fb;
 	unsigned vblank_start;
 	enum pipe pipe = find_connected_pipe(display, false);
+	uint32_t *busy;
 
 	if (mode >= flip_test_atomic)
 		igt_require(display->is_atomic);
@@ -489,6 +564,10 @@ static void basic_flip_cursor(igt_display_t *display,
 
 	/* Start with a synchronous query to align with the vblank */
 	vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
+
+	busy = NULL;
+	if (flags & BASIC_BUSY)
+		busy = make_busy(display->drm_fd, fb_info.gem_handle);
 
 	switch (order) {
 	case FLIP_BEFORE_CURSOR:
@@ -521,6 +600,12 @@ static void basic_flip_cursor(igt_display_t *display,
 			break;
 		}
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
+	}
+
+	if (busy) {
+		struct pollfd pfd = { display->drm_fd, POLLIN };
+		igt_assert(poll(&pfd, 1, 0) == 0);
+		cancel_busy(display->drm_fd, busy);
 	}
 
 	igt_set_timeout(1, "Stuck page flip");
@@ -1128,10 +1213,14 @@ igt_main
 		}
 
 		igt_subtest_f("%sflip-before-cursor-%s", prefix, modes[i])
-			basic_flip_cursor(&display, i, FLIP_BEFORE_CURSOR);
+			basic_flip_cursor(&display, i, FLIP_BEFORE_CURSOR, 0);
+
+		igt_subtest_f("%sbusy-flip-before-cursor-%s", prefix, modes[i])
+			basic_flip_cursor(&display, i, FLIP_BEFORE_CURSOR,
+					  BASIC_BUSY);
 
 		igt_subtest_f("%sflip-after-cursor-%s", prefix, modes[i])
-			basic_flip_cursor(&display, i, FLIP_AFTER_CURSOR);
+			basic_flip_cursor(&display, i, FLIP_AFTER_CURSOR, 0);
 
 		igt_subtest_f("flip-vs-cursor-%s", modes[i])
 			flip_vs_cursor(&display, i, 150);
