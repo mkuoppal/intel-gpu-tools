@@ -1040,11 +1040,87 @@ cleanup:
 		igt_skip("Nonblocking modeset is not supported by this kernel\n");
 }
 
-static void flip_vs_cursor_crc(igt_display_t *display, bool atomic)
+static uint32_t *
+make_fb_busy(int fd, const struct igt_fb *fb)
+{
+	const int gen = intel_gen(intel_get_drm_devid(fd));
+	struct drm_i915_gem_exec_object2 obj[2];
+#define SCRATCH 0
+#define BATCH 1
+	struct drm_i915_gem_relocation_entry reloc[2];
+	struct drm_i915_gem_execbuffer2 execbuf;
+	uint32_t *batch;
+	int i;
+	unsigned ring;
+
+	for_each_engine(fd, ring)
+		break;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
+	execbuf.buffer_count = 2;
+	execbuf.flags = ring;
+
+	memset(obj, 0, sizeof(obj));
+	obj[SCRATCH].handle = fb->gem_handle;
+
+	obj[BATCH].handle = gem_create(fd, 4096);
+	obj[BATCH].relocs_ptr = (uintptr_t)reloc;
+	obj[BATCH].relocation_count = 2;
+	memset(reloc, 0, sizeof(reloc));
+	reloc[0].target_handle = obj[BATCH].handle; /* recurse */
+	reloc[0].presumed_offset = 0;
+	reloc[0].offset = sizeof(uint32_t);
+	reloc[0].delta = 0;
+	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[0].write_domain = 0;
+
+	batch = gem_mmap__wc(fd, obj[BATCH].handle, 0, 4096, PROT_WRITE);
+	gem_set_domain(fd, obj[BATCH].handle, I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
+
+	batch[i = 0] = MI_BATCH_BUFFER_START;
+	if (gen >= 8) {
+		batch[i] |= 1 << 8 | 1;
+		batch[++i] = 0;
+		batch[++i] = 0;
+	} else if (gen >= 6) {
+		batch[i] |= 1 << 8;
+		batch[++i] = 0;
+	} else {
+		batch[i] |= 2 << 6;
+		batch[++i] = 0;
+		if (gen < 4) {
+			batch[i] |= 1;
+			reloc[0].delta = 1;
+		}
+	}
+
+	/* dummy write to fb */
+	reloc[1].target_handle = obj[SCRATCH].handle;
+	reloc[1].presumed_offset = 0;
+	reloc[1].offset = 1024;
+	reloc[1].delta = 0;
+	reloc[1].read_domains = I915_GEM_DOMAIN_RENDER;
+	reloc[1].write_domain = I915_GEM_DOMAIN_RENDER;
+
+	gem_execbuf(fd, &execbuf);
+	gem_close(fd, obj[BATCH].handle);
+
+	return batch;
+}
+
+static void finish_fb_busy(uint32_t *batch)
+{
+	batch[0] = MI_BATCH_BUFFER_END;
+	__sync_synchronize();
+	munmap(batch, 4096);
+}
+
+static void flip_vs_cursor_crc(igt_display_t *display, bool atomic, bool busy_wait)
 {
 	struct drm_mode_cursor arg[2];
 	struct drm_event_vblank vbl;
-	struct igt_fb fb_info, cursor_fb;
+	struct igt_fb fb_info[2], cursor_fb;
 	unsigned vblank_start;
 	enum pipe pipe = find_connected_pipe(display, false);
 	igt_pipe_crc_t *pipe_crc;
@@ -1053,12 +1129,14 @@ static void flip_vs_cursor_crc(igt_display_t *display, bool atomic)
 	if (atomic)
 		igt_require(display->is_atomic);
 
-	igt_require(set_fb_on_crtc(display, pipe, &fb_info));
+	igt_require(set_fb_on_crtc(display, pipe, &fb_info[0]));
+	igt_create_color_pattern_fb(display->drm_fd, fb_info[0].width, fb_info[0].height,
+				    DRM_FORMAT_XRGB8888, LOCAL_I915_FORMAT_MOD_X_TILED, .1, .1, .1, &fb_info[1]);
 
 	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
 	populate_cursor_args(display, pipe, arg, &cursor_fb);
 
-	arg[0].flags = arg[1].flags = DRM_MODE_CURSOR_BO;
+	arg[0].flags = arg[1].flags |= DRM_MODE_CURSOR_BO;
 	arg[1].handle = 0;
 	arg[1].width = arg[1].height = 0;
 
@@ -1074,33 +1152,67 @@ static void flip_vs_cursor_crc(igt_display_t *display, bool atomic)
 
 	do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[0]);
 
-	get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
-
 	/* Collect reference crc with cursor enabled. */
 	igt_pipe_crc_collect_crc(pipe_crc, &crcs[0]);
 
+	if (busy_wait) {
+		/*
+		 * Set fb 1 on primary at least once before flipping to force
+		 * setting the correct cache level, else we get a stall in the
+		 * page flip handler.
+		 */
+		igt_plane_set_fb(&display->pipes[pipe].planes[IGT_PLANE_PRIMARY], &fb_info[1]);
+		igt_display_commit2(display, COMMIT_UNIVERSAL);
+
+		igt_plane_set_fb(&display->pipes[pipe].planes[IGT_PLANE_PRIMARY], &fb_info[0]);
+		igt_display_commit2(display, COMMIT_UNIVERSAL);
+	}
+
 	/* Disable cursor, and immediately queue a flip. Check if resulting crc is correct. */
 	for (int i = 1; i >= 0; i--) {
+		uint32_t *batch;
+
+		if (busy_wait) {
+			batch = make_fb_busy(display->drm_fd, &fb_info[1]);
+			igt_assert(gem_bo_busy(display->drm_fd, fb_info[1].gem_handle));
+		}
+
 		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
 
-		flip_nonblocking(display, pipe, atomic, &fb_info);
+		flip_nonblocking(display, pipe, atomic, &fb_info[busy_wait]);
 		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg[i]);
 
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
-		igt_set_timeout(1, "Stuck page flip");
-		igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
-		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start + 1);
-		igt_reset_timeout();
+		if (busy_wait) {
+			igt_pipe_crc_collect_crc(pipe_crc, &crcs[2]);
 
-		igt_debug("Checking for cursor %s\n", i ? "disabled" : "enabled");
-		igt_pipe_crc_collect_crc(pipe_crc, &crcs[2]);
+			finish_fb_busy(batch);
+
+			igt_set_timeout(1, "Stuck page flip");
+			igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
+			igt_reset_timeout();
+
+			igt_assert_lte(vblank_start + 1, get_vblank(display->drm_fd, pipe, 0));
+
+			igt_plane_set_fb(&display->pipes[pipe].planes[IGT_PLANE_PRIMARY], &fb_info[0]);
+			igt_display_commit2(display, COMMIT_UNIVERSAL);
+		} else {
+			igt_set_timeout(1, "Stuck page flip");
+			igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
+			igt_reset_timeout();
+
+			igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start + 1);
+
+			igt_pipe_crc_collect_crc(pipe_crc, &crcs[2]);
+		}
 
 		igt_assert_crc_equal(&crcs[i], &crcs[2]);
 	}
 
 	do_cleanup_display(display);
-	igt_remove_fb(display->drm_fd, &fb_info);
+	igt_remove_fb(display->drm_fd, &fb_info[1]);
+	igt_remove_fb(display->drm_fd, &fb_info[0]);
 	igt_remove_fb(display->drm_fd, &cursor_fb);
 	igt_pipe_crc_free(pipe_crc);
 }
@@ -1187,10 +1299,16 @@ igt_main
 		two_screens_cursor_vs_flip(&display, 150, true);
 
 	igt_subtest("flip-vs-cursor-crc-legacy")
-		flip_vs_cursor_crc(&display, false);
+		flip_vs_cursor_crc(&display, false, false);
 
 	igt_subtest("flip-vs-cursor-crc-atomic")
-		flip_vs_cursor_crc(&display, true);
+		flip_vs_cursor_crc(&display, true, false);
+
+	igt_subtest("flip-vs-cursor-busy-crc-legacy")
+		flip_vs_cursor_crc(&display, false, true);
+
+	igt_subtest("flip-vs-cursor-busy-crc-atomic")
+		flip_vs_cursor_crc(&display, true, true);
 
 	for (i = 0; i <= flip_test_last; i++) {
 		const char *modes[flip_test_last+1] = {
