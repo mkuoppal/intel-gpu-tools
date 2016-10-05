@@ -520,11 +520,28 @@ static uint32_t *make_busy(int fd, uint32_t target)
 	return batch;
 }
 
-static void cancel_busy(int fd, uint32_t *busy)
+static void cancel_busy(uint32_t *busy)
 {
 	*busy = MI_BATCH_BUFFER_END;
 	munmap(busy, 4096);
 }
+
+static uint32_t *
+make_fb_busy(int fd, const struct igt_fb *fb)
+{
+	uint32_t *busy;
+
+	busy = make_busy(fd, fb->gem_handle);
+	igt_assert(gem_bo_busy(fd, fb->gem_handle));
+
+	return busy;
+}
+
+static void finish_fb_busy(uint32_t *busy)
+{
+	cancel_busy(busy);
+}
+
 
 #define BASIC_BUSY 0x1
 
@@ -567,7 +584,7 @@ static void basic_flip_cursor(igt_display_t *display,
 
 	busy = NULL;
 	if (flags & BASIC_BUSY)
-		busy = make_busy(display->drm_fd, fb_info.gem_handle);
+		busy = make_fb_busy(display->drm_fd, &fb_info);
 
 	switch (order) {
 	case FLIP_BEFORE_CURSOR:
@@ -605,7 +622,7 @@ static void basic_flip_cursor(igt_display_t *display,
 	if (busy) {
 		struct pollfd pfd = { display->drm_fd, POLLIN };
 		igt_assert(poll(&pfd, 1, 0) == 0);
-		cancel_busy(display->drm_fd, busy);
+		finish_fb_busy(busy);
 	}
 
 	igt_set_timeout(1, "Stuck page flip");
@@ -1040,82 +1057,6 @@ cleanup:
 		igt_skip("Nonblocking modeset is not supported by this kernel\n");
 }
 
-static uint32_t *
-make_fb_busy(int fd, const struct igt_fb *fb)
-{
-	const int gen = intel_gen(intel_get_drm_devid(fd));
-	struct drm_i915_gem_exec_object2 obj[2];
-#define SCRATCH 0
-#define BATCH 1
-	struct drm_i915_gem_relocation_entry reloc[2];
-	struct drm_i915_gem_execbuffer2 execbuf;
-	uint32_t *batch;
-	int i;
-	unsigned ring;
-
-	for_each_engine(fd, ring)
-		break;
-
-	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)obj;
-	execbuf.buffer_count = 2;
-	execbuf.flags = ring;
-
-	memset(obj, 0, sizeof(obj));
-	obj[SCRATCH].handle = fb->gem_handle;
-
-	obj[BATCH].handle = gem_create(fd, 4096);
-	obj[BATCH].relocs_ptr = (uintptr_t)reloc;
-	obj[BATCH].relocation_count = 2;
-	memset(reloc, 0, sizeof(reloc));
-	reloc[0].target_handle = obj[BATCH].handle; /* recurse */
-	reloc[0].presumed_offset = 0;
-	reloc[0].offset = sizeof(uint32_t);
-	reloc[0].delta = 0;
-	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
-	reloc[0].write_domain = 0;
-
-	batch = gem_mmap__wc(fd, obj[BATCH].handle, 0, 4096, PROT_WRITE);
-	gem_set_domain(fd, obj[BATCH].handle, I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
-
-	batch[i = 0] = MI_BATCH_BUFFER_START;
-	if (gen >= 8) {
-		batch[i] |= 1 << 8 | 1;
-		batch[++i] = 0;
-		batch[++i] = 0;
-	} else if (gen >= 6) {
-		batch[i] |= 1 << 8;
-		batch[++i] = 0;
-	} else {
-		batch[i] |= 2 << 6;
-		batch[++i] = 0;
-		if (gen < 4) {
-			batch[i] |= 1;
-			reloc[0].delta = 1;
-		}
-	}
-
-	/* dummy write to fb */
-	reloc[1].target_handle = obj[SCRATCH].handle;
-	reloc[1].presumed_offset = 0;
-	reloc[1].offset = 1024;
-	reloc[1].delta = 0;
-	reloc[1].read_domains = I915_GEM_DOMAIN_RENDER;
-	reloc[1].write_domain = I915_GEM_DOMAIN_RENDER;
-
-	gem_execbuf(fd, &execbuf);
-	gem_close(fd, obj[BATCH].handle);
-
-	return batch;
-}
-
-static void finish_fb_busy(uint32_t *batch)
-{
-	batch[0] = MI_BATCH_BUFFER_END;
-	__sync_synchronize();
-	munmap(batch, 4096);
-}
-
 static void flip_vs_cursor_crc(igt_display_t *display, bool atomic, bool busy_wait)
 {
 	struct drm_mode_cursor arg[2];
@@ -1170,12 +1111,11 @@ static void flip_vs_cursor_crc(igt_display_t *display, bool atomic, bool busy_wa
 
 	/* Disable cursor, and immediately queue a flip. Check if resulting crc is correct. */
 	for (int i = 1; i >= 0; i--) {
-		uint32_t *batch;
+		uint32_t *busy;
 
-		if (busy_wait) {
-			batch = make_fb_busy(display->drm_fd, &fb_info[1]);
-			igt_assert(gem_bo_busy(display->drm_fd, fb_info[1].gem_handle));
-		}
+		busy = NULL;
+		if (busy_wait)
+			busy = make_fb_busy(display->drm_fd, &fb_info[1]);
 
 		vblank_start = get_vblank(display->drm_fd, pipe, DRM_VBLANK_NEXTONMISS);
 
@@ -1184,10 +1124,10 @@ static void flip_vs_cursor_crc(igt_display_t *display, bool atomic, bool busy_wa
 
 		igt_assert_eq(get_vblank(display->drm_fd, pipe, 0), vblank_start);
 
-		if (busy_wait) {
+		if (busy) {
 			igt_pipe_crc_collect_crc(pipe_crc, &crcs[2]);
 
-			finish_fb_busy(batch);
+			finish_fb_busy(busy);
 
 			igt_set_timeout(1, "Stuck page flip");
 			igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
