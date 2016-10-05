@@ -112,14 +112,6 @@ static void setup_output(data_t *data)
 			continue;
 
 		igt_output_set_pipe(output, pipe);
-		igt_display_commit(display);
-
-		if (!output->valid) {
-			igt_output_set_pipe(output, PIPE_ANY);
-			igt_display_commit(display);
-			continue;
-		}
-
 		data->crtc_id = output->config.crtc->crtc_id;
 		data->output = output;
 		data->mode = igt_output_get_mode(output);
