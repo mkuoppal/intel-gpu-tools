@@ -336,7 +336,7 @@ static void whisper(int fd, unsigned engine, unsigned flags)
 			for (pass = 0; pass < 1024; pass++) {
 				uint64_t offset;
 
-				if (child == 0)
+				if (!(flags & FORKED))
 					write_seqno(pass);
 
 				if (flags & HANG)
