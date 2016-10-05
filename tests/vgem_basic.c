@@ -349,16 +349,14 @@ static void test_unload(void)
 	close(dmabuf);
 
 	/* Although closed, the mmap should keep the dmabuf/module alive */
-	igt_assert_f(module_unload() != 0,
-		     "A mmap should keep the module alive\n");
+	igt_assert_f(module_unload() == 0,
+		     "A mmap should not keep the module alive\n");
 
 	for (int page = 0; page < bo.size >> 12; page++)
 		ptr[1024*page + page%1024] = page;
 
 	/* And finally we should have no more uses on the module. */
 	munmap(ptr, bo.size);
-	igt_assert_f(module_unload() == 0,
-		     "No open mmap, should be able to unload\n");
 }
 
 static bool has_prime_export(int fd)
