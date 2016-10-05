@@ -1215,13 +1215,16 @@ static void igt_display_log_shift(igt_display_t *display, int shift)
 	igt_assert(display->log_shift >= 0);
 }
 
-static void igt_output_refresh(igt_output_t *output)
+static void igt_output_refresh(igt_output_t *output, bool final)
 {
 	igt_display_t *display = output->display;
 	unsigned long crtc_idx_mask;
 
+	crtc_idx_mask = output->pending_crtc_idx_mask;
+
 	/* we mask out the pipes already in use */
-	crtc_idx_mask = output->pending_crtc_idx_mask & ~display->pipes_in_use;
+	if (final)
+		crtc_idx_mask &= ~display->pipes_in_use;
 
 	kmstest_free_connector_config(&output->config);
 
@@ -1504,7 +1507,7 @@ void igt_display_init(igt_display_t *display, int drm_fd)
 		output->id = resources->connectors[i];
 		output->display = display;
 
-		igt_output_refresh(output);
+		igt_output_refresh(output, false);
 
 		output->config.pipe_changed = true;
 	}
@@ -1591,7 +1594,7 @@ static void igt_display_refresh(igt_display_t *display)
 	for (i = 0; i < display->n_outputs; i++) {
 		igt_output_t *output = &display->outputs[i];
 
-		igt_output_refresh(output);
+		igt_output_refresh(output, true);
 	}
 }
 
@@ -2462,6 +2465,8 @@ void igt_output_set_pipe(igt_output_t *output, enum pipe pipe)
 
 	if (pipe != output->config.pipe)
 		output->config.pipe_changed = true;
+
+	igt_output_refresh(output, false);
 }
 
 void igt_output_set_scaling_mode(igt_output_t *output, uint64_t scaling_mode)
