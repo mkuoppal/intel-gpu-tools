@@ -43,6 +43,10 @@
 #include "intel_aub.h"
 #include "intel_chipset.h"
 
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x)/sizeof((x)[0]))
+#endif
+
 static int close_init_helper(int fd);
 static int ioctl_init_helper(int fd, unsigned long request, ...);
 
@@ -50,8 +54,8 @@ static int (*libc_close)(int fd) = close_init_helper;
 static int (*libc_ioctl)(int fd, unsigned long request, ...) = ioctl_init_helper;
 
 static int drm_fd = -1;
-static char *filename;
-static FILE *file;
+static char *filename = NULL;
+static FILE *files[2] = { NULL, NULL };
 static int gen = 0;
 static int verbose = 0;
 static const uint32_t gtt_size = 0x10000;
@@ -140,13 +144,28 @@ align_u64(uint64_t v, uint64_t a)
 static void
 dword_out(uint32_t data)
 {
-	fwrite(&data, 1, 4, file);
+	for (int i = 0; i < ARRAY_SIZE (files); i++) {
+		if (files[i] == NULL)
+			continue;
+
+		fail_if(fwrite(&data, 1, 4, files[i]) == 0,
+			"Writing to output failed\n");
+	}
 }
 
 static void
 data_out(const void *data, size_t size)
 {
-	fwrite(data, 1, size, file);
+	if (size == 0)
+		return;
+
+	for (int i = 0; i < ARRAY_SIZE (files); i++) {
+		if (files[i] == NULL)
+			continue;
+
+		fail_if(fwrite(data, 1, size, files[i]) == 0,
+			"Writing to output failed\n");
+	}
 }
 
 static void
@@ -393,7 +412,10 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 	aub_dump_ringbuffer(batch_bo->offset + execbuffer2->batch_start_offset,
 			    offset, ring_flag);
 
-	fflush(file);
+	for (int i = 0; i < ARRAY_SIZE(files); i++) {
+		if (files[i] != NULL)
+			fflush(files[i]);
+	}
 }
 
 static void
@@ -426,6 +448,40 @@ close(int fd)
 	return libc_close(fd);
 }
 
+static FILE *
+launch_command(char *command)
+{
+	int i = 0, fds[2];
+	char **args = calloc(strlen(command), sizeof(char *));
+	char *iter = command;
+
+	args[i++] = iter = command;
+
+	while ((iter = strstr(iter, ",")) != NULL) {
+		*iter = '\0';
+		iter += 1;
+		args[i++] = iter;
+	}
+
+	if (pipe(fds) == -1)
+		return NULL;
+
+	switch (fork()) {
+	case 0:
+		dup2(fds[0], 0);
+		fail_if(execvp(args[0], args) == -1,
+			"intel_aubdump: failed to launch child command\n");
+		return NULL;
+
+	default:
+		free(args);
+		return fdopen(fds[1], "w");
+
+	case -1:
+		return NULL;
+	}
+}
+
 static void
 maybe_init(void)
 {
@@ -448,11 +504,16 @@ maybe_init(void)
 				value);
 			device_override = true;
 		} else if (!strcmp(key, "file")) {
-			filename = value;
-			file = fopen(filename, "w+");
-			fail_if(file == NULL,
+			filename = strdup(value);
+			files[0] = fopen(filename, "w+");
+			fail_if(files[0] == NULL,
 				"intel_aubdump: failed to open file '%s'\n",
 				filename);
+		} else if (!strcmp(key,  "command")) {
+			files[1] = launch_command(value);
+			fail_if(files[1] == NULL,
+				"intel_aubdump: failed to launch command '%s'\n",
+				value);
 		} else {
 			fprintf(stderr, "intel_aubdump: unknown option '%s'\n", key);
 		}
@@ -623,7 +684,9 @@ static void __attribute__ ((destructor))
 fini(void)
 {
 	free(filename);
-	if (file)
-		fclose(file);
+	for (int i = 0; i < ARRAY_SIZE(files); i++) {
+		if (files[i] != NULL)
+			fclose(files[i]);
+	}
 	free(bos);
 }
