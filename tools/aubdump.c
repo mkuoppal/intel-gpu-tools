@@ -426,6 +426,46 @@ close(int fd)
 	return libc_close(fd);
 }
 
+static void
+maybe_init(void)
+{
+	static bool initialized = false;
+	FILE *config;
+	char *key, *value;
+
+	if (initialized)
+		return;
+
+	initialized = true;
+
+	config = fdopen(3, "r");
+	while (fscanf(config, "%m[^=]=%m[^\n]\n", &key, &value) != EOF) {
+		if (!strcmp(key, "verbose")) {
+			verbose = 1;
+		} else if (!strcmp(key, "device")) {
+			fail_if(sscanf(value, "%i", &device) != 1,
+				"intel_aubdump: failed to parse device id '%s'",
+				value);
+			device_override = true;
+		} else if (!strcmp(key, "file")) {
+			filename = value;
+			file = fopen(filename, "w+");
+			fail_if(file == NULL,
+				"intel_aubdump: failed to open file '%s'\n",
+				filename);
+		} else {
+			fprintf(stderr, "intel_aubdump: unknown option '%s'\n", key);
+		}
+
+		free(key);
+		free(value);
+	}
+	fclose(config);
+
+	bos = malloc(MAX_BO_COUNT * sizeof(bos[0]));
+	fail_if(bos == NULL, "intel_aubdump: out of memory\n");
+}
+
 int
 ioctl(int fd, unsigned long request, ...)
 {
@@ -447,6 +487,8 @@ ioctl(int fd, unsigned long request, ...)
 	}
 
 	if (fd == drm_fd) {
+		maybe_init();
+
 		switch (request) {
 		case DRM_IOCTL_I915_GETPARAM: {
 			struct drm_i915_getparam *getparam = argp;
@@ -550,26 +592,10 @@ ioctl(int fd, unsigned long request, ...)
 static void
 init(void)
 {
-	const char *args = getenv("INTEL_AUBDUMP_ARGS");
-
 	libc_close = dlsym(RTLD_NEXT, "close");
 	libc_ioctl = dlsym(RTLD_NEXT, "ioctl");
 	fail_if(libc_close == NULL || libc_ioctl == NULL,
 		"intel_aubdump: failed to get libc ioctl or close\n");
-
-	if (sscanf(args, "verbose=%d;file=%m[^;];device=%i",
-		   &verbose, &filename, &device) != 3)
-		filename = strdup("intel.aub");
-	fail_if(filename == NULL, "intel_aubdump: out of memory\n");
-
-	if (device)
-		device_override = true;
-
-	bos = malloc(MAX_BO_COUNT * sizeof(bos[0]));
-	fail_if(bos == NULL, "intel_aubdump: out of memory\n");
-
-	file = fopen(filename, "w+");
-	fail_if(file == NULL, "intel_aubdump: failed to open file '%s'\n", filename);
 }
 
 static int
