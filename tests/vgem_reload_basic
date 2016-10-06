@@ -6,7 +6,7 @@
 #
 
 SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
-. $SOURCE_DIR/drm_getopt.sh
+. $SOURCE_DIR/drm_lib.sh
 
 function unload() {
 	/sbin/rmmod vgem
