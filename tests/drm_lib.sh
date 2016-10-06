@@ -3,6 +3,30 @@
 SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
 . $SOURCE_DIR/drm_getopt.sh
 
+NAME=$(basename "$0")
+
+KERN_EMER="<0>"
+KERN_ALERT="<1>"
+KERN_CRIT="<2>"
+KERN_ERR="<3>"
+KERN_WARNING="<4>"
+KERN_NOTICE="<5>"
+KERN_INFO="<6>"
+KERN_DEBUG="<7>"
+
+kmsg() {
+	echo "$@" > /dev/kmsg
+}
+
+finish() {
+	exitcode=$?
+	kmsg "$KERN_INFO$NAME: exiting, ret=$exitcode"
+	exit $exitcode
+}
+trap finish EXIT
+
+kmsg "$KERN_INFO$NAME: executing"
+
 skip() {
 	echo "$@"
 	exit $IGT_EXIT_SKIP
