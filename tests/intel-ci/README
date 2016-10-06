@@ -1,0 +1,34 @@
+This directory contains test lists that are used by Intel's CI. The
+files are passed to piglit with the --test-list parameter directly.
+
+The test lists are contained in the IGT repository for several
+reasons:
+
+- The lists stay synchronized with the IGT codebase.
+- Public availability. Kernel developers can see what tests are run,
+  and can see what changes are done to the set, when, and why.
+- Explicit test lists in general make it possible to implement a new
+  test without having it run in CI (accidentally or on purpose) before
+  CI is ready for it, and for CI to stop running a test without
+  removing the test or changing its name. The previous method of test
+  selection was based on name patterns.
+
+Changing the test lists should only happen with approval from the CI
+people. If you make a new test that should be tested by CI regularly,
+ask a maintainer (see MAINTAINERS).
+
+======================
+fast-feedback.testlist
+======================
+
+Fast-feedback is the testlist that is run for Patchwork and Trybot
+testing. It is also run on various drm-intel-* branches.
+
+Time limit: Full run must complete in 15 minutes on all tested
+platforms.
+
+Feature coverage: Should test all working features, with at least 1
+test per feature.
+
+The string "basic" in a test name means the test probably belongs in
+this list.
