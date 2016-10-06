@@ -491,7 +491,7 @@ static int intel_reg_dump(struct config *config, int argc, char *argv[])
 
 	intel_register_access_fini();
 
-	return EXIT_FAILURE;
+	return EXIT_SUCCESS;
 }
 
 static int intel_reg_snapshot(struct config *config, int argc, char *argv[])
