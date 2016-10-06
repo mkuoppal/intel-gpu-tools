@@ -7,8 +7,8 @@ SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
 
 # ARB_MODE has existed for many gens
 PATH=$SOURCE_DIR/../tools:$PATH
-do_or_die "intel_reg_read 0x4030"
-do_or_die "intel_reg_dumper"
+do_or_die "intel_reg read 0x4030"
+do_or_die "intel_reg dump"
 
 # TODO: Add more tests
 
