@@ -57,6 +57,25 @@ static bool has_execlists(int fd)
 	return enabled;
 }
 
+static unsigned context_size(int fd)
+{
+	const int gen = intel_gen(intel_get_drm_devid(fd));
+
+	switch (gen) {
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 7: return 18 << 12;
+	case 8: return 20 << 12;
+	case 9: return 22 << 12;
+	default: return 32 << 12;
+	}
+}
+
 static unsigned get_num_contexts(int fd, int num_engines)
 {
 	uint64_t ggtt_size;
@@ -66,9 +85,9 @@ static unsigned get_num_contexts(int fd, int num_engines)
 	/* Compute the number of contexts we can allocate to fill the GGTT */
 	ggtt_size = gem_global_aperture_size(fd);
 
-	size = 64 << 10; /* Most gen require at least 64k for ctx */
+	size = context_size(fd);
 	if (has_execlists(fd)) {
-		size *= 2; /* ringbuffer as well */
+		size += 4 << 12; /* ringbuffer as well */
 		if (num_engines) /* one per engine with execlists */
 			size *= num_engines;
 	}
