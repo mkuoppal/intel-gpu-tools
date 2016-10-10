@@ -93,8 +93,9 @@ static unsigned get_num_contexts(int fd, int num_engines)
 	}
 
 	count = 3 * (ggtt_size / size) / 2;
-	igt_info("Creating %lld contexts (assuming of size %lld)\n",
-		 (long long)count, (long long)size);
+	igt_info("Creating %lld contexts (assuming of size %lld%s)\n",
+		 (long long)count, (long long)size,
+		 has_execlists(fd) ? " with execlists" : "");
 
 	intel_require_memory(count, size, CHECK_RAM | CHECK_SWAP);
 	return count;
