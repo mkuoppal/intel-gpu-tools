@@ -342,11 +342,13 @@ static void *thread(void *data)
 	ctx = malloc(t->num_ctx * sizeof(uint32_t));
 	igt_assert(ctx);
 	memcpy(ctx, t->all_ctx, t->num_ctx * sizeof(uint32_t));
-	igt_permute_array(ctx, t->num_ctx, xchg_int);
 
-	for (unsigned n = 0; n < t->num_ctx; n++) {
-		execbuf.rsvd1 = ctx[n];
-		gem_execbuf(t->fd, &execbuf);
+	igt_until_timeout(150) {
+		igt_permute_array(ctx, t->num_ctx, xchg_int);
+		for (unsigned n = 0; n < t->num_ctx; n++) {
+			execbuf.rsvd1 = ctx[n];
+			gem_execbuf(t->fd, &execbuf);
+		}
 	}
 
 	free(ctx);
