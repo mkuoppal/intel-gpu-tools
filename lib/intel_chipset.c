@@ -100,8 +100,7 @@ intel_get_pci_device(void)
 		pci_dev = pci_device_next(iter);
 		pci_iterator_destroy(iter);
 	}
-	if (pci_dev == NULL)
-		errx(1, "Couldn't find graphics card");
+	igt_require_f(pci_dev, "Couldn't find Intel graphics card\n");
 
 	error = pci_device_probe(pci_dev);
 	igt_fail_on_f(error != 0,
