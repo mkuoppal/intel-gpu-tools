@@ -244,4 +244,3 @@ igt@vgem_basic@mmap
 igt@vgem_basic@second-client
 igt@vgem_basic@sysfs
 igt@vgem_basic@unload
-igt@vgem_reload_basic
