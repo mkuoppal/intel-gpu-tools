@@ -123,7 +123,7 @@ PKG_CHECK_MODULES(DRM, [libdrm])
 PKG_CHECK_MODULES(PCIACCESS, [pciaccess >= 0.10])
 
 case "$target_cpu" in
-	x86*)
+	x86*|i?86)
 		build_x86="yes"
 		;;
 	*)
