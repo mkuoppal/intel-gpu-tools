@@ -26,233 +26,290 @@
  */
 
 #include "igt.h"
-#include <stdio.h>
+
+#include <signal.h>
 #include <time.h>
-#include <stdlib.h>
-#include <sys/ioctl.h>
-#include <stdio.h>
-#include <string.h>
-#include <fcntl.h>
-#include <inttypes.h>
-#include <errno.h>
-#include <sys/stat.h>
-#include <sys/time.h>
+#include <sys/syscall.h>
 
-#include <drm.h>
+#define gettid() syscall(__NR_gettid)
+#define sigev_notify_thread_id _sigev_un._tid
 
-#include "intel_bufmgr.h"
+#define LOCAL_I915_EXEC_BSD_SHIFT      (13)
+#define LOCAL_I915_EXEC_BSD_MASK       (3 << LOCAL_I915_EXEC_BSD_SHIFT)
 
-#define MSEC_PER_SEC	1000L
-#define USEC_PER_MSEC	1000L
-#define NSEC_PER_USEC	1000L
-#define NSEC_PER_MSEC	1000000L
-#define USEC_PER_SEC	1000000L
-#define NSEC_PER_SEC	1000000000L
+#define ENGINE_MASK  (I915_EXEC_RING_MASK | LOCAL_I915_EXEC_BSD_MASK)
 
-#define ENOUGH_WORK_IN_SECONDS 2
-#define BUF_SIZE (8<<20)
-#define BUF_PAGES ((8<<20)>>12)
-drm_intel_bo *dst, *dst2;
-
-/* returns time diff in milliseconds */
-static int64_t
-do_time_diff(struct timespec *end, struct timespec *start)
+static int __gem_wait(int fd, struct drm_i915_gem_wait *w)
 {
-	int64_t ret;
-	ret = (MSEC_PER_SEC * difftime(end->tv_sec, start->tv_sec)) +
-	      ((end->tv_nsec/NSEC_PER_MSEC) - (start->tv_nsec/NSEC_PER_MSEC));
-	return ret;
-}
+	int err;
 
-static void blt_color_fill(struct intel_batchbuffer *batch,
-			   drm_intel_bo *buf,
-			   const unsigned int pages)
-{
-	const unsigned short height = pages/4;
-	const unsigned short width =  4096;
+	err = 0;
+	if (igt_ioctl(fd, DRM_IOCTL_I915_GEM_WAIT, w))
+		err = -errno;
 
-	COLOR_BLIT_COPY_BATCH_START(COLOR_BLT_WRITE_ALPHA |
-				    XY_COLOR_BLT_WRITE_RGB);
-	OUT_BATCH((3 << 24)	| /* 32 Bit Color */
-		  (0xF0 << 16)	| /* Raster OP copy background register */
-		  0);		  /* Dest pitch is 0 */
-	OUT_BATCH(0);
-	OUT_BATCH(width << 16	|
-		  height);
-	OUT_RELOC_FENCED(buf, I915_GEM_DOMAIN_RENDER, I915_GEM_DOMAIN_RENDER, 0);
-	OUT_BATCH(rand()); /* random pattern */
-	ADVANCE_BATCH();
-}
-
-static void render_timeout(int fd)
-{
-	drm_intel_bufmgr *bufmgr;
-	struct intel_batchbuffer *batch;
-	int64_t timeout = ENOUGH_WORK_IN_SECONDS * NSEC_PER_SEC;
-	int64_t negative_timeout = -1;
-	int ret;
-	const bool do_signals = true; /* signals will seem to make the operation
-				       * use less process CPU time */
-	bool done = false;
-	int i, iter = 1;
-
-	igt_skip_on_simulation();
-
-	bufmgr = drm_intel_bufmgr_gem_init(fd, 4096);
-	drm_intel_bufmgr_gem_enable_reuse(bufmgr);
-	batch = intel_batchbuffer_alloc(bufmgr, intel_get_drm_devid(fd));
-
-	dst = drm_intel_bo_alloc(bufmgr, "dst", BUF_SIZE, 4096);
-	dst2 = drm_intel_bo_alloc(bufmgr, "dst2", BUF_SIZE, 4096);
-
-	igt_skip_on_f(gem_wait(fd, dst->handle, &timeout) == -EINVAL,
-		      "kernel doesn't support wait_timeout, skipping test\n");
-	timeout = ENOUGH_WORK_IN_SECONDS * NSEC_PER_SEC;
-
-	/* Figure out a rough number of fills required to consume 1 second of
-	 * GPU work.
-	 */
-	do {
-		struct timespec start, end;
-		long diff;
-
-#ifndef CLOCK_MONOTONIC_RAW
-#define CLOCK_MONOTONIC_RAW CLOCK_MONOTONIC
-#endif
-
-		igt_assert(clock_gettime(CLOCK_MONOTONIC_RAW, &start) == 0);
-		for (i = 0; i < iter; i++)
-			blt_color_fill(batch, dst, BUF_PAGES);
-		intel_batchbuffer_flush(batch);
-		drm_intel_bo_wait_rendering(dst);
-		igt_assert(clock_gettime(CLOCK_MONOTONIC_RAW, &end) == 0);
-
-		diff = do_time_diff(&end, &start);
-		igt_assert(diff >= 0);
-
-		if ((diff / MSEC_PER_SEC) > ENOUGH_WORK_IN_SECONDS)
-			done = true;
-		else
-			iter <<= 1;
-	} while (!done && iter < 1000000);
-
-	igt_assert_lt(iter, 1000000);
-
-	igt_debug("%d iters is enough work\n", iter);
-	gem_quiescent_gpu(fd);
-	if (do_signals)
-		igt_fork_signal_helper();
-
-	/* We should be able to do half as much work in the same amount of time,
-	 * but because we might schedule almost twice as much as required, we
-	 * might accidentally time out. Hence add some fudge. */
-	for (i = 0; i < iter/3; i++)
-		blt_color_fill(batch, dst2, BUF_PAGES);
-
-	intel_batchbuffer_flush(batch);
-	igt_assert(gem_bo_busy(fd, dst2->handle) == true);
-
-	igt_assert_eq(gem_wait(fd, dst2->handle, &timeout), 0);
-	igt_assert(gem_bo_busy(fd, dst2->handle) == false);
-	igt_assert_neq(timeout, 0);
-	if (timeout ==  (ENOUGH_WORK_IN_SECONDS * NSEC_PER_SEC))
-		igt_info("Buffer was already done!\n");
-	else
-		igt_info("Finished with %fs remaining\n", timeout*1e-9);
-
-	/* check that polling with timeout=0 works. */
-	timeout = 0;
-	igt_assert_eq(gem_wait(fd, dst2->handle, &timeout), 0);
-	igt_assert_eq(timeout, 0);
-
-	/* Now check that we correctly time out, twice the auto-tune load should
-	 * be good enough. */
-	timeout = ENOUGH_WORK_IN_SECONDS * NSEC_PER_SEC;
-	for (i = 0; i < iter*2; i++)
-		blt_color_fill(batch, dst2, BUF_PAGES);
-
-	intel_batchbuffer_flush(batch);
-
-	ret = gem_wait(fd, dst2->handle, &timeout);
-	igt_assert_eq(ret, -ETIME);
-	igt_assert_eq(timeout, 0);
-	igt_assert(gem_bo_busy(fd, dst2->handle) == true);
-
-	/* check that polling with timeout=0 works. */
-	timeout = 0;
-	igt_assert_eq(gem_wait(fd, dst2->handle, &timeout), -ETIME);
-	igt_assert_eq(timeout, 0);
-
-
-	/* Now check that we can pass negative (infinite) timeouts. */
-	negative_timeout = -1;
-	for (i = 0; i < iter; i++)
-		blt_color_fill(batch, dst2, BUF_PAGES);
-
-	intel_batchbuffer_flush(batch);
-
-	igt_assert_eq(gem_wait(fd, dst2->handle, &negative_timeout), 0);
-	igt_assert_eq(negative_timeout, -1); /* infinity always remains */
-	igt_assert(gem_bo_busy(fd, dst2->handle) == false);
-
-	if (do_signals)
-		igt_stop_signal_helper();
-	drm_intel_bo_unreference(dst2);
-	drm_intel_bo_unreference(dst);
-	intel_batchbuffer_free(batch);
-	drm_intel_bufmgr_destroy(bufmgr);
+	return err;
 }
 
 static void invalid_flags(int fd)
 {
 	struct drm_i915_gem_wait wait;
-	int ret;
-	uint32_t handle;
 
-	handle = gem_create(fd, 4096);
-
-	wait.bo_handle = handle;
+	memset(&wait, 0, sizeof(wait));
+	wait.bo_handle = gem_create(fd, 4096);
 	wait.timeout_ns = 1;
 	/* NOTE: This test intentionally tests for just the next available flag.
 	 * Don't "fix" this testcase without the ABI testcases for new flags
 	 * first. */
 	wait.flags = 1;
-	ret = drmIoctl(fd, DRM_IOCTL_I915_GEM_WAIT, &wait);
 
-	igt_assert(ret != 0 && errno == EINVAL);
+	igt_assert_eq(__gem_wait(fd, &wait), -EINVAL);
 
-	gem_close(fd, handle);
+	gem_close(fd, wait.bo_handle);
 }
 
 static void invalid_buf(int fd)
 {
 	struct drm_i915_gem_wait wait;
-	int ret;
 
-	wait.bo_handle = 0;
-	wait.timeout_ns = 1;
-	wait.flags = 0;
-	ret = drmIoctl(fd, DRM_IOCTL_I915_GEM_WAIT, &wait);
-
-	igt_assert(ret != 0 && errno == ENOENT);
+	memset(&wait, 0, sizeof(wait));
+	igt_assert_eq(__gem_wait(fd, &wait), -ENOENT);
 }
 
-int drm_fd;
+static uint32_t *batch;
+
+static void sigiter(int sig, siginfo_t *info, void *arg)
+{
+	*batch = MI_BATCH_BUFFER_END;
+	__sync_synchronize();
+}
+
+#define MSEC_PER_SEC (1000)
+#define USEC_PER_SEC (1000 * MSEC_PER_SEC)
+#define NSEC_PER_SEC (1000 * USEC_PER_SEC)
+
+#define BUSY 1
+#define HANG 2
+static void basic(int fd, unsigned engine, unsigned flags)
+{
+	const int gen = intel_gen(intel_get_drm_devid(fd));
+	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_relocation_entry reloc;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_wait wait;
+	unsigned engines[16];
+	unsigned nengine;
+	int i, timeout;
+
+	nengine = 0;
+	if (engine == -1) {
+		for_each_engine(fd, engine)
+			if (engine) engines[nengine++] = engine;
+	} else {
+		igt_require(gem_has_ring(fd, engine));
+		engines[nengine++] = engine;
+	}
+	igt_require(nengine);
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 1;
+
+	memset(&obj, 0, sizeof(obj));
+	obj.handle = gem_create(fd, 4096);
+
+	obj.relocs_ptr = (uintptr_t)&reloc;
+	obj.relocation_count = 1;
+	memset(&reloc, 0, sizeof(reloc));
+
+	batch = gem_mmap__gtt(fd, obj.handle, 4096, PROT_WRITE);
+	gem_set_domain(fd, obj.handle,
+			I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
+
+	reloc.target_handle = obj.handle; /* recurse */
+	reloc.presumed_offset = 0;
+	reloc.offset = sizeof(uint32_t);
+	reloc.delta = 0;
+	reloc.read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc.write_domain = 0;
+
+	i = 0;
+	batch[i] = MI_BATCH_BUFFER_START;
+	if (gen >= 8) {
+		batch[i] |= 1 << 8 | 1;
+		batch[++i] = 0;
+		batch[++i] = 0;
+	} else if (gen >= 6) {
+		batch[i] |= 1 << 8;
+		batch[++i] = 0;
+	} else {
+		batch[i] |= 2 << 6;
+		batch[++i] = 0;
+		if (gen < 4) {
+			batch[i] |= 1;
+			reloc.delta = 1;
+		}
+	}
+
+	for (i = 0; i < nengine; i++) {
+		execbuf.flags &= ~ENGINE_MASK;
+		execbuf.flags |= engines[i];
+		gem_execbuf(fd, &execbuf);
+	}
+
+	memset(&wait, 0, sizeof(wait));
+	wait.bo_handle = obj.handle;
+	igt_assert_eq(__gem_wait(fd, &wait), -ETIME);
+
+	if (flags & BUSY) {
+		struct timespec tv;
+
+		timeout = 120;
+		if ((flags & HANG) == 0) {
+			*batch = MI_BATCH_BUFFER_END;
+			__sync_synchronize();
+			timeout = 1;
+		}
+		munmap(batch, 4096);
+
+		memset(&tv, 0, sizeof(tv));
+		while (__gem_wait(fd, &wait) == -ETIME)
+			igt_assert(igt_seconds_elapsed(&tv) < timeout);
+	} else {
+		timer_t timer;
+
+		if ((flags & HANG) == 0) {
+			struct sigevent sev;
+			struct sigaction act;
+			struct itimerspec its;
+
+			memset(&sev, 0, sizeof(sev));
+			sev.sigev_notify = SIGEV_SIGNAL | SIGEV_THREAD_ID;
+			sev.sigev_notify_thread_id = gettid();
+			sev.sigev_signo = SIGRTMIN + 1;
+			igt_assert(timer_create(CLOCK_MONOTONIC, &sev, &timer) == 0);
+
+			memset(&act, 0, sizeof(act));
+			act.sa_sigaction = sigiter;
+			act.sa_flags = SA_SIGINFO;
+			igt_assert(sigaction(SIGRTMIN + 1, &act, NULL) == 0);
+
+			memset(&its, 0, sizeof(its));
+			its.it_value.tv_nsec = 0;
+			its.it_value.tv_sec = 1;
+			igt_assert(timer_settime(timer, 0, &its, NULL) == 0);
+		}
+
+		wait.timeout_ns = NSEC_PER_SEC / 2; /* 0.5s */
+		igt_assert_eq(__gem_wait(fd, &wait), -ETIME);
+		igt_assert_eq_s64(wait.timeout_ns, 0);
+
+		if ((flags & HANG) == 0) {
+			wait.timeout_ns = NSEC_PER_SEC; /* 1.0s */
+			igt_assert_eq(__gem_wait(fd, &wait), 0);
+			igt_assert(wait.timeout_ns > 0);
+		} else {
+			wait.timeout_ns = -1;
+			igt_assert_eq(__gem_wait(fd, &wait), 0);
+			igt_assert(wait.timeout_ns == -1);
+		}
+
+		wait.timeout_ns = 0;
+		igt_assert_eq(__gem_wait(fd, &wait), 0);
+		igt_assert(wait.timeout_ns == 0);
+
+		if ((flags & HANG) == 0)
+			timer_delete(timer);
+	}
+
+	gem_close(fd, obj.handle);
+}
 
 igt_main
 {
-	igt_fixture
-		drm_fd = drm_open_driver(DRIVER_INTEL);
+	const struct intel_execution_engine *e;
+	int fd = -1;
 
-	igt_subtest("render_timeout")
-		render_timeout(drm_fd);
+	igt_skip_on_simulation();
+
+	igt_fixture {
+		fd = drm_open_driver_master(DRIVER_INTEL);
+	}
 
 	igt_subtest("invalid-flags")
-		invalid_flags(drm_fd);
+		invalid_flags(fd);
 
 	igt_subtest("invalid-buf")
-		invalid_buf(drm_fd);
+		invalid_buf(fd);
 
-	igt_fixture
-		close(drm_fd);
+	igt_subtest_group {
+		igt_fixture {
+			igt_fork_hang_detector(fd);
+			igt_fork_signal_helper();
+		}
+
+		igt_subtest("basic-busy-all") {
+			gem_quiescent_gpu(fd);
+			basic(fd, -1, BUSY);
+		}
+		igt_subtest("basic-wait-all") {
+			gem_quiescent_gpu(fd);
+			basic(fd, -1, 0);
+		}
+
+		for (e = intel_execution_engines; e->name; e++) {
+			igt_subtest_group {
+				igt_subtest_f("busy-%s", e->name) {
+					gem_quiescent_gpu(fd);
+					basic(fd, e->exec_id | e->flags, BUSY);
+				}
+				igt_subtest_f("wait-%s", e->name) {
+					gem_quiescent_gpu(fd);
+					basic(fd, e->exec_id | e->flags, 0);
+				}
+			}
+		}
+
+		igt_fixture {
+			igt_stop_signal_helper();
+			igt_stop_hang_detector();
+		}
+	}
+
+	igt_subtest_group {
+		igt_hang_t hang;
+
+		igt_fixture {
+			hang = igt_allow_hang(fd, 0, 0);
+			igt_fork_signal_helper();
+		}
+
+		igt_subtest("hang-busy-all") {
+			gem_quiescent_gpu(fd);
+			basic(fd, -1, BUSY | HANG);
+		}
+		igt_subtest("hang-wait-all") {
+			gem_quiescent_gpu(fd);
+			basic(fd, -1, HANG);
+		}
+
+		for (e = intel_execution_engines; e->name; e++) {
+			igt_subtest_f("hang-busy-%s", e->name) {
+				gem_quiescent_gpu(fd);
+				basic(fd, e->exec_id | e->flags, HANG | BUSY);
+			}
+			igt_subtest_f("hang-wait-%s", e->name) {
+				gem_quiescent_gpu(fd);
+				basic(fd, e->exec_id | e->flags, HANG);
+			}
+		}
+
+		igt_fixture {
+			igt_stop_signal_helper();
+			igt_disallow_hang(fd, hang);
+		}
+	}
+
+	igt_fixture {
+		close(fd);
+	}
 }
