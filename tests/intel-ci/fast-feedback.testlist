@@ -208,7 +208,6 @@ igt@kms_pipe_crc_basic@read-crc-pipe-c-frame-sequence
 igt@kms_pipe_crc_basic@suspend-read-crc-pipe-a
 igt@kms_pipe_crc_basic@suspend-read-crc-pipe-b
 igt@kms_pipe_crc_basic@suspend-read-crc-pipe-c
-igt@kms_psr_sink_crc@psr_basic
 igt@kms_setmode@basic-clone-single-crtc
 igt@kms_sink_crc_basic
 igt@pm_backlight@basic-brightness
