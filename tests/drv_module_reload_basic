@@ -81,6 +81,8 @@ function finish_load() {
 	return $IGT_EXIT_SUCCESS
 }
 
+hda_dynamic_debug_enable
+
 reload || exit $?
 finish_load || exit $?
 
