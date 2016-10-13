@@ -5,6 +5,22 @@ SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
 
 NAME=$(basename "$0")
 
+dynamic_debug=
+
+hda_dynamic_debug_enable() {
+	if [ -e "$dynamic_debug" ]; then
+		echo -n "module snd_hda_intel +pf" > $dynamic_debug
+		echo -n "module snd_hda_core +pf" > $dynamic_debug
+	fi
+}
+
+hda_dynamic_debug_disable() {
+	if [ -e "$dynamic_debug" ]; then
+		echo -n "module snd_hda_core =_" > $dynamic_debug
+		echo -n "module snd_hda_intel =_" > $dynamic_debug
+	fi
+}
+
 KERN_EMER="<0>"
 KERN_ALERT="<1>"
 KERN_CRIT="<2>"
@@ -20,6 +36,7 @@ kmsg() {
 
 finish() {
 	exitcode=$?
+	hda_dynamic_debug_disable
 	kmsg "${KERN_INFO}[IGT] $NAME: exiting, ret=$exitcode"
 	exit $exitcode
 }
@@ -47,6 +64,11 @@ elif [ -d /debug ]; then
 	debugfs_path=/debug
 else
 	skip "debugfs not found"
+fi
+
+dynamic_debug=$debugfs_path/dynamic_debug/control
+if [ ! -e "$dynamic_debug" ]; then
+	echo "WARNING: dynamic debug control not available"
 fi
 
 if [ ! -d $debugfs_path/dri ]; then
