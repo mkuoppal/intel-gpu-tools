@@ -119,6 +119,8 @@ igt@gem_sync@basic-store-each
 igt@gem_tiled_blits@basic
 igt@gem_tiled_fence_blits@basic
 igt@gem_tiled_pread_basic
+igt@gem_wait@basic-busy-all
+igt@gem_wait@basic-wait-all
 igt@gem_workarounds@basic-read
 igt@gvt_basic@invalid-placeholder-test
 igt@kms_addfb_basic@addfb25-bad-modifier
