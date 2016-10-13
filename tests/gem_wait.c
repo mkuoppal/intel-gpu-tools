@@ -169,7 +169,6 @@ static void basic(int fd, unsigned engine, unsigned flags)
 			__sync_synchronize();
 			timeout = 1;
 		}
-		munmap(batch, 4096);
 
 		memset(&tv, 0, sizeof(tv));
 		while (__gem_wait(fd, &wait) == -ETIME)
@@ -222,6 +221,7 @@ static void basic(int fd, unsigned engine, unsigned flags)
 	}
 
 	gem_close(fd, obj.handle);
+	munmap(batch, 4096);
 }
 
 igt_main
