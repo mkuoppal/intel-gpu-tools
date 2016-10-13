@@ -41,18 +41,22 @@ do_or_die() {
 	$@ > /dev/null 2>&1 || (echo "FAIL: $@ ($?)" && exit $IGT_EXIT_FAILURE)
 }
 
-if [ -d /debug/dri ] ; then
-	debugfs_path=/debug/dri
+if [ -d /sys/kernel/debug ]; then
+	debugfs_path=/sys/kernel/debug
+elif [ -d /debug ]; then
+	debugfs_path=/debug
+else
+	skip "debugfs not found"
 fi
 
-if [ -d /sys/kernel/debug/dri ] ; then
-	debugfs_path=/sys/kernel/debug/dri
+if [ ! -d $debugfs_path/dri ]; then
+	skip "dri debugfs not found"
 fi
 
 i915_dfs_path=x
 for minor in `seq 0 16`; do
-	if [ -f $debugfs_path/$minor/i915_error_state ] ; then
-		i915_dfs_path=$debugfs_path/$minor
+	if [ -f $debugfs_path/dri/$minor/i915_error_state ] ; then
+		i915_dfs_path=$debugfs_path/dri/$minor
 		break
 	fi
 done
