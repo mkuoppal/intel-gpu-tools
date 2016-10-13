@@ -200,13 +200,14 @@ static void execN(int fd, uint32_t handle, uint64_t batch_size, unsigned flags, 
 igt_simple_main
 {
 	uint32_t batch[2] = {MI_BATCH_BUFFER_END};
-	uint64_t batch_size, max, reloc_ofs;
+	uint64_t batch_size, max, ggtt_max, reloc_ofs;
 	int fd;
 
 	fd = drm_open_driver(DRIVER_INTEL);
 	use_64bit_relocs = intel_gen(intel_get_drm_devid(fd)) >= 8;
 
 	max = 3 * gem_aperture_size(fd) / 4;
+	ggtt_max = 3 * gem_global_aperture_size(fd) / 4;
 	intel_require_memory(1, max, CHECK_RAM);
 
 	for (batch_size = 4096; batch_size <= max; ) {
@@ -228,7 +229,8 @@ igt_simple_main
 			igt_debug("batch_size %llu, reloc_ofs %llu\n",
 				  (long long)batch_size, (long long)reloc_ofs);
 			exec1(fd, handle, reloc_ofs, 0, ptr);
-			exec1(fd, handle, reloc_ofs, I915_EXEC_SECURE, ptr);
+			if (batch_size < ggtt_max)
+				exec1(fd, handle, reloc_ofs, I915_EXEC_SECURE, ptr);
 		}
 
 		igt_debug("Backwards (%lld)\n", (long long)batch_size);
@@ -236,12 +238,14 @@ igt_simple_main
 			igt_debug("batch_size %llu, reloc_ofs %llu\n",
 				  (long long)batch_size, (long long)reloc_ofs);
 			exec1(fd, handle, reloc_ofs, 0, ptr);
-			exec1(fd, handle, reloc_ofs, I915_EXEC_SECURE, ptr);
+			if (batch_size < ggtt_max)
+				exec1(fd, handle, reloc_ofs, I915_EXEC_SECURE, ptr);
 		}
 
 		igt_debug("Random (%lld)\n", (long long)batch_size);
 		execN(fd, handle, batch_size, 0, ptr);
-		execN(fd, handle, batch_size, I915_EXEC_SECURE, ptr);
+		if (batch_size < ggtt_max)
+			execN(fd, handle, batch_size, I915_EXEC_SECURE, ptr);
 
 		if (ptr)
 			munmap(ptr, batch_size);
