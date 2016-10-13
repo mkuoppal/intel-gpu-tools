@@ -25,141 +25,127 @@
  */
 
 #include "igt.h"
-#include <stdlib.h>
-#include <sys/ioctl.h>
-#include <stdio.h>
 
 IGT_TEST_DESCRIPTION("Basic test for context set/get param input validation.");
 
-int fd;
-int32_t ctx;
-
-#define LOCAL_I915_GEM_CONTEXT_GETPARAM       0x34
-#define LOCAL_I915_GEM_CONTEXT_SETPARAM       0x35
-#define LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM DRM_IOWR (DRM_COMMAND_BASE + LOCAL_I915_GEM_CONTEXT_GETPARAM, struct local_i915_gem_context_param)
-#define LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM DRM_IOWR (DRM_COMMAND_BASE + LOCAL_I915_GEM_CONTEXT_SETPARAM, struct local_i915_gem_context_param)
-
-#define TEST_SUCCESS(ioc) \
-	do_ioctl(fd, (ioc), &ctx_param);
-#define TEST_FAIL(ioc, exp_errno) \
-	do_ioctl_err(fd, (ioc), &ctx_param, exp_errno);
-
 igt_main
 {
-	struct local_i915_gem_context_param ctx_param;
+	struct local_i915_gem_context_param arg;
+	int fd;
+	uint32_t ctx;
 
-	memset(&ctx_param, 0, sizeof(ctx_param));
+	memset(&arg, 0, sizeof(arg));
 
 	igt_fixture {
 		fd = drm_open_driver_render(DRIVER_INTEL);
 		ctx = gem_context_create(fd);
 	}
 
-	ctx_param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+	arg.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
 
 	igt_subtest("basic") {
-		ctx_param.context = ctx;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM);
+		arg.context = ctx;
+		gem_context_get_param(fd, &arg);
+		gem_context_set_param(fd, &arg);
 	}
 
 	igt_subtest("basic-default") {
-		ctx_param.context = 0;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM);
+		arg.context = 0;
+		gem_context_get_param(fd, &arg);
+		gem_context_set_param(fd, &arg);
 	}
 
 	igt_subtest("invalid-ctx-get") {
-		ctx_param.context = 2;
-		TEST_FAIL(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, ENOENT);
+		arg.context = 2;
+		igt_assert_eq(__gem_context_get_param(fd, &arg), -ENOENT);
 	}
 
 	igt_subtest("invalid-ctx-set") {
-		ctx_param.context = ctx;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		ctx_param.context = 2;
-		TEST_FAIL(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM, ENOENT);
+		arg.context = ctx;
+		gem_context_get_param(fd, &arg);
+		arg.context = 2;
+		igt_assert_eq(__gem_context_set_param(fd, &arg), -ENOENT);
 	}
 
 	igt_subtest("invalid-size-get") {
-		ctx_param.context = ctx;
-		ctx_param.size = 8;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		igt_assert(ctx_param.size == 0);
+		arg.context = ctx;
+		arg.size = 8;
+		gem_context_get_param(fd, &arg);
+		igt_assert(arg.size == 0);
 	}
 
 	igt_subtest("invalid-size-set") {
-		ctx_param.context = ctx;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		ctx_param.size = 8;
-		TEST_FAIL(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM, EINVAL);
-		ctx_param.size = 0;
+		arg.context = ctx;
+		gem_context_get_param(fd, &arg);
+		arg.size = 8;
+		igt_assert_eq(__gem_context_set_param(fd, &arg), -EINVAL);
+		arg.size = 0;
 	}
 
-	ctx_param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+	arg.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
 
 	igt_subtest("non-root-set") {
 		igt_fork(child, 1) {
 			igt_drop_root();
 
-			ctx_param.context = ctx;
-			TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-			ctx_param.value--;
-			TEST_FAIL(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM, EPERM);
+			arg.context = ctx;
+			gem_context_get_param(fd, &arg);
+			arg.value--;
+			igt_assert_eq(__gem_context_set_param(fd, &arg), -EPERM);
 		}
 
 		igt_waitchildren();
 	}
 
 	igt_subtest("root-set") {
-		ctx_param.context = ctx;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		ctx_param.value--;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM);
+		arg.context = ctx;
+		gem_context_get_param(fd, &arg);
+		arg.value--;
+		gem_context_set_param(fd, &arg);
 	}
 
-	ctx_param.param = LOCAL_CONTEXT_PARAM_NO_ZEROMAP;
+	arg.param = LOCAL_CONTEXT_PARAM_NO_ZEROMAP;
 
 	igt_subtest("non-root-set-no-zeromap") {
 		igt_fork(child, 1) {
 			igt_drop_root();
 
-			ctx_param.context = ctx;
-			TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-			ctx_param.value--;
-			TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM);
+			arg.context = ctx;
+			gem_context_get_param(fd, &arg);
+			arg.value--;
+			gem_context_set_param(fd, &arg);
 		}
 
 		igt_waitchildren();
 	}
 
 	igt_subtest("root-set-no-zeromap-enabled") {
-		ctx_param.context = ctx;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		ctx_param.value = 1;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM);
+		arg.context = ctx;
+		gem_context_get_param(fd, &arg);
+		arg.value = 1;
+		gem_context_set_param(fd, &arg);
 	}
 
 	igt_subtest("root-set-no-zeromap-disabled") {
-		ctx_param.context = ctx;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM);
-		ctx_param.value = 0;
-		TEST_SUCCESS(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM);
+		arg.context = ctx;
+		gem_context_get_param(fd, &arg);
+		arg.value = 0;
+		gem_context_set_param(fd, &arg);
 	}
 
 	/* NOTE: This testcase intentionally tests for the next free parameter
 	 * to catch ABI extensions. Don't "fix" this testcase without adding all
 	 * the tests for the new param first. */
-	ctx_param.param = LOCAL_CONTEXT_PARAM_GTT_SIZE + 1;
+	arg.param = LOCAL_CONTEXT_PARAM_GTT_SIZE + 1;
 
 	igt_subtest("invalid-param-get") {
-		ctx_param.context = ctx;
-		TEST_FAIL(LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, EINVAL);
+		arg.context = ctx;
+		igt_assert_eq(__gem_context_get_param(fd, &arg), -EINVAL);
 	}
 
 	igt_subtest("invalid-param-set") {
-		ctx_param.context = ctx;
-		TEST_FAIL(LOCAL_IOCTL_I915_GEM_CONTEXT_SETPARAM, EINVAL);
+		arg.context = ctx;
+		igt_assert_eq(__gem_context_set_param(fd, &arg), -EINVAL);
 	}
 
 	igt_fixture

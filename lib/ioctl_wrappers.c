@@ -871,6 +871,17 @@ void gem_context_destroy(int fd, uint32_t ctx_id)
 	do_ioctl(fd, DRM_IOCTL_I915_GEM_CONTEXT_DESTROY, &destroy);
 }
 
+int __gem_context_get_param(int fd, struct local_i915_gem_context_param *p)
+{
+#define LOCAL_I915_GEM_CONTEXT_GETPARAM       0x34
+#define LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM DRM_IOWR (DRM_COMMAND_BASE + LOCAL_I915_GEM_CONTEXT_GETPARAM, struct local_i915_gem_context_param)
+	if (igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, p))
+		return -errno;
+
+	errno = 0;
+	return 0;
+}
+
 /**
  * gem_context_get_param:
  * @fd: open i915 drm file descriptor
@@ -883,10 +894,9 @@ void gem_context_destroy(int fd, uint32_t ctx_id)
  */
 void gem_context_get_param(int fd, struct local_i915_gem_context_param *p)
 {
-#define LOCAL_I915_GEM_CONTEXT_GETPARAM       0x34
-#define LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM DRM_IOWR (DRM_COMMAND_BASE + LOCAL_I915_GEM_CONTEXT_GETPARAM, struct local_i915_gem_context_param)
-	do_ioctl(fd, LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, p);
+	igt_assert(__gem_context_get_param(fd, p) == 0);
 }
+
 
 int __gem_context_set_param(int fd, struct local_i915_gem_context_param *p)
 {

@@ -126,6 +126,7 @@ void gem_context_require_param(int fd, uint64_t param);
 void gem_context_get_param(int fd, struct local_i915_gem_context_param *p);
 void gem_context_set_param(int fd, struct local_i915_gem_context_param *p);
 int __gem_context_set_param(int fd, struct local_i915_gem_context_param *p);
+int __gem_context_get_param(int fd, struct local_i915_gem_context_param *p);
 
 #define LOCAL_I915_GEM_USERPTR       0x33
 #define LOCAL_IOCTL_I915_GEM_USERPTR DRM_IOWR (DRM_COMMAND_BASE + LOCAL_I915_GEM_USERPTR, struct local_i915_gem_userptr)
