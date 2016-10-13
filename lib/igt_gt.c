@@ -33,6 +33,7 @@
 #include "igt_aux.h"
 #include "igt_core.h"
 #include "igt_gt.h"
+#include "igt_sysfs.h"
 #include "igt_debugfs.h"
 #include "ioctl_wrappers.h"
 #include "intel_reg.h"
@@ -70,17 +71,17 @@ static bool has_gpu_reset(int fd)
 	return once;
 }
 
-static void eat_error_state(void)
+static void eat_error_state(int dev)
 {
-	int fd, ret;
+	int dir;
 
-	fd = igt_debugfs_open("i915_error_state", O_WRONLY);
-	do {
-		ret = write(fd, "", 1);
-		if (ret < 0)
-			ret = -errno;
-	} while (ret == -EINTR || ret == -EAGAIN);
-	close(fd);
+	dir = igt_sysfs_open(dev, NULL);
+	if (dir < 0)
+		return;
+
+	/* Any write to the error state clears it */
+	igt_sysfs_set(dir, "error", "");
+	close(dir);
 }
 
 /**
@@ -175,7 +176,7 @@ void igt_disallow_hang(int fd, igt_hang_t arg)
 		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
 		param.value = 0;
 		if (__gem_context_set_param(fd, &param))
-			eat_error_state();
+			eat_error_state(fd);
 	}
 }
 
@@ -332,7 +333,7 @@ void igt_post_hang_ring(int fd, igt_hang_t arg)
 		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
 		param.value = 0;
 		if (__gem_context_set_param(fd, &param))
-			eat_error_state();
+			eat_error_state(fd);
 	}
 }
 
