@@ -135,8 +135,9 @@ igt_main
 
 	/* NOTE: This testcase intentionally tests for the next free parameter
 	 * to catch ABI extensions. Don't "fix" this testcase without adding all
-	 * the tests for the new param first. */
-	arg.param = LOCAL_CONTEXT_PARAM_GTT_SIZE + 1;
+	 * the tests for the new param first.
+	 */
+	arg.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE + 1;
 
 	igt_subtest("invalid-param-get") {
 		arg.context = ctx;
