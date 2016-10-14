@@ -151,6 +151,20 @@ int igt_sysfs_open_parameters(int device)
 	params = openat(dir, "device/driver/module/parameters", O_RDONLY);
 	close(dir);
 
+	if (params < 0) { /* builtin? */
+		drm_version_t version;
+		char name[32] = "";
+		char path[128];
+
+		memset(&version, 0, sizeof(version));
+		version.name_len = sizeof(name);
+		version.name = name;
+		ioctl(device, DRM_IOCTL_VERSION, &version);
+
+		sprintf(path, "/sys/module/%s/parameters", name);
+		params = open(path, O_RDONLY);
+	}
+
 	return params;
 }
 /**
