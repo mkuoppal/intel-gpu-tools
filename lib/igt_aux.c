@@ -628,8 +628,8 @@ void igt_cleanup_aperture_trashers(void)
 
 static const char *suspend_state_name[] = {
 	[SUSPEND_STATE_FREEZE] = "freeze",
-	[SUSPEND_STATE_MEM] = "mem",
 	[SUSPEND_STATE_STANDBY] = "standby",
+	[SUSPEND_STATE_MEM] = "mem",
 	[SUSPEND_STATE_DISK] = "disk",
 };
 
@@ -744,11 +744,22 @@ static uint32_t get_supported_suspend_states(int power_dir)
 
 /**
  * igt_system_suspend_autoresume:
+ * @state: an #igt_suspend_state, the target suspend state
+ * @test: an #igt_suspend_test, test point at which to complete the suspend
+ *	  cycle
  *
- * Execute a system suspend (to idle, memory, disk) cycle optionally
- * completing the cycle at a given test point and automaically wake up again.
- * Waking up is either achieved using the RTC wake-up alarm for a full suspend
- * cycle or a kernel timer for a suspend test cycle.
+ * Execute a system suspend cycle targeting the given @state optionally
+ * completing the cycle at the given @test point and automaically wake up
+ * again. Waking up is either achieved using the RTC wake-up alarm for a full
+ * suspend cycle or a kernel timer for a suspend test cycle. The kernel timer
+ * delay for a test cycle can be configured by the suspend.pm_test_delay
+ * kernel parameter (5 sec by default).
+ *
+ * #SUSPEND_TEST_NONE specifies a full suspend cycle.
+ * The #SUSPEND_TEST_FREEZER..#SUSPEND_TEST_CORE test points can make it
+ * possible to collect error logs in case a full suspend cycle would prevent
+ * this by hanging the machine, or they can provide an idea of the faulty
+ * component by comparing fail/no-fail results at different test points.
  *
  * This is very handy for implementing any kind of suspend/resume test.
  */

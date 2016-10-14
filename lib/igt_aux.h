@@ -116,15 +116,48 @@ void igt_cleanup_aperture_trashers(void);
 
 /* suspend/hibernate and auto-resume system */
 
+/**
+ *  igt_suspend_state:
+ *  @SUSPEND_STATE_FREEZE: suspend-to-idle target state, aka S0ix or freeze,
+ *			   first non-hibernation state
+ *  @SUSPEND_STATE_STANDBY: standby target state, aka S1, second
+ *			    non-hibernation state
+ *  @SUSPEND_STATE_MEM: suspend-to-mem target state aka S3, third
+ *			non-hibernation state
+ *  @SUSPEND_STATE_DISK: suspend-to-disk target state, aka S4 or hibernation
+ *
+ *  Target suspend states used with igt_system_suspend_autoresume().
+ *  See /sys/power/state for the available states on a given machine.
+ */
 enum igt_suspend_state {
 	SUSPEND_STATE_FREEZE,
-	SUSPEND_STATE_MEM,
 	SUSPEND_STATE_STANDBY,
+	SUSPEND_STATE_MEM,
 	SUSPEND_STATE_DISK,
 
+	/*< private >*/
 	SUSPEND_STATE_NUM,
 };
 
+/**
+ * igt_suspend_test:
+ * @SUSPEND_TEST_NONE: no testing, perform a full suspend/resume cycle
+ * @SUSPEND_TEST_FREEZER: complete cycle after freezing all freezable threads
+ * @SUSPEND_TEST_DEVICES: complete cycle after the above step and suspending
+ *			  devices (before calling the drivers' suspend late and
+ *			  no_irq hooks). Platform and system devices are not
+ *			  suspended here, see #SUSPEND_TEST_CORE.
+ * @SUSPEND_TEST_PLATFORM: complete cycle after all the above steps and calling
+ *			   the ACPI platform global control methods (applies
+ *			   only with /sys/power/disk set to platform)
+ * @SUSPEND_TEST_PROCESSORS: complete cycle after all the above steps and
+ *			     disabling non-boot CPUs
+ * @SUSPEND_TEST_CORE: complete cycle after all the above steps and suspending
+ *		       platform and system devices
+ *
+ * Test points used with igt_system_suspend_autoresume(). Specifies if and where
+ * the suspend sequence is to be terminated.
+ */
 enum igt_suspend_test {
 	SUSPEND_TEST_NONE,
 	SUSPEND_TEST_FREEZER,
@@ -133,6 +166,7 @@ enum igt_suspend_test {
 	SUSPEND_TEST_PROCESSORS,
 	SUSPEND_TEST_CORE,
 
+	/*< private >*/
 	SUSPEND_TEST_NUM,
 };
 
