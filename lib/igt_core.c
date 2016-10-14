@@ -734,7 +734,7 @@ out:
 		exit(ret == -1 ? 0 : IGT_EXIT_INVALID);
 
 	if (!list_subtests) {
-		kmsg(KERN_INFO "%s: executing\n", command_str);
+		kmsg(KERN_INFO "[IGT] %s: executing\n", command_str);
 		print_version();
 
 		oom_adjust_for_doom();
@@ -860,7 +860,7 @@ bool __igt_run_subtest(const char *subtest_name)
 		return false;
 	}
 
-	kmsg(KERN_INFO "%s: starting subtest %s\n", command_str, subtest_name);
+	kmsg(KERN_INFO "[IGT] %s: starting subtest %s\n", command_str, subtest_name);
 	igt_debug("Starting subtest: %s\n", subtest_name);
 
 	_igt_log_buffer_reset();
@@ -1343,7 +1343,7 @@ void igt_exit(void)
 	}
 
 	if (command_str)
-		kmsg(KERN_INFO "%s: exiting, ret=%d\n",
+		kmsg(KERN_INFO "[IGT] %s: exiting, ret=%d\n",
 		     command_str, igt_exitcode);
 	igt_debug("Exiting with status code %d\n", igt_exitcode);
 

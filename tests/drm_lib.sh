@@ -20,12 +20,12 @@ kmsg() {
 
 finish() {
 	exitcode=$?
-	kmsg "$KERN_INFO$NAME: exiting, ret=$exitcode"
+	kmsg "${KERN_INFO}[IGT] $NAME: exiting, ret=$exitcode"
 	exit $exitcode
 }
 trap finish EXIT
 
-kmsg "$KERN_INFO$NAME: executing"
+kmsg "${KERN_INFO}[IGT] $NAME: executing"
 
 skip() {
 	echo "$@"
