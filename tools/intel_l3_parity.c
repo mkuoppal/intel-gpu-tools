@@ -37,6 +37,7 @@
 #include <getopt.h>
 #include "intel_chipset.h"
 #include "intel_io.h"
+#include "igt_sysfs.h"
 #include "drmtest.h"
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -180,36 +181,33 @@ static void usage(const char *name)
 
 int main(int argc, char *argv[])
 {
-	const int device = drm_get_card();
-	char *path[REAL_MAX_SLICES];
-	uint32_t dft;
+	const char *path[REAL_MAX_SLICES] = {"l3_parity", "l3_parity_slice_1"};
 	int row = 0, bank = 0, sbank = 0;
 	int fd[REAL_MAX_SLICES] = {0}, ret, i;
 	int action = '0';
-	int drm_fd = drm_open_driver(DRIVER_INTEL);
 	int daemonize = 0;
-	devid = intel_get_drm_devid(drm_fd);
+	int device, dir;
+	uint32_t dft;
 
+	device = drm_open_driver(DRIVER_INTEL);
+	devid = intel_get_drm_devid(device);
 	if (intel_gen(devid) < 7 || IS_VALLEYVIEW(devid))
-		exit(EXIT_SUCCESS);
+		exit(77);
 
 	assert(intel_register_access_init(intel_get_pci_device(), 0) == 0);
 
-	ret = asprintf(&path[0], "/sys/class/drm/card%d/l3_parity", device);
-	assert(ret != -1);
-	ret = asprintf(&path[1], "/sys/class/drm/card%d/l3_parity_slice_1", device);
-	assert(ret != -1);
+	dir = igt_sysfs_open(device, NULL);
 
 	for_each_slice(i) {
-		fd[i] = open(path[i], O_RDWR);
-		assert(fd[i]);
-		ret = read(fd[i], l3logs[i], NUM_REGS * sizeof(uint32_t));
-		if (ret == -1) {
-			perror("Reading sysfs");
-			exit(EXIT_FAILURE);
+		fd[i] = openat(dir, path[i], O_RDWR);
+		if (read(fd[i], l3logs[i], NUM_REGS * sizeof(uint32_t)) < 0) {
+			perror(path[i]);
+			exit(77);
 		}
 		assert(lseek(fd[i], 0, SEEK_SET) == 0);
 	}
+
+	close(dir);
 
 	/* NB: It is potentially unsafe to read this register if the kernel is
 	 * actively using this register range, or we're running multiple

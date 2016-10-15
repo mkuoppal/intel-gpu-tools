@@ -3,12 +3,7 @@
 SOURCE_DIR="$( dirname "${BASH_SOURCE[0]}" )"
 . $SOURCE_DIR/drm_lib.sh
 
-if ! find /sys/class/drm/card*/ | grep l3_parity > /dev/null ; then
-	echo "no l3_parity interface, skipping test"
-	exit $IGT_EXIT_SKIP
-fi
-
-$SOURCE_DIR/../tools/intel_l3_parity -r 0 -b 0 -s 0 -e
+$SOURCE_DIR/../tools/intel_l3_parity -r 0 -b 0 -s 0 -e || exit $?
 
 #Check that we can remap a row
 $SOURCE_DIR/../tools/intel_l3_parity -r 0 -b 0 -s 0 -d
