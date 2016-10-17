@@ -269,6 +269,10 @@ int __drm_open_driver(int chipset)
 		    is_virtio_device(fd))
 			return fd;
 
+		/* Only VGEM-specific tests should be run on VGEM */
+		if (chipset & DRIVER_ANY && !is_vgem_device(fd))
+			return fd;
+
 		close(fd);
 	}
 
