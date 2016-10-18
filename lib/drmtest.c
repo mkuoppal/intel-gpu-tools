@@ -344,14 +344,18 @@ int drm_open_driver(int chipset)
 	fd = __drm_open_driver(chipset);
 	igt_skip_on_f(fd<0, "No known gpu found\n");
 
-	if (__sync_fetch_and_add(&open_count, 1))
-		return fd;
-
+	/* For i915, at least, we ensure that the driver is idle before
+	 * starting a test and we install an exit handler to wait until
+	 * idle before quitting.
+	 */
 	if (is_i915_device(fd)) {
-		gem_quiescent_gpu(fd);
-		igt_install_exit_handler(quiescent_gpu_at_exit);
+		if (__sync_fetch_and_add(&open_count, 1) == 0) {
+			gem_quiescent_gpu(fd);
+
+			at_exit_drm_fd = __drm_open_driver(chipset);
+			igt_install_exit_handler(quiescent_gpu_at_exit);
+		}
 	}
-	at_exit_drm_fd = __drm_open_driver(chipset);
 
 	return fd;
 }
