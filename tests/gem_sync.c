@@ -81,7 +81,7 @@ static bool can_mi_store_dword(int gen, unsigned engine)
 }
 
 static void
-sync_ring(int fd, unsigned ring, int num_children)
+sync_ring(int fd, unsigned ring, int num_children, int timeout)
 {
 	unsigned engines[16];
 	const char *names[16];
@@ -141,7 +141,7 @@ sync_ring(int fd, unsigned ring, int num_children)
 				gem_execbuf(fd, &execbuf);
 				gem_sync(fd, object.handle);
 			} while (++cycles & 1023);
-		} while ((elapsed = gettime() - start) < SLOW_QUICK(10, 1));
+		} while ((elapsed = gettime() - start) < timeout);
 		igt_info("%s%sompleted %ld cycles: %.3f us\n",
 			 names[child % num_engines] ?: "",
 			 names[child % num_engines] ? " c" : "C",
@@ -149,12 +149,12 @@ sync_ring(int fd, unsigned ring, int num_children)
 
 		gem_close(fd, object.handle);
 	}
-	igt_waitchildren_timeout(20, NULL);
+	igt_waitchildren_timeout(timeout+10, NULL);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 static void
-store_ring(int fd, unsigned ring, int num_children)
+store_ring(int fd, unsigned ring, int num_children, int timeout)
 {
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	unsigned engines[16];
@@ -269,7 +269,7 @@ store_ring(int fd, unsigned ring, int num_children)
 				gem_execbuf(fd, &execbuf);
 				gem_sync(fd, object[1].handle);
 			} while (++cycles & 1023);
-		} while ((elapsed = gettime() - start) < SLOW_QUICK(10, 1));
+		} while ((elapsed = gettime() - start) < timeout);
 		igt_info("%s%sompleted %ld cycles: %.3f us\n",
 			 names[child % num_engines] ?: "",
 			 names[child % num_engines] ? " c" : "C",
@@ -278,7 +278,7 @@ store_ring(int fd, unsigned ring, int num_children)
 		gem_close(fd, object[1].handle);
 		gem_close(fd, object[0].handle);
 	}
-	igt_waitchildren_timeout(20, NULL);
+	igt_waitchildren_timeout(timeout+10, NULL);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
@@ -508,7 +508,7 @@ store_many(int fd, unsigned ring, int timeout)
 }
 
 static void
-sync_all(int fd, int num_children)
+sync_all(int fd, int num_children, int timeout)
 {
 	const struct intel_execution_engine *e;
 	unsigned engines[16];
@@ -560,18 +560,18 @@ sync_all(int fd, int num_children)
 				}
 				gem_sync(fd, object.handle);
 			} while (++cycles & 1023);
-		} while ((elapsed = gettime() - start) < SLOW_QUICK(10, 1));
+		} while ((elapsed = gettime() - start) < timeout);
 		igt_info("Completed %ld cycles: %.3f us\n",
 			 cycles, elapsed*1e6/cycles);
 
 		gem_close(fd, object.handle);
 	}
-	igt_waitchildren_timeout(20, NULL);
+	igt_waitchildren_timeout(timeout+10, NULL);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
 static void
-store_all(int fd, int num_children)
+store_all(int fd, int num_children, int timeout)
 {
 	const int gen = intel_gen(intel_get_drm_devid(fd));
 	const struct intel_execution_engine *e;
@@ -679,14 +679,14 @@ store_all(int fd, int num_children)
 				}
 				gem_sync(fd, object[1].handle);
 			} while (++cycles & 1023);
-		} while ((elapsed = gettime() - start) < SLOW_QUICK(10, 1));
+		} while ((elapsed = gettime() - start) < timeout);
 		igt_info("Completed %ld cycles: %.3f us\n",
 			 cycles, elapsed*1e6/cycles);
 
 		gem_close(fd, object[1].handle);
 		gem_close(fd, object[0].handle);
 	}
-	igt_waitchildren_timeout(20, NULL);
+	igt_waitchildren_timeout(timeout+10, NULL);
 	igt_assert_eq(intel_detect_and_clear_missed_interrupts(fd), 0);
 }
 
@@ -736,36 +736,36 @@ igt_main
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%s", e->name)
-			sync_ring(fd, e->exec_id | e->flags, 1);
+			sync_ring(fd, e->exec_id | e->flags, 1, 150);
 		igt_subtest_f("store-%s", e->name)
-			store_ring(fd, e->exec_id | e->flags, 1);
+			store_ring(fd, e->exec_id | e->flags, 1, 150);
 		igt_subtest_f("many-%s", e->name)
-			store_many(fd, e->exec_id | e->flags, 20);
+			store_many(fd, e->exec_id | e->flags, 150);
 		igt_subtest_f("forked-%s", e->name)
-			sync_ring(fd, e->exec_id | e->flags, ncpus);
+			sync_ring(fd, e->exec_id | e->flags, ncpus, 150);
 		igt_subtest_f("forked-store-%s", e->name)
-			store_ring(fd, e->exec_id | e->flags, ncpus);
+			store_ring(fd, e->exec_id | e->flags, ncpus, 150);
 	}
 
 	igt_subtest("basic-each")
-		sync_ring(fd, ~0u, 1);
+		sync_ring(fd, ~0u, 1, 5);
 	igt_subtest("basic-store-each")
-		store_ring(fd, ~0u, 1);
+		store_ring(fd, ~0u, 1, 5);
 	igt_subtest("basic-many-each")
-		store_many(fd, ~0u, 10);
+		store_many(fd, ~0u, 5);
 	igt_subtest("forked-each")
-		sync_ring(fd, ~0u, ncpus);
+		sync_ring(fd, ~0u, ncpus, 150);
 	igt_subtest("forked-store-each")
-		store_ring(fd, ~0u, ncpus);
+		store_ring(fd, ~0u, ncpus, 150);
 
 	igt_subtest("basic-all")
-		sync_all(fd, 1);
+		sync_all(fd, 1, 5);
 	igt_subtest("basic-store-all")
-		store_all(fd, 1);
+		store_all(fd, 1, 5);
 	igt_subtest("forked-all")
-		sync_all(fd, ncpus);
+		sync_all(fd, ncpus, 150);
 	igt_subtest("forked-store-all")
-		store_all(fd, ncpus);
+		store_all(fd, ncpus, 150);
 
 	igt_fixture {
 		igt_stop_hang_detector();

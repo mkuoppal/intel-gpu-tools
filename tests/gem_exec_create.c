@@ -157,9 +157,9 @@ igt_main
 	}
 
 	igt_subtest("basic")
-		all(device, 0, 20, 1);
+		all(device, 0, 5, 1);
 	igt_subtest("forked")
-		all(device, 0, 20, ncpus);
+		all(device, 0, 150, ncpus);
 
 	igt_subtest("madvise")
 		all(device, LEAK, 20, 1);

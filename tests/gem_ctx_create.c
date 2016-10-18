@@ -211,9 +211,11 @@ igt_main
 	}
 
 	igt_subtest("basic-files")
-		files(fd, 20, 1);
+		files(fd, 5, 1);
+	igt_subtest("files")
+		files(fd, 150, 1);
 	igt_subtest("forked-files")
-		files(fd, 20, ncpus);
+		files(fd, 150, ncpus);
 
 	for (const struct intel_execution_engine *e = intel_execution_engines;
 	     e->name; e++) {

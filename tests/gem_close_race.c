@@ -230,7 +230,7 @@ igt_main
 	}
 
 	igt_subtest("basic-threads")
-		threads(10);
+		threads(1);
 
 	igt_subtest("process-exit") {
 		igt_fork(child, 768)

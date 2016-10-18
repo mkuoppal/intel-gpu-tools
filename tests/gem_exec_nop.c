@@ -315,10 +315,10 @@ igt_main
 	}
 
 	igt_subtest("basic-series")
-		series(device, handle, 10);
+		series(device, handle, 5);
 
 	igt_subtest("basic-parallel")
-		parallel(device, handle, 10);
+		parallel(device, handle, 5);
 
 	for (e = intel_execution_engines; e->name; e++)
 		igt_subtest_f("%s", e->name)

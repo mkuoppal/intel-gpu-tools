@@ -67,7 +67,8 @@ static double elapsed(const struct timespec *start, const struct timespec *end)
 static void single(int fd, uint32_t handle,
 		   const struct intel_execution_engine *e,
 		   unsigned flags,
-		   const int ncpus)
+		   const int ncpus,
+		   int timeout)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj;
@@ -117,15 +118,15 @@ static void single(int fd, uint32_t handle,
 		clock_gettime(CLOCK_MONOTONIC, &start);
 		do {
 			igt_while_interruptible(flags & INTERRUPTIBLE) {
-				for (int loop = 0; loop < 1024; loop++) {
+				for (int loop = 0; loop < 64; loop++) {
 					execbuf.rsvd1 = contexts[loop % 64];
 					reloc.presumed_offset = 0;
 					gem_execbuf(fd, &execbuf);
 				}
-				count += 1024;
+				count += 64;
 			}
 			clock_gettime(CLOCK_MONOTONIC, &now);
-		} while (elapsed(&start, &now) < 20.);
+		} while (elapsed(&start, &now) < timeout);
 		gem_sync(fd, handle);
 		clock_gettime(CLOCK_MONOTONIC, &now);
 
@@ -161,17 +162,17 @@ igt_main
 
 	for (e = intel_execution_engines; e->name; e++) {
 		igt_subtest_f("%s%s", e->exec_id == 0 ? "basic-" : "", e->name)
-			single(fd, light, e, 0, 1);
+			single(fd, light, e, 0, 1, 5);
 		igt_subtest_f("%s%s-heavy", e->exec_id == 0 ? "basic-" : "", e->name)
-			single(fd, heavy, e, 0, 1);
+			single(fd, heavy, e, 0, 1, 5);
 		igt_subtest_f("%s-interruptible", e->name)
-			single(fd, light, e, INTERRUPTIBLE, 1);
+			single(fd, light, e, INTERRUPTIBLE, 1, 150);
 		igt_subtest_f("forked-%s", e->name)
-			single(fd, light, e, 0, ncpus);
+			single(fd, light, e, 0, ncpus, 150);
 		igt_subtest_f("forked-%s-heavy", e->name)
-			single(fd, heavy, e, 0, ncpus);
+			single(fd, heavy, e, 0, ncpus, 150);
 		igt_subtest_f("forked-%s-interruptible", e->name)
-			single(fd, light, e, INTERRUPTIBLE, ncpus);
+			single(fd, light, e, INTERRUPTIBLE, ncpus, 150);
 	}
 
 	igt_fixture {
