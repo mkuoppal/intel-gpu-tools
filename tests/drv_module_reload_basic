@@ -33,14 +33,22 @@ function reload() {
 	pkill alsactl
 	snd_hda_intel_unloaded=0
 	if mod_loaded snd_hda_intel; then
-		rmmod snd_hda_intel && snd_hda_intel_unloaded=1
+		if rmmod snd_hda_intel; then
+			snd_hda_intel_unloaded=1
+		else
+			lsmod >&2
+		fi
 	fi
 
 	# gen5 only
 	if mod_loaded intel_ips; then
 		rmmod intel_ips
 	fi
-	rmmod i915 || return $IGT_EXIT_SKIP
+
+	if ! rmmod i915; then
+		lsmod >&2
+		return $IGT_EXIT_SKIP
+	fi
 	#ignore errors in intel-gtt, often built-in
 	rmmod intel-gtt &> /dev/null
 	# drm may be used by other devices (nouveau, radeon, udl, etc)
