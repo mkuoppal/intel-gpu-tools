@@ -185,14 +185,14 @@ igt_main
 	}
 
 	for (e = intel_execution_engines; e->name; e++) {
-		igt_subtest_f("basic-%s", e->name) {
+		igt_subtest_f("short-%s", e->name) {
 			check_test_requirements(fd, e->exec_id);
-			store_test(fd, e->exec_id | e->flags, 16*1024);
+			store_test(fd, e->exec_id | e->flags, 4*1024);
 		}
 
 		igt_subtest_f("long-%s", e->name) {
 			check_test_requirements(fd, e->exec_id);
-			store_test(fd, e->exec_id | e->flags, 1024*1024);
+			store_test(fd, e->exec_id | e->flags, 4*1024*1024);
 		}
 	}
 

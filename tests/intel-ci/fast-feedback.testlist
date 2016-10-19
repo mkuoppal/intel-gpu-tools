@@ -111,13 +111,6 @@ igt@gem_ringfill@basic-default
 igt@gem_ringfill@basic-default-forked
 igt@gem_ringfill@basic-default-hang
 igt@gem_ringfill@basic-default-interruptible
-igt@gem_storedw_loop@basic-blt
-igt@gem_storedw_loop@basic-bsd
-igt@gem_storedw_loop@basic-bsd1
-igt@gem_storedw_loop@basic-bsd2
-igt@gem_storedw_loop@basic-default
-igt@gem_storedw_loop@basic-render
-igt@gem_storedw_loop@basic-vebox
 igt@gem_sync@basic-all
 igt@gem_sync@basic-each
 igt@gem_sync@basic-many-each
