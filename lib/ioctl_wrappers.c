@@ -111,6 +111,19 @@ gem_handle_to_libdrm_bo(drm_intel_bufmgr *bufmgr, int fd, const char *name, uint
 	return bo;
 }
 
+static int
+__gem_get_tiling(int fd, struct drm_i915_gem_get_tiling *arg)
+{
+	int err;
+
+	err = 0;
+	if (igt_ioctl(fd, DRM_IOCTL_I915_GEM_GET_TILING, arg))
+		err = -errno;
+	errno = 0;
+
+	return err;
+}
+
 /**
  * gem_get_tiling:
  * @fd: open i915 drm file descriptor
@@ -119,21 +132,23 @@ gem_handle_to_libdrm_bo(drm_intel_bufmgr *bufmgr, int fd, const char *name, uint
  * @swizzle: (out) bit 6 swizzle mode
  *
  * This wraps the GET_TILING ioctl.
+ *
+ * Returns whether the actual physical tiling matches the reported tiling.
  */
-void
+bool
 gem_get_tiling(int fd, uint32_t handle, uint32_t *tiling, uint32_t *swizzle)
 {
 	struct drm_i915_gem_get_tiling get_tiling;
-	int ret;
 
 	memset(&get_tiling, 0, sizeof(get_tiling));
 	get_tiling.handle = handle;
 
-	ret = igt_ioctl(fd, DRM_IOCTL_I915_GEM_GET_TILING, &get_tiling);
-	igt_assert(ret == 0);
+	igt_assert_eq(__gem_get_tiling(fd, &get_tiling), 0);
 
 	*tiling = get_tiling.tiling_mode;
 	*swizzle = get_tiling.swizzle_mode;
+
+	return get_tiling.phys_swizzle_mode == get_tiling.swizzle_mode;
 }
 
 int __gem_set_tiling(int fd, uint32_t handle, uint32_t tiling, uint32_t stride)

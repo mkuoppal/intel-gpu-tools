@@ -121,7 +121,7 @@ igt_simple_main
 	fd = drm_open_driver(DRIVER_INTEL);
 
 	handle = create_bo(fd);
-	gem_get_tiling(fd, handle, &tiling, &swizzle);
+	igt_require(gem_get_tiling(fd, handle, &tiling, &swizzle));
 
 	devid = intel_get_drm_devid(fd);
 

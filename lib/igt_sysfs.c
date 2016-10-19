@@ -148,7 +148,8 @@ int igt_sysfs_open_parameters(int device)
 	if (dir < 0)
 		return -1;
 
-	params = openat(dir, "device/driver/module/parameters", O_RDONLY);
+	params = -1;
+	//params = openat(dir, "device/driver/module/parameters", O_RDONLY);
 	close(dir);
 
 	if (params < 0) { /* builtin? */

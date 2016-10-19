@@ -246,7 +246,7 @@ static void draw_rect_mmap_cpu(int fd, struct buf_data *buf, struct rect *rect,
 
 	gem_set_domain(fd, buf->handle, I915_GEM_DOMAIN_CPU,
 		       I915_GEM_DOMAIN_CPU);
-	gem_get_tiling(fd, buf->handle, &tiling, &swizzle);
+	igt_require(gem_get_tiling(fd, buf->handle, &tiling, &swizzle));
 
 	/* We didn't implement suport for the older tiling methods yet. */
 	if (tiling != I915_TILING_NONE)
@@ -295,7 +295,7 @@ static void draw_rect_mmap_wc(int fd, struct buf_data *buf, struct rect *rect,
 
 	gem_set_domain(fd, buf->handle, I915_GEM_DOMAIN_GTT,
 		       I915_GEM_DOMAIN_GTT);
-	gem_get_tiling(fd, buf->handle, &tiling, &swizzle);
+	igt_require(gem_get_tiling(fd, buf->handle, &tiling, &swizzle));
 
 	/* We didn't implement suport for the older tiling methods yet. */
 	if (tiling != I915_TILING_NONE)
@@ -392,7 +392,7 @@ static void draw_rect_pwrite(int fd, struct buf_data *buf,
 {
 	uint32_t tiling, swizzle;
 
-	gem_get_tiling(fd, buf->handle, &tiling, &swizzle);
+	igt_require(gem_get_tiling(fd, buf->handle, &tiling, &swizzle));
 
 	switch (tiling) {
 	case I915_TILING_NONE:
@@ -419,7 +419,7 @@ static void draw_rect_blt(int fd, struct cmd_data *cmd_data,
 	uint32_t tiling, swizzle;
 	int pitch;
 
-	gem_get_tiling(fd, buf->handle, &tiling, &swizzle);
+	igt_require(gem_get_tiling(fd, buf->handle, &tiling, &swizzle));
 
 	dst = gem_handle_to_libdrm_bo(cmd_data->bufmgr, fd, "", buf->handle);
 	igt_assert(dst);
@@ -483,7 +483,7 @@ static void draw_rect_render(int fd, struct cmd_data *cmd_data,
 		    rect->w % (32 / buf->bpp) != 0 ||
 		    rect->h % (32 / buf->bpp) != 0);
 
-	gem_get_tiling(fd, buf->handle, &tiling, &swizzle);
+	igt_require(gem_get_tiling(fd, buf->handle, &tiling, &swizzle));
 
 	/* We create a temporary buffer and copy from it using rendercopy. */
 	tmp.size = rect->w * rect->h * pixel_size;
