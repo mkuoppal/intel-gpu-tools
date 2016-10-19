@@ -87,11 +87,16 @@ swizzle_bit(int bit, int offset)
 	return (offset & (1 << bit)) >> (bit - 6);
 }
 
+struct offset {
+	int base_x, base_y;
+	int tile_x, tile_y;
+};
+
 /* Translate from a swizzled offset in the tiled buffer to the corresponding
  * value from the original linear buffer.
  */
 static uint32_t
-calculate_expected(int offset)
+calculate_expected(int offset, struct offset *dbg)
 {
 	int tile_off = offset & (tile_size - 1);
 	int tile_base = offset & -tile_size;
@@ -99,15 +104,14 @@ calculate_expected(int offset)
 	int tiles_per_row = 4*WIDTH / tile_width;
 
 	/* base x,y values from the tile (page) index. */
-	int base_y = tile_index / tiles_per_row * tile_height;
-	int base_x = tile_index % tiles_per_row * (tile_width/4);
+	dbg->base_y = tile_index / tiles_per_row * tile_height;
+	dbg->base_x = tile_index % tiles_per_row * (tile_width/4);
 
 	/* x, y offsets within the tile */
-	int tile_y = tile_off / tile_width;
-	int tile_x = (tile_off % tile_width) / 4;
+	dbg->tile_y = tile_off / tile_width;
+	dbg->tile_x = (tile_off % tile_width) / 4;
 
-	igt_debug("%3d, %3d, %3d,%3d\n", base_x, base_y, tile_x, tile_y);
-	return (base_y + tile_y) * WIDTH + base_x + tile_x;
+	return (dbg->base_y + dbg->tile_y) * WIDTH + dbg->base_x + dbg->tile_x;
 }
 
 igt_simple_main
@@ -163,7 +167,8 @@ igt_simple_main
 		 * offset it's looking for).
 		 */
 		for (j = offset; j < offset + len; j += 4) {
-			uint32_t expected_val, found_val;
+			struct offset dbg;
+			uint32_t expected, found;
 			int swizzled_offset;
 			const char *swizzle_str;
 
@@ -200,12 +205,15 @@ igt_simple_main
 				igt_assert_f(0, "Bad swizzle bits; %d\n",
 					     swizzle);
 			}
-			expected_val = calculate_expected(swizzled_offset);
-			found_val = linear[(j - offset) / 4];
-			igt_assert_f(expected_val == found_val,
+			expected = calculate_expected(swizzled_offset, &dbg);
+			found = linear[(j - offset) / 4];
+			igt_assert_f(expected == found,
 				     "Bad read [%d]: %d instead of %d at 0x%08x "
+				     "[tile (%d, %d) subtile (%d, %d)] "
 				     "for read from 0x%08x to 0x%08x, swizzle=%s\n",
-				     i, found_val, expected_val, j,
+				     i, found, expected, j,
+				     dbg.base_x, dbg.base_y,
+				     dbg.tile_x, dbg.tile_y,
 				     offset, offset + len,
 				     swizzle_str);
 		}
