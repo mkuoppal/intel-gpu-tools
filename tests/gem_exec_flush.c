@@ -121,6 +121,7 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 		struct drm_i915_gem_relocation_entry reloc1[1024];
 		struct drm_i915_gem_execbuffer2 execbuf;
 		unsigned long cycles = 0;
+		bool snoop = false;
 		uint32_t *ptr;
 		uint32_t *map;
 		int i;
@@ -136,7 +137,8 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 				       I915_GEM_DOMAIN_GTT,
 				       I915_GEM_DOMAIN_GTT);
 		} else {
-			gem_set_caching(fd, obj[0].handle, !!(flags & COHERENT));
+			snoop = flags & COHERENT;
+			gem_set_caching(fd, obj[0].handle, snoop);
 			map = gem_mmap__cpu(fd, obj[0].handle, 0, 4096, PROT_WRITE);
 			gem_set_domain(fd, obj[0].handle,
 				       I915_GEM_DOMAIN_CPU,
@@ -149,6 +151,13 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 		gem_set_domain(fd, obj[0].handle,
 			       I915_GEM_DOMAIN_GTT,
 			       I915_GEM_DOMAIN_GTT);
+
+		/* Prepara a mappable binding to prevent pread mighrating */
+		if (!snoop) {
+			ptr = gem_mmap__gtt(fd, obj[0].handle, 4096, PROT_READ);
+			igt_assert_eq_u32(ptr[0], 0xabcdabcd);
+			munmap(ptr, 4096);
+		}
 
 		memset(&execbuf, 0, sizeof(execbuf));
 		execbuf.buffers_ptr = (uintptr_t)obj;
@@ -241,6 +250,8 @@ static void run(int fd, unsigned ring, int nchild, int timeout,
 			i = 16 * (idx % 64) + (idx / 64);
 			obj[1].relocs_ptr = (uintptr_t)&reloc0[i];
 			obj[2].relocs_ptr = (uintptr_t)&reloc1[i];
+			igt_assert_eq_u64(reloc0[i].presumed_offset, obj[0].offset);
+			igt_assert_eq_u64(reloc1[i].presumed_offset, obj[0].offset);
 			execbuf.batch_start_offset =  64*i;
 
 overwrite:
