@@ -385,21 +385,23 @@ static void init_mode_params(struct modeset_params *params, uint32_t crtc_id,
 			     drmModeConnectorPtr connector,
 			     drmModeModeInfoPtr mode)
 {
-	uint32_t plane_id = 0;
+	uint32_t overlay_plane_id = 0;
 	int crtc_idx = kmstest_get_crtc_idx(drm.res, crtc_id);
 	int i;
 
-	for (i = 0; i < drm.plane_res->count_planes && plane_id == 0; i++)
+	for (i = 0; i < drm.plane_res->count_planes; i++)
 		if ((drm.planes[i]->possible_crtcs & (1 << crtc_idx)) &&
-		    drm.plane_types[i] == DRM_PLANE_TYPE_OVERLAY)
-			plane_id = drm.planes[i]->plane_id;
+		    drm.plane_types[i] == DRM_PLANE_TYPE_OVERLAY) {
+			overlay_plane_id = drm.planes[i]->plane_id;
+			break;
+		}
 
-	igt_assert(plane_id);
+	igt_require(overlay_plane_id);
 
 	params->crtc_id = crtc_id;
 	params->connector_id = connector->connector_id;
 	params->mode = mode;
-	params->sprite_id = plane_id;
+	params->sprite_id = overlay_plane_id;
 
 	params->fb.fb = NULL;
 	params->fb.w = mode->hdisplay;
@@ -520,7 +522,7 @@ static bool init_modeset_cached_params(void)
 		return true;
 	}
 
-	igt_assert(drm.res->count_crtcs >= 2);
+	igt_require(drm.res->count_crtcs >= 2);
 	scnd_crtc_id = kmstest_find_crtc_for_connector(drm.fd, drm.res,
 						      scnd_connector,
 			1 << kmstest_get_crtc_idx(drm.res, prim_crtc_id));
