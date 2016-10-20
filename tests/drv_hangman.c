@@ -32,6 +32,8 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "igt_debugfs.h"
+
 #ifndef I915_PARAM_CMD_PARSER_VERSION
 #define I915_PARAM_CMD_PARSER_VERSION       28
 #endif
@@ -166,15 +168,21 @@ static void test_error_state_basic(void)
 {
 	int fd;
 
-	fd = drm_open_driver(DRIVER_INTEL);
-
 	clear_error_state();
 	assert_error_state_clear();
 
-	submit_hang(fd, I915_EXEC_RENDER);
+	/* Manually trigger a hang by request a reset */
+	fd = igt_debugfs_open("i915_wedged", O_WRONLY);
+	igt_ignore_warn(write(fd, "1\n", 2));
+	close(fd);
+
+	/* Wait for the error capture and gpu reset to complete */
+	fd = drm_open_driver(DRIVER_INTEL);
+	gem_quiescent_gpu(fd);
 	close(fd);
 
 	assert_error_state_collected();
+
 	clear_error_state();
 	assert_error_state_clear();
 }
