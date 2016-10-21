@@ -229,6 +229,9 @@ static void check_error_state(const int gen,
 
 			for (i = 0; i < 1024; i++) {
 				igt_assert(getline(&line, &line_size, file) > 0);
+				if (line[0] == ':' || line[0] == '~')
+					break;
+
 				snprintf(expected_line, sizeof(expected_line),
 					 "%08x :  %08x",
 					 4*i, batch[i]);
