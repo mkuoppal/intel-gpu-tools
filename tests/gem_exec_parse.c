@@ -385,6 +385,29 @@ static void exec_batch_chained(int fd, uint32_t cmd_bo, uint32_t *cmds,
 	gem_close(fd, target_bo);
 }
 
+static void stray_lri(int fd, uint32_t handle)
+{
+	/* Ideally this would test all once whitelisted registers */
+	uint32_t lri[] = {
+		MI_LOAD_REGISTER_IMM,
+		OACONTROL,
+		0x31337000,
+		MI_BATCH_BUFFER_END,
+	};
+	int err;
+
+	igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
+
+	err = __exec_batch(fd, handle, lri, sizeof(lri), I915_EXEC_RENDER);
+	if (err == -EINVAL)
+		return;
+
+	igt_assert_eq(err, 0);
+	gem_sync(fd, handle);
+
+	igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
+}
+
 uint32_t handle;
 int fd;
 
@@ -461,6 +484,23 @@ igt_main
 			   display_flip, sizeof(display_flip),
 			   I915_EXEC_BLT,
 			   -EINVAL);
+	}
+
+	igt_subtest_group {
+		igt_fixture {
+			intel_register_access_init(intel_get_pci_device(), 0);
+
+			intel_register_write(OACONTROL, 0xdeadbeef);
+			igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
+		}
+
+		igt_subtest("basic-stray-lri")
+			stray_lri(fd, handle);
+
+		igt_fixture {
+			intel_register_write(OACONTROL, 0);
+			intel_register_access_fini();
+		}
 	}
 
 	igt_subtest("registers") {
