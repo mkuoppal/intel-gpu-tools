@@ -268,6 +268,8 @@ static void setup_crtcs(drmModeRes *resources, struct connector_config *cconf,
 	int i;
 	int encoder_usage_count[resources->count_encoders];
 
+	kmstest_unset_all_crtcs(drm_fd, resources);
+
 	i = 0;
 	crtc_count = 0;
 	crtc = crtcs;
