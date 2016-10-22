@@ -321,6 +321,10 @@ test_coherency(int fd)
 	cpu = gem_mmap__cpu(fd, handle, 0, OBJECT_SIZE, PROT_READ | PROT_WRITE);
 	set_domain_gtt(fd, handle);
 
+	/* On byt/bsw/bxt this detects an interesting behaviour where the
+	 * CPU cannot flush the iobar and so the read may bypass the write.
+	 * https://bugs.freedesktop.org/show_bug.cgi?id=94314
+	 */
 	for (i = 0; i < OBJECT_SIZE / 64; i++) {
 		int x = 16*i + (i%16);
 		gtt[x] = i;
