@@ -71,6 +71,7 @@ enum test_flags {
 	TEST_SINGLE_CRTC_CLONE		= 0x04,
 	TEST_EXCLUSIVE_CRTC_CLONE	= 0x08,
 	TEST_STEALING			= 0x10,
+	TEST_TIMINGS			= 0x20,
 };
 
 struct test_config {
@@ -411,6 +412,75 @@ static int test_stealing(int fd, struct crtc_config *crtc, uint32_t *ids)
 	return ret;
 }
 
+static double frame_time(const drmModeModeInfo *kmode)
+{
+	return 1000.0 * kmode->htotal * kmode->vtotal / kmode->clock;
+}
+
+static void check_timings(int crtc_idx, const drmModeModeInfo *kmode)
+{
+#define CALIBRATE_TS_STEPS 120 /* ~2s has to be less than 128! */
+	drmVBlank wait;
+	igt_stats_t stats;
+	uint32_t last_seq;
+	uint64_t last_timestamp;
+	double expected;
+	double mean;
+	double stddev;
+	int n;
+
+	memset(&wait, 0, sizeof(wait));
+	wait.request.type = kmstest_get_vbl_flag(crtc_idx);
+	wait.request.type |= DRM_VBLANK_ABSOLUTE | DRM_VBLANK_NEXTONMISS;
+	do_or_die(drmWaitVBlank(drm_fd, &wait));
+
+	last_seq = wait.reply.sequence;
+	last_timestamp = wait.reply.tval_sec;
+	last_timestamp *= 1000000;
+	last_timestamp += wait.reply.tval_usec;
+
+	memset(&wait, 0, sizeof(wait));
+	wait.request.type = kmstest_get_vbl_flag(crtc_idx);
+	wait.request.type |= DRM_VBLANK_ABSOLUTE | DRM_VBLANK_EVENT;
+	wait.request.sequence = last_seq;
+	for (n = 0; n < CALIBRATE_TS_STEPS; n++) {
+		++wait.request.sequence;
+		do_or_die(drmWaitVBlank(drm_fd, &wait));
+	}
+
+	igt_stats_init_with_size(&stats, CALIBRATE_TS_STEPS);
+	for (n = 0; n < CALIBRATE_TS_STEPS; n++) {
+		struct drm_event_vblank ev;
+		uint64_t now;
+
+		igt_assert(read(drm_fd, &ev, sizeof(ev)) == sizeof(ev));
+		igt_assert_eq(ev.sequence, last_seq + 1);
+
+		now = ev.tv_sec;
+		now *= 1000000;
+		now += ev.tv_usec;
+
+		igt_stats_push(&stats, now - last_timestamp);
+
+		last_timestamp = now;
+		last_seq = ev.sequence;
+	}
+
+	expected = frame_time(kmode);
+
+	mean = igt_stats_get_mean(&stats);
+	stddev = igt_stats_get_std_deviation(&stats);
+
+	igt_info("Expected frametime: %.0fus; measured %.1fus +- %.3fus accuracy %.2f%%\n",
+		 expected, mean, stddev, 100 * 6 * stddev / mean);
+	igt_assert(6 * stddev / mean < 0.005); /* 99% accuracy within 0.5% */
+
+	igt_assert_f(fabs(mean - expected) < 2*stddev,
+		      "vblank interval differs from modeline! expected %.1fus, measured %1.fus +- %.3fus, difference %.1fus (%.1f sigma)\n",
+		      expected, mean, stddev,
+		      fabs(mean - expected), fabs(mean - expected) / stddev);
+}
+
 static void test_crtc_config(const struct test_config *tconf,
 			     struct crtc_config *crtcs, int crtc_count)
 {
@@ -473,8 +543,8 @@ static void test_crtc_config(const struct test_config *tconf,
 
 	igt_assert(config_failed == !!(tconf->flags & TEST_INVALID));
 
-	if (ret == 0 && connector_connected && !(tconf->flags & TEST_INVALID))
-		sleep(5);
+	if (ret == 0 && connector_connected && tconf->flags & TEST_TIMINGS)
+		check_timings(crtcs[0].crtc_idx, &crtcs[0].mode);
 
 	for (i = 0; i < crtc_count; i++) {
 		if (crtcs[i].fb_info.fb_id) {
@@ -730,6 +800,7 @@ int main(int argc, char **argv)
 		enum test_flags flags;
 		const char *name;
 	} tests[] = {
+		{ TEST_TIMINGS, "basic" },
 		{ TEST_CLONE | TEST_SINGLE_CRTC_CLONE,
 					"basic-clone-single-crtc" },
 		{ TEST_INVALID | TEST_CLONE | TEST_SINGLE_CRTC_CLONE,
