@@ -26,6 +26,7 @@
 #endif
 
 #include "igt.h"
+
 #include <cairo.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -43,6 +44,7 @@
 #include <time.h>
 #include <pthread.h>
 
+#include "igt_stats.h"
 
 #define TEST_DPMS		(1 << 0)
 #define TEST_WITH_DUMMY_BCS	(1 << 1)
@@ -1301,6 +1303,70 @@ static void free_test_output(struct test_output *o)
 	}
 }
 
+static void calibrate_ts(struct test_output *o, int crtc_idx)
+{
+#define CALIBRATE_TS_STEPS 16
+	drmVBlank wait;
+	igt_stats_t stats;
+	uint32_t last_seq;
+	uint64_t last_timestamp;
+	double expected;
+	double mean;
+	double stddev;
+	int n;
+
+	memset(&wait, 0, sizeof(wait));
+	wait.request.type = kmstest_get_vbl_flag(crtc_idx);
+	wait.request.type |= DRM_VBLANK_ABSOLUTE | DRM_VBLANK_NEXTONMISS;
+	do_or_die(drmWaitVBlank(drm_fd, &wait));
+
+	last_seq = wait.reply.sequence;
+	last_timestamp = wait.reply.tval_sec;
+	last_timestamp *= 1000000;
+	last_timestamp += wait.reply.tval_usec;
+
+	memset(&wait, 0, sizeof(wait));
+	wait.request.type = kmstest_get_vbl_flag(crtc_idx);
+	wait.request.type |= DRM_VBLANK_ABSOLUTE | DRM_VBLANK_EVENT;
+	wait.request.sequence = last_seq;
+	for (n = 0; n < CALIBRATE_TS_STEPS; n++) {
+		++wait.request.sequence;
+		do_or_die(drmWaitVBlank(drm_fd, &wait));
+	}
+
+	igt_stats_init_with_size(&stats, CALIBRATE_TS_STEPS);
+	for (n = 0; n < CALIBRATE_TS_STEPS; n++) {
+		struct drm_event_vblank ev;
+		uint64_t now;
+
+		igt_assert(read(drm_fd, &ev, sizeof(ev)) == sizeof(ev));
+		igt_assert_eq(ev.sequence, last_seq + 1);
+
+		now = ev.tv_sec;
+		now *= 1000000;
+		now += ev.tv_usec;
+
+		igt_stats_push(&stats, now - last_timestamp);
+
+		last_timestamp = now;
+		last_seq = ev.sequence;
+	}
+
+	expected = frame_time(o);
+
+	mean = igt_stats_get_mean(&stats);
+	stddev = igt_stats_get_std_deviation(&stats);
+
+	igt_info("Expected frametime: %.0fus; measured %.1fus +- %.3fus accuracy %.2f%%\n",
+		 expected, mean, stddev, 100 * 6 * stddev / mean);
+	igt_assert(6 * stddev / mean < 0.005); /* 99% accuracy within 0.5% */
+
+	igt_require_f(fabs(mean - expected) < 2*stddev,
+		      "vblank interval differs from modeline! expected %.1fus, measured %1.fus +- %.3fus, difference %.1fus (%.1f sigma)\n",
+		      expected, mean, stddev,
+		      fabs(mean - expected), fabs(mean - expected) / stddev);
+}
+
 static void run_test_on_crtc_set(struct test_output *o, int *crtc_idxs,
 				 int crtc_count, int duration_ms)
 {
@@ -1404,7 +1470,7 @@ static void run_test_on_crtc_set(struct test_output *o, int *crtc_idxs,
 
 	/* quiescent the hw a bit so ensure we don't miss a single frame */
 	if (o->flags & TEST_CHECK_TS)
-		sleep(1);
+		calibrate_ts(o, crtc_idxs[0]);
 
 	igt_assert_eq(do_page_flip(o, o->fb_ids[1], true), 0);
 	wait_for_events(o);
