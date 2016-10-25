@@ -19,6 +19,7 @@ tools_prog_lists =		\
 	intel_gpu_time		\
 	intel_gpu_top		\
 	intel_gtt		\
+	intel_guc_logger        \
 	intel_infoframes	\
 	intel_l3_parity		\
 	intel_lid		\
