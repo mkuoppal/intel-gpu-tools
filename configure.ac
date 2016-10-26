@@ -178,12 +178,15 @@ fi
 if test "x$INTEL" = xyes; then
 	PKG_CHECK_MODULES(DRM_INTEL, [libdrm_intel >= 2.4.64])
 	AC_DEFINE(HAVE_LIBDRM_INTEL, 1, [Have intel support])
-	DRM_LIBS="$DRM_LIBS $DRM_INTEL_LIBS"
-	AC_SUBST([DRM_LIBS])
 else
-	DRM_INTEL_CFLAGS=$(top_srcdir)/lib/stubs/drm/
-	AC_SUBST([DRM_INTEL_CFLAGS])
+	DRM_INTEL_CFLAGS=-I$\(top_srcdir\)/lib/stubs/drm/
+	DRM_INTEL_LIBS=
 fi
+DRM_CFLAGS="$DRM_CFLAGS $DRM_INTEL_CFLAGS"
+DRM_LIBS="$DRM_LIBS $DRM_INTEL_LIBS"
+AC_SUBST([DRM_CFLAGS])
+AC_SUBST([DRM_LIBS])
+
 AM_CONDITIONAL(HAVE_LIBDRM_INTEL, [test "x$INTEL" = xyes])
 
 # for dma-buf tests
