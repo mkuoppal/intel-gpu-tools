@@ -22,7 +22,7 @@
 #include "intel_reg.h"
 #include "igt_aux.h"
 
-#include <intel_aub.h>
+#include "tools/intel_aub.h"
 
 #define VERTEX_SIZE (3*4)
 
