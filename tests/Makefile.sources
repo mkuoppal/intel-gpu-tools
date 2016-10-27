@@ -44,6 +44,7 @@ TESTS_progs_M = \
 	gem_exec_parallel \
 	gem_exec_params \
 	gem_exec_parse \
+	gem_exec_schedule \
 	gem_exec_store \
 	gem_exec_suspend \
 	gem_exec_reloc \

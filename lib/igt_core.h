@@ -231,6 +231,7 @@ void __igt_subtest_group_restore(int);
 #define igt_main \
 	static void igt_tokencat(__real_main, __LINE__)(void); \
 	int main(int argc, char **argv) { \
+		sync(); \
 		igt_subtest_init_parse_opts(&argc, argv, NULL, NULL, NULL, \
 					    NULL, NULL); \
 		igt_tokencat(__real_main, __LINE__)(); \
@@ -271,6 +272,7 @@ void igt_simple_init_parse_opts(int *argc, char **argv,
 #define igt_simple_main \
 	static void igt_tokencat(__real_main, __LINE__)(void); \
 	int main(int argc, char **argv) { \
+		sync(); \
 		igt_simple_init_parse_opts(&argc, argv, NULL, NULL, NULL, \
 					   NULL, NULL); \
 		igt_tokencat(__real_main, __LINE__)(); \

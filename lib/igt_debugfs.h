@@ -189,5 +189,6 @@ void igt_enable_prefault(void);
 int igt_get_stable_obj_count(int driver);
 
 int igt_debugfs_dir(int device);
+void igt_debugfs_dump(int device, const char *filename);
 
 #endif /* __IGT_DEBUGFS_H__ */

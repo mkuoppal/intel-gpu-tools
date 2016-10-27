@@ -38,6 +38,7 @@
 #include "igt_aux.h"
 #include "igt_kms.h"
 #include "igt_debugfs.h"
+#include "igt_sysfs.h"
 
 /**
  * SECTION:igt_debugfs
@@ -814,4 +815,17 @@ int igt_debugfs_dir(int device)
 		igt_debugfs_mount(), (int)(st.st_rdev & 0xff));
 	igt_debug("Opening debugfs dir %s\n", path);
 	return open(path, O_RDONLY);
+}
+
+void igt_debugfs_dump(int device, const char *filename)
+{
+	char *contents;
+	int dir;
+
+	dir = igt_debugfs_dir(device);
+	contents = igt_sysfs_get(dir, filename);
+	close(dir);
+
+	igt_debug("%s:\n%s\n", filename, contents);
+	free(contents);
 }
