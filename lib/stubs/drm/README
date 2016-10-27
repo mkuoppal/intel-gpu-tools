@@ -1,4 +1,4 @@
-intel_bufmgr.h is a local copy of the file provided by libdrm (intel/intel_bufmgr.h).
+intel_bufmgr.h and intel_aub.h are a local copy of the files provided by libdrm.
 
-Before releasing i-g-t a current copy of intel_bufmgr.h should be copied into
-this directory of i-g-t.
+Before releasing i-g-t a current copy of the files should be copied into this
+directory of i-g-t.

@@ -22,7 +22,7 @@ AM_LDFLAGS = -Wl,--as-needed
 module_LTLIBRARIES = intel_aubdump.la
 moduledir = $(libdir)
 intel_aubdump_la_LDFLAGS = -module -avoid-version -no-undefined
-intel_aubdump_la_SOURCES = aubdump.c intel_aub.h
+intel_aubdump_la_SOURCES = aubdump.c
 intel_aubdump_la_LIBADD = $(top_builddir)/lib/libintel_tools.la -ldl
 
 bin_SCRIPTS = intel_aubdump
