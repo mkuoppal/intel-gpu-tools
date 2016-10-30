@@ -26,15 +26,21 @@
  */
 
 #include "igt.h"
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
 #include <time.h>
 
+#include "igt_rand.h"
+
 #define LOCAL_I915_EXEC_BSD_SHIFT      (13)
 #define LOCAL_I915_EXEC_BSD_MASK       (3 << LOCAL_I915_EXEC_BSD_SHIFT)
 
 #define ENGINE_FLAGS  (I915_EXEC_RING_MASK | LOCAL_I915_EXEC_BSD_MASK)
+
+static unsigned all_engines[16];
+static unsigned all_nengine;
 
 static unsigned ppgtt_engines[16];
 static unsigned ppgtt_nengine;
@@ -167,6 +173,131 @@ static void active(int fd, unsigned engine, int timeout, int ncpus)
 	munmap(shared, 4096);
 }
 
+static void xchg_u32(void *array, unsigned i, unsigned j)
+{
+	uint32_t *a = array, tmp;
+
+	tmp = a[i];
+	a[i] = a[j];
+	a[j] = tmp;
+}
+
+static unsigned __context_size(int fd)
+{
+	switch (intel_gen(intel_get_drm_devid(fd))) {
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+	case 5:
+	case 6:
+	case 7: return 17 << 12;
+	case 8: return 20 << 12;
+	case 9: return 22 << 12;
+	default: return 32 << 12;
+	}
+}
+
+static unsigned context_size(int fd)
+{
+	uint64_t size;
+
+	size = __context_size(fd);
+	if (ppgtt_nengine > 1) {
+		size += 4 << 12; /* ringbuffer as well */
+		size *= ppgtt_nengine;
+	}
+
+	return size;
+}
+
+static uint64_t total_avail_mem(unsigned mode)
+{
+	uint64_t total = intel_get_avail_ram_mb();
+	if (mode & CHECK_SWAP)
+		total += intel_get_total_swap_mb();
+	return total << 20;
+}
+
+static void maximum(int fd, int ncpus, unsigned mode)
+{
+	struct drm_i915_gem_context_create create;
+	const uint32_t bbe = MI_BATCH_BUFFER_END;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_exec_object2 obj[2];
+	uint64_t avail_mem = total_avail_mem(mode);
+	unsigned ctx_size = context_size(fd);
+	uint32_t *contexts = NULL;
+	unsigned long count = 0;
+
+	memset(&create, 0, sizeof(create));
+	do {
+		int err;
+
+		if ((count & -count) == count) {
+			int sz = count ? 2*count : 1;
+			contexts = realloc(contexts,
+					   sz*sizeof(*contexts));
+			igt_assert(contexts);
+		}
+
+		err = -ENOMEM;
+		if (avail_mem > (count + 1) * ctx_size)
+			err = __gem_context_create(fd, &create);
+		if (err) {
+			igt_info("Created %lu contexts, before failing with '%s' [%d]\n",
+				 count, strerror(-err), -err);
+			break;
+		}
+
+		contexts[count++] = create.ctx_id;
+	} while (1);
+	igt_require(count);
+
+	memset(obj, 0, sizeof(obj));
+	obj[1].handle = gem_create(fd, 4096);
+	gem_write(fd, obj[1].handle, 0, &bbe, sizeof(bbe));
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
+	execbuf.buffer_count = 2;
+
+	igt_fork(child, ncpus) {
+		struct timespec start, end;
+
+		hars_petruska_f54_1_random_perturb(child);
+		obj[0].handle = gem_create(fd, 4096);
+
+		clock_gettime(CLOCK_MONOTONIC, &start);
+		for (int repeat = 0; repeat < 3; repeat++) {
+			igt_permute_array(contexts, count, xchg_u32);
+			igt_permute_array(all_engines, all_nengine, xchg_u32);
+
+			for (unsigned long i = 0; i < count; i++) {
+				execbuf.rsvd1 = contexts[i];
+				for (unsigned long j = 0; j < all_nengine; j++) {
+					execbuf.flags = all_engines[j];
+					gem_execbuf(fd, &execbuf);
+				}
+			}
+		}
+		gem_sync(fd, obj[0].handle);
+		clock_gettime(CLOCK_MONOTONIC, &end);
+		gem_close(fd, obj[0].handle);
+
+		igt_info("[%d] Context execution: %.3f us\n", child,
+			 elapsed(&start, &end) / (3 * count * all_nengine) * 1e6);
+	}
+	igt_waitchildren();
+
+	gem_close(fd, obj[1].handle);
+
+	for (unsigned long i = 0; i < count; i++)
+		gem_context_destroy(fd, contexts[i]);
+	free(contexts);
+}
+
 igt_main
 {
 	const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
@@ -174,20 +305,26 @@ igt_main
 	int fd = -1;
 
 	igt_fixture {
+		unsigned engine;
+
 		fd = drm_open_driver(DRIVER_INTEL);
 
 		memset(&create, 0, sizeof(create));
 		igt_require(__gem_context_create(fd, &create) == 0);
 		gem_context_destroy(fd, create.ctx_id);
 
-		if (gem_uses_full_ppgtt(fd)) {
-			unsigned engine;
+		for_each_engine(fd, engine) {
+			if (engine == 0)
+				continue;
+			all_engines[all_nengine++] = engine;
+		}
+		igt_require(all_nengine);
 
-			for_each_engine(fd, engine) {
-				if (engine == 0)
-					continue;
-				ppgtt_engines[ppgtt_nengine++] = engine;
-			}
+		if (gem_uses_full_ppgtt(fd)) {
+			ppgtt_nengine = all_nengine;
+			memcpy(ppgtt_engines,
+			       all_engines,
+			       all_nengine * sizeof(all_engines[0]));
 		} else
 			ppgtt_engines[ppgtt_nengine++] = 0;
 
@@ -209,6 +346,11 @@ igt_main
 		create.pad = 1;
 		igt_assert_eq(__gem_context_create(fd, &create), -EINVAL);
 	}
+
+	igt_subtest("maximum-mem")
+		maximum(fd, ncpus, CHECK_RAM);
+	igt_subtest("maximum-swap")
+		maximum(fd, ncpus, CHECK_RAM | CHECK_SWAP);
 
 	igt_subtest("basic-files")
 		files(fd, 5, 1);
