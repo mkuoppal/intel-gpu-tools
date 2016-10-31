@@ -33,6 +33,11 @@ function reload() {
 	pkill alsactl
 	snd_hda_intel_unloaded=0
 	if mod_loaded snd_hda_intel; then
+		# unbind sound cards
+		for card in $(find /sys/bus/pci/drivers/snd_hda_intel -name "0000:*" -printf "%f\n"); do
+			echo $card > /sys/bus/pci/drivers/snd_hda_intel/unbind
+		done
+
 		if rmmod snd_hda_intel; then
 			snd_hda_intel_unloaded=1
 		else
