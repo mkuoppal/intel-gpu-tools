@@ -42,6 +42,7 @@ function reload() {
 			snd_hda_intel_unloaded=1
 		else
 			lsmod >&2
+			lsof /dev/snd/* >&2
 		fi
 	fi
 
