@@ -177,6 +177,8 @@ struct test_output {
 	int seq_step;
 	unsigned int pending_events;
 	int flip_count;
+
+	double vblank_interval;
 };
 
 
@@ -579,6 +581,12 @@ static double mode_frame_time(const struct test_output *o)
 	return 1000.0 * o->kmode[0].htotal * o->kmode[0].vtotal / o->kmode[0].clock;
 }
 
+static double actual_frame_time(const struct test_output *o)
+{
+	igt_assert(o->flags & TEST_CHECK_TS);
+	return o->vblank_interval;
+}
+
 static void *vblank_wait_thread_func(void *data)
 {
 	struct test_output *o = data;
@@ -687,12 +695,12 @@ static void check_state(const struct test_output *o, const struct event_state *e
 			  es->current_seq, es->last_seq);
 	}
 
-	if ((o->flags & TEST_CHECK_TS) && (!analog_tv_connector(o))) {
+	if (o->flags & TEST_CHECK_TS) {
 		double elapsed, expected;
 
 		timersub(&es->current_ts, &es->last_ts, &diff);
 		elapsed = 1e6*diff.tv_sec + diff.tv_usec;
-		expected = (es->current_seq - es->last_seq) * mode_frame_time(o);
+		expected = (es->current_seq - es->last_seq) * actual_frame_time(o);
 
 		igt_debug("%s ts/seq: last %ld.%06ld/%u, current %ld.%06ld/%u: elapsed=%.1fus expected=%.1fus +- %.1fus, error %.1f%%\n",
 			  es->name, es->last_ts.tv_sec, es->last_ts.tv_usec, es->last_seq,
@@ -1192,17 +1200,17 @@ static void check_final_state(const struct test_output *o,
 
 	/* Verify we drop no frames, but only if it's not a TV encoder, since
 	 * those use some funny fake timings behind userspace's back. */
-	if (o->flags & TEST_CHECK_TS && !analog_tv_connector(o)) {
+	if (o->flags & TEST_CHECK_TS) {
 		int count = es->count * o->seq_step;
-		unsigned int min = mode_frame_time(o) * (count - 1);
-		unsigned int max = mode_frame_time(o) * (count + 1);
+		unsigned int min = actual_frame_time(o) * (count - 1);
+		unsigned int max = actual_frame_time(o) * (count + 1);
 
 		igt_debug("expected %d, counted %d, encoder type %d\n",
-			  (int)(elapsed / mode_frame_time(o)), count,
+			  (int)(elapsed / actual_frame_time(o)), count,
 			  o->kencoder[0]->encoder_type);
 		igt_assert_f(elapsed >= min && elapsed <= max,
 			     "dropped frames, expected %d, counted %d, encoder type %d\n",
-			     (int)(elapsed / mode_frame_time(o)), count,
+			     (int)(elapsed / actual_frame_time(o)), count,
 			     o->kencoder[0]->encoder_type);
 	}
 }
@@ -1361,10 +1369,13 @@ static void calibrate_ts(struct test_output *o, int crtc_idx)
 		 expected, mean, stddev, 100 * 6 * stddev / mean);
 	igt_assert(6 * stddev / mean < 0.005); /* 99% accuracy within 0.5% */
 
-	igt_require_f(fabs(mean - expected) < 2*stddev,
-		      "vblank interval differs from modeline! expected %.1fus, measured %1.fus +- %.3fus, difference %.1fus (%.1f sigma)\n",
-		      expected, mean, stddev,
-		      fabs(mean - expected), fabs(mean - expected) / stddev);
+	if (fabs(mean - expected) > 2*stddev) {
+		igt_warn("vblank interval differs from modeline! expected %.1fus, measured %1.fus +- %.3fus, difference %.1fus (%.1f sigma)\n",
+				expected, mean, stddev,
+				fabs(mean - expected), fabs(mean - expected) / stddev);
+	}
+
+	o->vblank_interval = mean;
 }
 
 static void run_test_on_crtc_set(struct test_output *o, int *crtc_idxs,
