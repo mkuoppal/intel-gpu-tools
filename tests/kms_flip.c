@@ -574,7 +574,7 @@ static void page_flip_handler(int fd, unsigned int frame, unsigned int sec,
 		event_handler(&o->flip_state, frame, sec, usec);
 }
 
-static double frame_time(const struct test_output *o)
+static double mode_frame_time(const struct test_output *o)
 {
 	return 1000.0 * o->kmode[0].htotal * o->kmode[0].vtotal / o->kmode[0].clock;
 }
@@ -588,7 +588,7 @@ static void *vblank_wait_thread_func(void *data)
 	for (i = 0; i < 32; i++) {
 		unsigned long start = gettime_us();
 		__wait_for_vblank(TEST_VBLANK_BLOCK, o->pipe, 20, (unsigned long)o, &reply);
-		if (gettime_us() - start > 2 * frame_time(o))
+		if (gettime_us() - start > 2 * mode_frame_time(o))
 			return (void*)1;
 	}
 
@@ -692,7 +692,7 @@ static void check_state(const struct test_output *o, const struct event_state *e
 
 		timersub(&es->current_ts, &es->last_ts, &diff);
 		elapsed = 1e6*diff.tv_sec + diff.tv_usec;
-		expected = (es->current_seq - es->last_seq) * frame_time(o);
+		expected = (es->current_seq - es->last_seq) * mode_frame_time(o);
 
 		igt_debug("%s ts/seq: last %ld.%06ld/%u, current %ld.%06ld/%u: elapsed=%.1fus expected=%.1fus +- %.1fus, error %.1f%%\n",
 			  es->name, es->last_ts.tv_sec, es->last_ts.tv_usec, es->last_seq,
@@ -729,7 +729,7 @@ static void check_state_correlation(struct test_output *o,
 	usec_diff = tv_diff.tv_sec * USEC_PER_SEC + tv_diff.tv_usec;
 
 	seq_diff = es2->current_seq - es1->current_seq;
-	ftime = frame_time(o);
+	ftime = mode_frame_time(o);
 	usec_diff -= seq_diff * ftime;
 
 	igt_assert_f(fabs(usec_diff) / ftime <= 0.005,
@@ -940,10 +940,10 @@ static unsigned int run_test_step(struct test_output *o)
 		 * we waited for two vblanks, so verify that
 		 * we were blocked for ~1-2 frames.
 		 */
-		igt_assert_f(end - start > 0.9 * frame_time(o) &&
-			     end - start < 2.1 * frame_time(o),
+		igt_assert_f(end - start > 0.9 * mode_frame_time(o) &&
+			     end - start < 2.1 * mode_frame_time(o),
 			     "wait for two vblanks took %lu usec (frame time %f usec)\n",
-			     end - start, frame_time(o));
+			     end - start, mode_frame_time(o));
 		join_vblank_wait_thread();
 	}
 
@@ -1194,15 +1194,15 @@ static void check_final_state(const struct test_output *o,
 	 * those use some funny fake timings behind userspace's back. */
 	if (o->flags & TEST_CHECK_TS && !analog_tv_connector(o)) {
 		int count = es->count * o->seq_step;
-		unsigned int min = frame_time(o) * (count - 1);
-		unsigned int max = frame_time(o) * (count + 1);
+		unsigned int min = mode_frame_time(o) * (count - 1);
+		unsigned int max = mode_frame_time(o) * (count + 1);
 
 		igt_debug("expected %d, counted %d, encoder type %d\n",
-			  (int)(elapsed / frame_time(o)), count,
+			  (int)(elapsed / mode_frame_time(o)), count,
 			  o->kencoder[0]->encoder_type);
 		igt_assert_f(elapsed >= min && elapsed <= max,
 			     "dropped frames, expected %d, counted %d, encoder type %d\n",
-			     (int)(elapsed / frame_time(o)), count,
+			     (int)(elapsed / mode_frame_time(o)), count,
 			     o->kencoder[0]->encoder_type);
 	}
 }
@@ -1352,7 +1352,7 @@ static void calibrate_ts(struct test_output *o, int crtc_idx)
 		last_seq = ev.sequence;
 	}
 
-	expected = frame_time(o);
+	expected = mode_frame_time(o);
 
 	mean = igt_stats_get_mean(&stats);
 	stddev = igt_stats_get_std_deviation(&stats);
