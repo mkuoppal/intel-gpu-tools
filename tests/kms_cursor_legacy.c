@@ -744,6 +744,99 @@ static bool skip_on_unsupported_nonblocking_modeset(igt_display_t *display)
 	return false;
 }
 
+static void nonblocking_modeset_vs_cursor(igt_display_t *display, int loops)
+{
+	struct igt_fb fb_info, cursor_fb;
+	igt_output_t *output;
+	enum pipe pipe = find_connected_pipe(display, false);
+	struct drm_mode_cursor arg;
+	bool skip_test;
+	igt_plane_t *cursor = NULL, *plane;
+
+	igt_require(display->is_atomic);
+	igt_require((output = set_fb_on_crtc(display, pipe, &fb_info)));
+	igt_create_color_fb(display->drm_fd, 64, 64, DRM_FORMAT_ARGB8888, 0, 1., 1., 1., &cursor_fb);
+	set_cursor_on_pipe(display, pipe, &cursor_fb);
+	populate_cursor_args(display, pipe, &arg, &cursor_fb);
+	arg.flags |= DRM_MODE_CURSOR_BO;
+
+	for_each_plane_on_pipe(display, pipe, plane) {
+		if (!plane->is_cursor)
+			continue;
+
+		cursor = plane;
+		break;
+	}
+
+	igt_skip_on(!cursor);
+
+	if ((skip_test = skip_on_unsupported_nonblocking_modeset(display)))
+		goto cleanup;
+
+	/*
+	 * Start disabled, because skip_on_unsupported_nonblocking_modeset
+	 * will have enabled this pipe. No way around it, since the first
+	 * atomic commit may be unreliable with amount of events sent.
+	 */
+	igt_output_set_pipe(output, PIPE_NONE);
+	igt_display_commit2(display, COMMIT_ATOMIC);
+
+	while (loops--) {
+		unsigned flags;
+		struct pollfd pfd = { display->drm_fd, POLLIN };
+		struct drm_event_vblank vbl;
+
+		flags = DRM_MODE_ATOMIC_ALLOW_MODESET;
+		flags |= DRM_MODE_ATOMIC_NONBLOCK;
+		flags |= DRM_MODE_PAGE_FLIP_EVENT;
+
+		/*
+		 * Test that a cursor update after a nonblocking modeset
+		 * works as intended. It should block until the modeset completes.
+		 */
+
+		igt_output_set_pipe(output, pipe);
+		igt_plane_set_fb(cursor, NULL);
+		igt_display_commit_atomic(display, flags, NULL);
+
+		igt_assert_eq(0, poll(&pfd, 1, 0));
+		igt_assert_eq(0, pfd.revents);
+
+		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
+
+		igt_assert_eq(1, poll(&pfd, 1, 0));
+		igt_assert_eq(POLLIN, pfd.revents);
+
+		igt_set_timeout(1, "Stuck page flip");
+		igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
+		igt_reset_timeout();
+
+		igt_output_set_pipe(output, PIPE_NONE);
+		igt_display_commit_atomic(display, flags, NULL);
+
+		igt_assert_eq(0, poll(&pfd, 1, 0));
+		igt_assert_eq(0, pfd.revents);
+
+		/* Same for cursor on disabled crtc. */
+		do_ioctl(display->drm_fd, DRM_IOCTL_MODE_CURSOR, &arg);
+
+		igt_assert_eq(1, poll(&pfd, 1, 0));
+		igt_assert_eq(POLLIN, pfd.revents);
+
+		igt_set_timeout(1, "Stuck page flip");
+		igt_ignore_warn(read(display->drm_fd, &vbl, sizeof(vbl)));
+		igt_reset_timeout();
+	}
+
+cleanup:
+	do_cleanup_display(display);
+	igt_remove_fb(display->drm_fd, &fb_info);
+	igt_remove_fb(display->drm_fd, &cursor_fb);
+
+	if (skip_test)
+		igt_skip("Nonblocking modeset is not supported by this kernel\n");
+}
+
 static void two_screens_flip_vs_cursor(igt_display_t *display, int nloops, bool modeset)
 {
 	struct drm_mode_cursor arg[2], arg2[2];
@@ -1260,6 +1353,12 @@ igt_main
 		stress(&display, -1, -ncpus, DRM_MODE_CURSOR_BO, 20);
 	igt_subtest("all-pipes-torture-move")
 		stress(&display, -1, -ncpus, DRM_MODE_CURSOR_MOVE, 20);
+
+	igt_subtest("nonblocking-modeset-vs-cursor-atomic")
+		nonblocking_modeset_vs_cursor(&display, 1);
+
+	igt_subtest("long-nonblocking-modeset-vs-cursor-atomic")
+		nonblocking_modeset_vs_cursor(&display, 16);
 
 	igt_subtest("2x-flip-vs-cursor-legacy")
 		two_screens_flip_vs_cursor(&display, 8, false);
