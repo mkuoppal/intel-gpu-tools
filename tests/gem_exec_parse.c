@@ -37,6 +37,20 @@
 #define OACONTROL 0x2360
 #define DERRMR 0x44050
 
+#define HSW_CS_GPR(n) (0x2600 + 8*(n))
+#define HSW_CS_GPR0 HSW_CS_GPR(0)
+#define HSW_CS_GPR1 HSW_CS_GPR(1)
+
+#define MI_LOAD_REGISTER_REG (0x2a << 23)
+#define MI_STORE_REGISTER_MEM (0x24 << 23)
+#define MI_ARB_ON_OFF (0x8 << 23)
+#define MI_DISPLAY_FLIP ((0x14 << 23) | 1)
+
+#define GFX_OP_PIPE_CONTROL	((0x3<<29)|(0x3<<27)|(0x2<<24)|2)
+#define   PIPE_CONTROL_QW_WRITE	(1<<14)
+#define   PIPE_CONTROL_LRI_POST_OP (1<<23)
+
+
 static int command_parser_version(int fd)
 {
 	int version = -1;
@@ -51,12 +65,6 @@ static int command_parser_version(int fd)
 	return -1;
 }
 
-#define HSW_CS_GPR(n) (0x2600 + 8*(n))
-#define HSW_CS_GPR0 HSW_CS_GPR(0)
-#define HSW_CS_GPR1 HSW_CS_GPR(1)
-
-#define MI_LOAD_REGISTER_REG (0x2a << 23)
-#define MI_STORE_REGISTER_MEM (0x24 << 23)
 static void hsw_load_register_reg(void)
 {
 	uint32_t buf[16] = {
@@ -100,13 +108,13 @@ static void hsw_load_register_reg(void)
 	reloc[0].offset = 7*sizeof(uint32_t);
 	reloc[0].target_handle = obj[0].handle;
 	reloc[0].delta = 0;
-	reloc[0].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
-	reloc[0].write_domain = I915_GEM_DOMAIN_INSTRUCTION;
+	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[0].write_domain = I915_GEM_DOMAIN_COMMAND;
 	reloc[1].offset = 13*sizeof(uint32_t);
 	reloc[1].target_handle = obj[0].handle;
 	reloc[1].delta = sizeof(uint32_t);
-	reloc[1].read_domains = I915_GEM_DOMAIN_INSTRUCTION;
-	reloc[1].write_domain = I915_GEM_DOMAIN_INSTRUCTION;
+	reloc[1].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[1].write_domain = I915_GEM_DOMAIN_COMMAND;
 	obj[1].relocs_ptr = (uintptr_t)&reloc;
 	obj[1].relocation_count = 2;
 
@@ -152,7 +160,7 @@ static void exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
 			       int size, int patch_offset, uint64_t expected_value)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 objs[2];
+	struct drm_i915_gem_exec_object2 obj[2];
 	struct drm_i915_gem_relocation_entry reloc[1];
 
 	uint32_t target_bo = gem_create(fd, 4096);
@@ -160,42 +168,24 @@ static void exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
 
 	gem_write(fd, cmd_bo, 0, cmds, size);
 
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = target_bo;
+	obj[1].handle = cmd_bo;
+
+	memset(reloc, 0, sizeof(reloc));
 	reloc[0].offset = patch_offset;
+	reloc[0].target_handle = obj[0].handle;
 	reloc[0].delta = 0;
-	reloc[0].target_handle = target_bo;
-	reloc[0].read_domains = I915_GEM_DOMAIN_RENDER;
-	reloc[0].write_domain = I915_GEM_DOMAIN_RENDER;
-	reloc[0].presumed_offset = 0;
+	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[0].write_domain = I915_GEM_DOMAIN_COMMAND;
+	obj[1].relocs_ptr = (uintptr_t)reloc;
+	obj[1].relocation_count = 1;
 
-	objs[0].handle = target_bo;
-	objs[0].relocation_count = 0;
-	objs[0].relocs_ptr = 0;
-	objs[0].alignment = 0;
-	objs[0].offset = 0;
-	objs[0].flags = 0;
-	objs[0].rsvd1 = 0;
-	objs[0].rsvd2 = 0;
-
-	objs[1].handle = cmd_bo;
-	objs[1].relocation_count = 1;
-	objs[1].relocs_ptr = (uintptr_t)reloc;
-	objs[1].alignment = 0;
-	objs[1].offset = 0;
-	objs[1].flags = 0;
-	objs[1].rsvd1 = 0;
-	objs[1].rsvd2 = 0;
-
-	execbuf.buffers_ptr = (uintptr_t)objs;
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 2;
-	execbuf.batch_start_offset = 0;
 	execbuf.batch_len = size;
-	execbuf.cliprects_ptr = 0;
-	execbuf.num_cliprects = 0;
-	execbuf.DR1 = 0;
-	execbuf.DR4 = 0;
 	execbuf.flags = I915_EXEC_RENDER;
-	i915_execbuffer2_set_context_id(execbuf, 0);
-	execbuf.rsvd2 = 0;
 
 	gem_execbuf(fd, &execbuf);
 	gem_sync(fd, cmd_bo);
@@ -210,30 +200,18 @@ static int __exec_batch(int fd, uint32_t cmd_bo, uint32_t *cmds,
 			int size, int ring)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 objs[1];
+	struct drm_i915_gem_exec_object2 obj[1];
 
 	gem_write(fd, cmd_bo, 0, cmds, size);
 
-	objs[0].handle = cmd_bo;
-	objs[0].relocation_count = 0;
-	objs[0].relocs_ptr = 0;
-	objs[0].alignment = 0;
-	objs[0].offset = 0;
-	objs[0].flags = 0;
-	objs[0].rsvd1 = 0;
-	objs[0].rsvd2 = 0;
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = cmd_bo;
 
-	execbuf.buffers_ptr = (uintptr_t)objs;
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 1;
-	execbuf.batch_start_offset = 0;
 	execbuf.batch_len = size;
-	execbuf.cliprects_ptr = 0;
-	execbuf.num_cliprects = 0;
-	execbuf.DR1 = 0;
-	execbuf.DR4 = 0;
 	execbuf.flags = ring;
-	i915_execbuffer2_set_context_id(execbuf, 0);
-	execbuf.rsvd2 = 0;
 
 	return __gem_execbuf(fd, &execbuf);
 }
@@ -244,7 +222,7 @@ static void exec_split_batch(int fd, uint32_t *cmds,
 			     int size, int ring, int expected_ret)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 objs[1];
+	struct drm_i915_gem_exec_object2 obj[1];
 	uint32_t cmd_bo;
 	uint32_t noop[1024] = { 0 };
 	const int alloc_size = 4096 * 2;
@@ -261,16 +239,11 @@ static void exec_split_batch(int fd, uint32_t *cmds,
 	 */
 	gem_write(fd, cmd_bo, actual_start_offset, cmds, size);
 
-	objs[0].handle = cmd_bo;
-	objs[0].relocation_count = 0;
-	objs[0].relocs_ptr = 0;
-	objs[0].alignment = 0;
-	objs[0].offset = 0;
-	objs[0].flags = 0;
-	objs[0].rsvd1 = 0;
-	objs[0].rsvd2 = 0;
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = cmd_bo;
 
-	execbuf.buffers_ptr = (uintptr_t)objs;
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 1;
 	/* NB: We want batch_start_offset and batch_len to point to the block
 	 * of the actual commands (i.e. at the last dword of the first page),
@@ -281,13 +254,7 @@ static void exec_split_batch(int fd, uint32_t *cmds,
 	execbuf.batch_len =
 		ALIGN(size + actual_start_offset - execbuf.batch_start_offset,
 		      0x8);
-	execbuf.cliprects_ptr = 0;
-	execbuf.num_cliprects = 0;
-	execbuf.DR1 = 0;
-	execbuf.DR4 = 0;
 	execbuf.flags = ring;
-	i915_execbuffer2_set_context_id(execbuf, 0);
-	execbuf.rsvd2 = 0;
 
 	igt_assert_eq(__gem_execbuf(fd, &execbuf), expected_ret);
 
@@ -300,8 +267,8 @@ static void exec_batch_chained(int fd, uint32_t cmd_bo, uint32_t *cmds,
 			       uint64_t expected_value)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 objs[3];
-	struct drm_i915_gem_relocation_entry reloc;
+	struct drm_i915_gem_exec_object2 obj[3];
+	struct drm_i915_gem_relocation_entry reloc[1];
 	struct drm_i915_gem_relocation_entry first_level_reloc;
 
 	uint32_t target_bo = gem_create(fd, 4096);
@@ -322,58 +289,34 @@ static void exec_batch_chained(int fd, uint32_t cmd_bo, uint32_t *cmds,
 		  first_level_cmds, sizeof(first_level_cmds));
 	gem_write(fd, cmd_bo, 0, cmds, size);
 
-	reloc.offset = patch_offset;
-	reloc.delta = 0;
-	reloc.target_handle = target_bo;
-	reloc.read_domains = I915_GEM_DOMAIN_RENDER;
-	reloc.write_domain = I915_GEM_DOMAIN_RENDER;
-	reloc.presumed_offset = 0;
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = target_bo;
+	obj[1].handle = cmd_bo;
+	obj[2].handle = first_level_bo;
 
+	memset(reloc, 0, sizeof(reloc));
+	reloc[0].offset = patch_offset;
+	reloc[0].delta = 0;
+	reloc[0].target_handle = target_bo;
+	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[0].write_domain = I915_GEM_DOMAIN_COMMAND;
+	obj[1].relocation_count = 1;
+	obj[1].relocs_ptr = (uintptr_t)&reloc;
+
+	memset(&first_level_reloc, 0, sizeof(first_level_reloc));
 	first_level_reloc.offset = 4;
 	first_level_reloc.delta = 0;
 	first_level_reloc.target_handle = cmd_bo;
-	first_level_reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+	first_level_reloc.read_domains = I915_GEM_DOMAIN_COMMAND;
 	first_level_reloc.write_domain = 0;
-	first_level_reloc.presumed_offset = 0;
+	obj[2].relocation_count = 1;
+	obj[2].relocs_ptr = (uintptr_t)&first_level_reloc;
 
-	objs[0].handle = target_bo;
-	objs[0].relocation_count = 0;
-	objs[0].relocs_ptr = 0;
-	objs[0].alignment = 0;
-	objs[0].offset = 0;
-	objs[0].flags = 0;
-	objs[0].rsvd1 = 0;
-	objs[0].rsvd2 = 0;
-
-	objs[1].handle = cmd_bo;
-	objs[1].relocation_count = 1;
-	objs[1].relocs_ptr = (uintptr_t)&reloc;
-	objs[1].alignment = 0;
-	objs[1].offset = 0;
-	objs[1].flags = 0;
-	objs[1].rsvd1 = 0;
-	objs[1].rsvd2 = 0;
-
-	objs[2].handle = first_level_bo;
-	objs[2].relocation_count = 1;
-	objs[2].relocs_ptr = (uintptr_t)&first_level_reloc;
-	objs[2].alignment = 0;
-	objs[2].offset = 0;
-	objs[2].flags = 0;
-	objs[2].rsvd1 = 0;
-	objs[2].rsvd2 = 0;
-
-	execbuf.buffers_ptr = (uintptr_t)objs;
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 3;
-	execbuf.batch_start_offset = 0;
 	execbuf.batch_len = sizeof(first_level_cmds);
-	execbuf.cliprects_ptr = 0;
-	execbuf.num_cliprects = 0;
-	execbuf.DR1 = 0;
-	execbuf.DR4 = 0;
 	execbuf.flags = I915_EXEC_RENDER;
-	i915_execbuffer2_set_context_id(execbuf, 0);
-	execbuf.rsvd2 = 0;
 
 	gem_execbuf(fd, &execbuf);
 	gem_sync(fd, cmd_bo);
@@ -441,15 +384,8 @@ static void test_allocations(int fd)
 	}
 }
 
-uint32_t handle;
-int fd;
-
-#define MI_ARB_ON_OFF (0x8 << 23)
-#define MI_DISPLAY_FLIP ((0x14 << 23) | 1)
-
-#define GFX_OP_PIPE_CONTROL	((0x3<<29)|(0x3<<27)|(0x2<<24)|2)
-#define   PIPE_CONTROL_QW_WRITE	(1<<14)
-#define   PIPE_CONTROL_LRI_POST_OP (1<<23)
+static uint32_t handle;
+static int fd;
 
 igt_main
 {
