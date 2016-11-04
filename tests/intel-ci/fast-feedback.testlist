@@ -64,6 +64,9 @@ igt@gem_exec_nop@basic-series
 igt@gem_exec_parallel@basic
 igt@gem_exec_parse@basic-allowed
 igt@gem_exec_parse@basic-rejected
+igt@gem_exec_reloc@basic-cpu
+igt@gem_exec_reloc@basic-gtt
+igt@gem_exec_reloc@basic-noreloc
 igt@gem_exec_store@basic-all
 igt@gem_exec_store@basic-blt
 igt@gem_exec_store@basic-bsd

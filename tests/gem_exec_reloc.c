@@ -28,6 +28,9 @@ IGT_TEST_DESCRIPTION("Basic sanity check of execbuf-ioctl relocations.");
 #define LOCAL_I915_EXEC_BSD_SHIFT      (13)
 #define LOCAL_I915_EXEC_BSD_MASK       (3 << LOCAL_I915_EXEC_BSD_SHIFT)
 
+#define LOCAL_I915_EXEC_NO_RELOC (1<<11)
+#define LOCAL_I915_EXEC_HANDLE_LUT (1<<12)
+
 #define ENGINE_MASK  (I915_EXEC_RING_MASK | LOCAL_I915_EXEC_BSD_MASK)
 
 static uint32_t find_last_set(uint64_t x)
@@ -320,6 +323,193 @@ static void active(int fd, unsigned engine)
 	gem_close(fd, obj[0].handle);
 }
 
+static bool has_64bit_reloc(int fd)
+{
+	return intel_gen(intel_get_drm_devid(fd)) >= 8;
+}
+
+static void basic_cpu(int fd)
+{
+	struct drm_i915_gem_relocation_entry reloc;
+	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	uint32_t bbe = MI_BATCH_BUFFER_END;
+	uint32_t trash;
+	uint64_t offset;
+	char *wc;
+
+	memset(&obj, 0, sizeof(obj));
+
+	obj.handle = gem_create(fd, 4096);
+	obj.relocs_ptr = (uintptr_t)&reloc;
+	obj.relocation_count = 1;
+	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+
+	memset(&reloc, 0, sizeof(reloc));
+	reloc.offset = 4000;
+	reloc.target_handle = obj.handle;
+	reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 1;
+
+	wc = gem_mmap__wc(fd, obj.handle, 0, 4096, PROT_WRITE);
+	offset = -1;
+	memcpy(wc + 4000, &offset, sizeof(offset));
+
+	gem_set_domain(fd, obj.handle,
+		       I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+	gem_execbuf(fd, &execbuf);
+
+	offset = 0;
+	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
+	munmap(wc, 4096);
+
+	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	/* Simulate relocation */
+	trash = obj.handle;
+	obj.handle = gem_create(fd, 4096);
+	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+	reloc.target_handle = obj.handle;
+
+	wc = gem_mmap__wc(fd, obj.handle, 0, 4096, PROT_WRITE);
+	offset = -1;
+	memcpy(wc + 4000, &offset, sizeof(offset));
+
+	gem_set_domain(fd, obj.handle,
+		       I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+	gem_execbuf(fd, &execbuf);
+
+	offset = 0;
+	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
+	munmap(wc, 4096);
+
+	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	gem_close(fd, obj.handle);
+	gem_close(fd, trash);
+}
+
+static void basic_gtt(int fd)
+{
+	struct drm_i915_gem_relocation_entry reloc;
+	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	uint32_t bbe = MI_BATCH_BUFFER_END;
+	uint64_t offset;
+	char *wc;
+
+	memset(&obj, 0, sizeof(obj));
+
+	obj.handle = gem_create(fd, 4096);
+	obj.relocs_ptr = (uintptr_t)&reloc;
+	obj.relocation_count = 1;
+	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+
+	memset(&reloc, 0, sizeof(reloc));
+	reloc.offset = 4000;
+	reloc.target_handle = obj.handle;
+	reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 1;
+
+	wc = gem_mmap__wc(fd, obj.handle, 0, 4096, PROT_WRITE);
+	offset = -1;
+	memcpy(wc + 4000, &offset, sizeof(offset));
+
+	gem_set_domain(fd, obj.handle,
+		       I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+	gem_execbuf(fd, &execbuf);
+
+	offset = 0;
+	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
+
+	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	offset = -1;
+	memcpy(wc + 4000, &offset, sizeof(offset));
+
+	/* Simulate relocation */
+	obj.offset += 4096;
+	reloc.presumed_offset += 4096;
+	memcpy(wc + 4000, &obj.offset, has_64bit_reloc(fd) ? 8 : 4);
+
+	gem_execbuf(fd, &execbuf);
+
+	offset = 0;
+	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
+	munmap(wc, 4096);
+
+	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	gem_close(fd, obj.handle);
+}
+
+static void basic_noreloc(int fd)
+{
+	struct drm_i915_gem_relocation_entry reloc;
+	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	uint32_t bbe = MI_BATCH_BUFFER_END;
+	uint64_t offset;
+	char *wc;
+
+	memset(&obj, 0, sizeof(obj));
+
+	obj.handle = gem_create(fd, 4096);
+	obj.relocs_ptr = (uintptr_t)&reloc;
+	obj.relocation_count = 1;
+	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+
+	memset(&reloc, 0, sizeof(reloc));
+	reloc.offset = 4000;
+	reloc.target_handle = obj.handle;
+	reloc.read_domains = I915_GEM_DOMAIN_INSTRUCTION;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 1;
+	execbuf.flags = LOCAL_I915_EXEC_NO_RELOC;
+
+	wc = gem_mmap__wc(fd, obj.handle, 0, 4096, PROT_WRITE);
+	offset = -1;
+	memcpy(wc + 4000, &offset, sizeof(offset));
+
+	gem_set_domain(fd, obj.handle,
+		       I915_GEM_DOMAIN_CPU, I915_GEM_DOMAIN_CPU);
+	gem_execbuf(fd, &execbuf);
+
+	offset = 0;
+	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
+
+	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	/* Simulate relocation */
+	obj.offset += 4096;
+	reloc.presumed_offset += 4096;
+	memcpy(wc + 4000, &obj.offset, sizeof(obj.offset));
+
+	gem_execbuf(fd, &execbuf);
+
+	offset = 0;
+	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
+	munmap(wc, 4096);
+
+	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	gem_close(fd, obj.handle);
+}
+
 igt_main
 {
 	uint64_t size;
@@ -327,6 +517,15 @@ igt_main
 
 	igt_fixture
 		fd = drm_open_driver_master(DRIVER_INTEL);
+
+	igt_subtest("basic-cpu")
+		basic_cpu(fd);
+
+	igt_subtest("basic-gtt")
+		basic_gtt(fd);
+
+	igt_subtest("basic-noreloc")
+		basic_noreloc(fd);
 
 	for (size = 4096; size <= 4ull*1024*1024*1024; size <<= 1) {
 		igt_subtest_f("mmap-%u", find_last_set(size) - 1)
