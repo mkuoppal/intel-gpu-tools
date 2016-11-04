@@ -65,97 +65,6 @@ static int command_parser_version(int fd)
 	return -1;
 }
 
-static void hsw_load_register_reg(void)
-{
-	uint32_t buf[16] = {
-		MI_LOAD_REGISTER_IMM | (5 - 2),
-		HSW_CS_GPR0,
-		0xabcdabcd,
-		HSW_CS_GPR1,
-		0xdeadbeef,
-
-		MI_STORE_REGISTER_MEM | (3 - 2),
-		HSW_CS_GPR1,
-		0, /* address0 */
-
-		MI_LOAD_REGISTER_REG | (3 - 2),
-		HSW_CS_GPR0,
-		HSW_CS_GPR1,
-
-		MI_STORE_REGISTER_MEM | (3 - 2),
-		HSW_CS_GPR1,
-		4, /* address1 */
-
-		MI_BATCH_BUFFER_END,
-	};
-	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 obj[2];
-	struct drm_i915_gem_relocation_entry reloc[2];
-	int fd;
-
-	/* Open again to get a non-master file descriptor */
-	fd = drm_open_driver(DRIVER_INTEL);
-
-	igt_require(IS_HASWELL(intel_get_drm_devid(fd)));
-	igt_require(command_parser_version(fd) >= 7);
-
-	memset(obj, 0, sizeof(obj));
-	obj[0].handle = gem_create(fd, 4096);
-	obj[1].handle = gem_create(fd, 4096);
-	gem_write(fd, obj[1].handle, 0, buf, sizeof(buf));
-
-	memset(reloc, 0, sizeof(reloc));
-	reloc[0].offset = 7*sizeof(uint32_t);
-	reloc[0].target_handle = obj[0].handle;
-	reloc[0].delta = 0;
-	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
-	reloc[0].write_domain = I915_GEM_DOMAIN_COMMAND;
-	reloc[1].offset = 13*sizeof(uint32_t);
-	reloc[1].target_handle = obj[0].handle;
-	reloc[1].delta = sizeof(uint32_t);
-	reloc[1].read_domains = I915_GEM_DOMAIN_COMMAND;
-	reloc[1].write_domain = I915_GEM_DOMAIN_COMMAND;
-	obj[1].relocs_ptr = (uintptr_t)&reloc;
-	obj[1].relocation_count = 2;
-
-	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)obj;
-	execbuf.buffer_count = 2;
-	execbuf.batch_len = sizeof(buf);
-	execbuf.flags = I915_EXEC_RENDER;
-	gem_execbuf(fd, &execbuf);
-	gem_close(fd, obj[1].handle);
-
-	gem_read(fd, obj[0].handle, 0, buf, 2*sizeof(buf[0]));
-	igt_assert_eq_u32(buf[0], 0xdeadbeef); /* before copy */
-	igt_assert_eq_u32(buf[1], 0xabcdabcd); /* after copy */
-
-	/* Now a couple of negative tests that should be filtered */
-	execbuf.buffer_count = 1;
-	execbuf.batch_len = 4*sizeof(buf[0]);
-
-	buf[0] = MI_LOAD_REGISTER_REG | (3 - 2);
-	buf[1] = HSW_CS_GPR0;
-	buf[2] = 0;
-	buf[3] = MI_BATCH_BUFFER_END;
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	buf[2] = OACONTROL; /* filtered */
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	buf[2] = DERRMR; /* master only */
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	buf[2] = 0x2038; /* RING_START: invalid */
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	close(fd);
-}
-
 static void exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
 			       int size, int patch_offset, uint64_t expected_value)
 {
@@ -382,6 +291,97 @@ static void test_allocations(int fd)
 		gem_sync(fd, obj[i].handle);
 		gem_close(fd, obj[i].handle);
 	}
+}
+
+static void hsw_load_register_reg(void)
+{
+	uint32_t buf[16] = {
+		MI_LOAD_REGISTER_IMM | (5 - 2),
+		HSW_CS_GPR0,
+		0xabcdabcd,
+		HSW_CS_GPR1,
+		0xdeadbeef,
+
+		MI_STORE_REGISTER_MEM | (3 - 2),
+		HSW_CS_GPR1,
+		0, /* address0 */
+
+		MI_LOAD_REGISTER_REG | (3 - 2),
+		HSW_CS_GPR0,
+		HSW_CS_GPR1,
+
+		MI_STORE_REGISTER_MEM | (3 - 2),
+		HSW_CS_GPR1,
+		4, /* address1 */
+
+		MI_BATCH_BUFFER_END,
+	};
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_exec_object2 obj[2];
+	struct drm_i915_gem_relocation_entry reloc[2];
+	int fd;
+
+	/* Open again to get a non-master file descriptor */
+	fd = drm_open_driver(DRIVER_INTEL);
+
+	igt_require(IS_HASWELL(intel_get_drm_devid(fd)));
+	igt_require(command_parser_version(fd) >= 7);
+
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = gem_create(fd, 4096);
+	obj[1].handle = gem_create(fd, 4096);
+	gem_write(fd, obj[1].handle, 0, buf, sizeof(buf));
+
+	memset(reloc, 0, sizeof(reloc));
+	reloc[0].offset = 7*sizeof(uint32_t);
+	reloc[0].target_handle = obj[0].handle;
+	reloc[0].delta = 0;
+	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[0].write_domain = I915_GEM_DOMAIN_COMMAND;
+	reloc[1].offset = 13*sizeof(uint32_t);
+	reloc[1].target_handle = obj[0].handle;
+	reloc[1].delta = sizeof(uint32_t);
+	reloc[1].read_domains = I915_GEM_DOMAIN_COMMAND;
+	reloc[1].write_domain = I915_GEM_DOMAIN_COMMAND;
+	obj[1].relocs_ptr = (uintptr_t)&reloc;
+	obj[1].relocation_count = 2;
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)obj;
+	execbuf.buffer_count = 2;
+	execbuf.batch_len = sizeof(buf);
+	execbuf.flags = I915_EXEC_RENDER;
+	gem_execbuf(fd, &execbuf);
+	gem_close(fd, obj[1].handle);
+
+	gem_read(fd, obj[0].handle, 0, buf, 2*sizeof(buf[0]));
+	igt_assert_eq_u32(buf[0], 0xdeadbeef); /* before copy */
+	igt_assert_eq_u32(buf[1], 0xabcdabcd); /* after copy */
+
+	/* Now a couple of negative tests that should be filtered */
+	execbuf.buffer_count = 1;
+	execbuf.batch_len = 4*sizeof(buf[0]);
+
+	buf[0] = MI_LOAD_REGISTER_REG | (3 - 2);
+	buf[1] = HSW_CS_GPR0;
+	buf[2] = 0;
+	buf[3] = MI_BATCH_BUFFER_END;
+	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
+	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
+
+	buf[2] = OACONTROL; /* filtered */
+	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
+	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
+
+	buf[2] = DERRMR; /* master only */
+	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
+	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
+
+	buf[2] = 0x2038; /* RING_START: invalid */
+	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
+	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
+
+	close(fd);
 }
 
 static uint32_t handle;
