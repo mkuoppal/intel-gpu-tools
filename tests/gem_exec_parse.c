@@ -34,8 +34,9 @@
 #define I915_PARAM_CMD_PARSER_VERSION       28
 #endif
 
-#define OACONTROL 0x2360
 #define DERRMR 0x44050
+#define OACONTROL 0x2360
+#define SO_WRITE_OFFSET_0 0x5280
 
 #define HSW_CS_GPR(n) (0x2600 + 8*(n))
 #define HSW_CS_GPR0 HSW_CS_GPR(0)
@@ -65,8 +66,8 @@ static int command_parser_version(int fd)
 	return -1;
 }
 
-static void exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
-			       int size, int patch_offset, uint64_t expected_value)
+static uint64_t __exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
+				     int size, int patch_offset)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
 	struct drm_i915_gem_exec_object2 obj[2];
@@ -100,9 +101,19 @@ static void exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
 	gem_sync(fd, cmd_bo);
 
 	gem_read(fd,target_bo, 0, &actual_value, sizeof(actual_value));
-	igt_assert_eq(expected_value, actual_value);
 
 	gem_close(fd, target_bo);
+
+	return actual_value;
+}
+
+static void exec_batch_patched(int fd, uint32_t cmd_bo, uint32_t *cmds,
+			       int size, int patch_offset,
+			       uint64_t expected_value)
+{
+	igt_assert_eq(__exec_batch_patched(fd, cmd_bo, cmds,
+					   size, patch_offset),
+		      expected_value);
 }
 
 static int __exec_batch(int fd, uint32_t cmd_bo, uint32_t *cmds,
@@ -295,31 +306,36 @@ static void test_allocations(int fd)
 
 static void hsw_load_register_reg(void)
 {
-	uint32_t buf[16] = {
-		MI_LOAD_REGISTER_IMM | (5 - 2),
+	uint32_t init_gpr0[16] = {
+		MI_LOAD_REGISTER_IMM | (3 - 2),
 		HSW_CS_GPR0,
-		0xabcdabcd,
-		HSW_CS_GPR1,
-		0xdeadbeef,
-
-		MI_STORE_REGISTER_MEM | (3 - 2),
-		HSW_CS_GPR1,
-		0, /* address0 */
-
-		MI_LOAD_REGISTER_REG | (3 - 2),
-		HSW_CS_GPR0,
-		HSW_CS_GPR1,
-
-		MI_STORE_REGISTER_MEM | (3 - 2),
-		HSW_CS_GPR1,
-		4, /* address1 */
-
+		0xabcdabc0, /* leave [1:0] zero */
 		MI_BATCH_BUFFER_END,
 	};
-	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 obj[2];
-	struct drm_i915_gem_relocation_entry reloc[2];
+	uint32_t store_gpr0[16] = {
+		MI_STORE_REGISTER_MEM | (3 - 2),
+		HSW_CS_GPR0,
+		0, /* reloc*/
+		MI_BATCH_BUFFER_END,
+	};
+	uint32_t do_lrr[16] = {
+		MI_LOAD_REGISTER_REG | (3 - 2),
+		0, /* [1] = src */
+		HSW_CS_GPR0, /* dst */
+		MI_BATCH_BUFFER_END,
+	};
+	uint32_t allowed_regs[] = {
+		HSW_CS_GPR1,
+		SO_WRITE_OFFSET_0,
+	};
+	uint32_t disallowed_regs[] = {
+		0,
+		OACONTROL, /* filtered */
+		DERRMR, /* master only */
+		0x2038, /* RING_START: invalid */
+	};
 	int fd;
+	uint32_t handle;
 
 	/* Open again to get a non-master file descriptor */
 	fd = drm_open_driver(DRIVER_INTEL);
@@ -327,59 +343,34 @@ static void hsw_load_register_reg(void)
 	igt_require(IS_HASWELL(intel_get_drm_devid(fd)));
 	igt_require(command_parser_version(fd) >= 7);
 
-	memset(obj, 0, sizeof(obj));
-	obj[0].handle = gem_create(fd, 4096);
-	obj[1].handle = gem_create(fd, 4096);
-	gem_write(fd, obj[1].handle, 0, buf, sizeof(buf));
+	handle = gem_create(fd, 4096);
 
-	memset(reloc, 0, sizeof(reloc));
-	reloc[0].offset = 7*sizeof(uint32_t);
-	reloc[0].target_handle = obj[0].handle;
-	reloc[0].delta = 0;
-	reloc[0].read_domains = I915_GEM_DOMAIN_COMMAND;
-	reloc[0].write_domain = I915_GEM_DOMAIN_COMMAND;
-	reloc[1].offset = 13*sizeof(uint32_t);
-	reloc[1].target_handle = obj[0].handle;
-	reloc[1].delta = sizeof(uint32_t);
-	reloc[1].read_domains = I915_GEM_DOMAIN_COMMAND;
-	reloc[1].write_domain = I915_GEM_DOMAIN_COMMAND;
-	obj[1].relocs_ptr = (uintptr_t)&reloc;
-	obj[1].relocation_count = 2;
+	for (int i = 0 ; i < ARRAY_SIZE(allowed_regs); i++) {
+		uint32_t var;
 
-	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)obj;
-	execbuf.buffer_count = 2;
-	execbuf.batch_len = sizeof(buf);
-	execbuf.flags = I915_EXEC_RENDER;
-	gem_execbuf(fd, &execbuf);
-	gem_close(fd, obj[1].handle);
+		exec_batch(fd, handle, init_gpr0, sizeof(init_gpr0),
+			   I915_EXEC_RENDER,
+			   0);
+		exec_batch_patched(fd, handle,
+				   store_gpr0, sizeof(store_gpr0),
+				   2 * sizeof(uint32_t), /* reloc */
+				   0xabcdabc0);
+		do_lrr[1] = allowed_regs[i];
+		exec_batch(fd, handle, do_lrr, sizeof(do_lrr),
+			   I915_EXEC_RENDER,
+			   0);
+		var = __exec_batch_patched(fd, handle,
+					   store_gpr0, sizeof(store_gpr0),
+					   2 * sizeof(uint32_t)); /* reloc */
+		igt_assert_neq(var, 0xabcdabc0);
+	}
 
-	gem_read(fd, obj[0].handle, 0, buf, 2*sizeof(buf[0]));
-	igt_assert_eq_u32(buf[0], 0xdeadbeef); /* before copy */
-	igt_assert_eq_u32(buf[1], 0xabcdabcd); /* after copy */
-
-	/* Now a couple of negative tests that should be filtered */
-	execbuf.buffer_count = 1;
-	execbuf.batch_len = 4*sizeof(buf[0]);
-
-	buf[0] = MI_LOAD_REGISTER_REG | (3 - 2);
-	buf[1] = HSW_CS_GPR0;
-	buf[2] = 0;
-	buf[3] = MI_BATCH_BUFFER_END;
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	buf[2] = OACONTROL; /* filtered */
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	buf[2] = DERRMR; /* master only */
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
-
-	buf[2] = 0x2038; /* RING_START: invalid */
-	gem_write(fd, obj[0].handle, 0, buf, execbuf.batch_len);
-	igt_assert_eq(__gem_execbuf(fd, &execbuf), -EINVAL);
+	for (int i = 0 ; i < ARRAY_SIZE(disallowed_regs); i++) {
+		do_lrr[1] = disallowed_regs[i];
+		exec_batch(fd, handle, do_lrr, sizeof(do_lrr),
+			   I915_EXEC_RENDER,
+			   -EINVAL);
+	}
 
 	close(fd);
 }
