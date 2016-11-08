@@ -43,6 +43,11 @@ igt_main
 
 	arg.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
 
+	/* XXX start to enforce ban period returning -EINVAL when
+	 * transition has been done */
+	if (__gem_context_get_param(fd, &arg) == -EINVAL)
+		arg.param = LOCAL_CONTEXT_PARAM_BANNABLE;
+
 	igt_subtest("basic") {
 		arg.context = ctx;
 		gem_context_get_param(fd, &arg);
@@ -81,8 +86,6 @@ igt_main
 		igt_assert_eq(__gem_context_set_param(fd, &arg), -EINVAL);
 		arg.size = 0;
 	}
-
-	arg.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
 
 	igt_subtest("non-root-set") {
 		igt_fork(child, 1) {
@@ -137,7 +140,7 @@ igt_main
 	 * to catch ABI extensions. Don't "fix" this testcase without adding all
 	 * the tests for the new param first.
 	 */
-	arg.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE + 1;
+	arg.param = LOCAL_CONTEXT_PARAM_BANNABLE + 1;
 
 	igt_subtest("invalid-param-get") {
 		arg.context = ctx;

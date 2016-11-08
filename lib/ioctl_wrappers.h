@@ -120,9 +120,10 @@ struct local_i915_gem_context_param {
 #define LOCAL_CONTEXT_PARAM_NO_ZEROMAP	0x2
 #define LOCAL_CONTEXT_PARAM_GTT_SIZE	0x3
 #define LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE	0x4
+#define LOCAL_CONTEXT_PARAM_BANNABLE	0x5
 	uint64_t value;
 };
-void gem_context_require_ban_period(int fd);
+void gem_context_require_bannable(int fd);
 void gem_context_require_param(int fd, uint64_t param);
 void gem_context_get_param(int fd, struct local_i915_gem_context_param *p);
 void gem_context_set_param(int fd, struct local_i915_gem_context_param *p);

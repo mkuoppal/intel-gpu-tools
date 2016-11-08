@@ -962,9 +962,21 @@ void gem_context_require_param(int fd, uint64_t param)
 	igt_require(igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, &p) == 0);
 }
 
-void gem_context_require_ban_period(int fd)
+void gem_context_require_bannable(int fd)
 {
 	static int has_ban_period = -1;
+	static int has_bannable = -1;
+
+	if (has_bannable < 0) {
+		struct local_i915_gem_context_param p;
+
+		p.context = 0;
+		p.param = LOCAL_CONTEXT_PARAM_BANNABLE;
+		p.value = 0;
+		p.size = 0;
+
+		has_bannable = igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, &p) == 0;
+	}
 
 	if (has_ban_period < 0) {
 		struct local_i915_gem_context_param p;
@@ -977,7 +989,7 @@ void gem_context_require_ban_period(int fd)
 		has_ban_period = igt_ioctl(fd, LOCAL_IOCTL_I915_GEM_CONTEXT_GETPARAM, &p) == 0;
 	}
 
-	igt_require(has_ban_period);
+	igt_require(has_ban_period || has_bannable);
 }
 
 int __gem_userptr(int fd, void *ptr, int size, int read_only, uint32_t flags, uint32_t *handle)

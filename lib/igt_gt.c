@@ -119,9 +119,41 @@ void igt_require_hang_ring(int fd, int ring)
 		igt_skip("hang injection disabled by user");
 
 	gem_require_ring(fd, ring);
-	gem_context_require_ban_period(fd);
+	gem_context_require_bannable(fd);
 	if (!igt_check_boolean_env_var("IGT_HANG_WITHOUT_RESET", false))
 		igt_require(has_gpu_reset(fd));
+}
+
+static unsigned context_get_ban(int fd, unsigned ctx)
+{
+	struct local_i915_gem_context_param param;
+
+	param.param = LOCAL_CONTEXT_PARAM_BANNABLE;
+	param.value = 0;
+	param.size = 0;
+
+	if (__gem_context_get_param(fd, &param) == -EINVAL) {
+		igt_assert(param.value == 0);
+		param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+		gem_context_get_param(fd, &param);
+	}
+
+	return param.value;
+}
+
+static void context_set_ban(int fd, unsigned ctx, unsigned ban)
+{
+	struct local_i915_gem_context_param param;
+
+	param.value = ban;
+	param.size = 0;
+	param.param = LOCAL_CONTEXT_PARAM_BANNABLE;
+
+	if(__gem_context_set_param(fd, &param) == -EINVAL) {
+		igt_assert(param.value == ban);
+		param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
+		gem_context_set_param(fd, &param);
+	}
 }
 
 igt_hang_t igt_allow_hang(int fd, unsigned ctx, unsigned flags)
@@ -131,7 +163,7 @@ igt_hang_t igt_allow_hang(int fd, unsigned ctx, unsigned flags)
 
 	if (!igt_check_boolean_env_var("IGT_HANG", true))
 		igt_skip("hang injection disabled by user");
-	gem_context_require_ban_period(fd);
+	gem_context_require_bannable(fd);
 	if (!igt_check_boolean_env_var("IGT_HANG_WITHOUT_RESET", false))
 		igt_require(has_gpu_reset(fd));
 
@@ -148,16 +180,9 @@ igt_hang_t igt_allow_hang(int fd, unsigned ctx, unsigned flags)
 		__gem_context_set_param(fd, &param);
 	}
 
-	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
-	param.value = 0;
-	gem_context_get_param(fd, &param);
-	ban = param.value;
-
-	if ((flags & HANG_ALLOW_BAN) == 0) {
-		param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
-		param.value = 0;
-		gem_context_set_param(fd, &param);
-	}
+	ban = context_get_ban(fd, ctx);
+	if ((flags & HANG_ALLOW_BAN) == 0)
+		context_set_ban(fd, ctx, 0);
 
 	return (struct igt_hang){ 0, ctx, ban, flags };
 }
@@ -166,13 +191,11 @@ void igt_disallow_hang(int fd, igt_hang_t arg)
 {
 	struct local_i915_gem_context_param param;
 
-	param.context = arg.ctx;
-	param.size = 0;
-	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
-	param.value = arg.ban;
-	gem_context_set_param(fd, &param);
+	context_set_ban(fd, arg.ctx, arg.ban);
 
 	if ((arg.flags & HANG_ALLOW_CAPTURE) == 0) {
+		param.context = arg.ctx;
+		param.size = 0;
 		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
 		param.value = 0;
 		if (__gem_context_set_param(fd, &param))
@@ -227,16 +250,10 @@ igt_hang_t igt_hang_ctx(int fd,
 		__gem_context_set_param(fd, &param);
 	}
 
-	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
-	param.value = 0;
-	gem_context_get_param(fd, &param);
-	ban = param.value;
+	ban = context_get_ban(fd, ctx);
 
-	if ((flags & HANG_ALLOW_BAN) == 0) {
-		param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
-		param.value = 0;
-		gem_context_set_param(fd, &param);
-	}
+	if ((flags & HANG_ALLOW_BAN) == 0)
+		context_set_ban(fd, ctx, 0);
 
 	memset(&reloc, 0, sizeof(reloc));
 	memset(&exec, 0, sizeof(exec));
@@ -323,13 +340,11 @@ void igt_post_hang_ring(int fd, igt_hang_t arg)
 		       I915_GEM_DOMAIN_GTT, I915_GEM_DOMAIN_GTT);
 	gem_close(fd, arg.handle);
 
-	param.context = arg.ctx;
-	param.size = 0;
-	param.param = LOCAL_CONTEXT_PARAM_BAN_PERIOD;
-	param.value = arg.ban;
-	gem_context_set_param(fd, &param);
+	context_set_ban(fd, arg.ctx, arg.ban);
 
 	if ((arg.flags & HANG_ALLOW_CAPTURE) == 0) {
+		param.context = arg.ctx;
+		param.size = 0;
 		param.param = LOCAL_CONTEXT_PARAM_NO_ERROR_CAPTURE;
 		param.value = 0;
 		if (__gem_context_set_param(fd, &param))
