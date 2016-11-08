@@ -42,6 +42,10 @@
 #define HSW_CS_GPR0 HSW_CS_GPR(0)
 #define HSW_CS_GPR1 HSW_CS_GPR(1)
 
+/* To help craft commands known to be invalid across all engines */
+#define INSTR_CLIENT_SHIFT	29
+#define   INSTR_INVALID_CLIENT  0x7
+
 #define MI_LOAD_REGISTER_REG (0x2a << 23)
 #define MI_STORE_REGISTER_MEM (0x24 << 23)
 #define MI_ARB_ON_OFF (0x8 << 23)
@@ -411,33 +415,38 @@ igt_main
 	}
 
 	igt_subtest("basic-rejected") {
-		uint32_t arb_on_off[] = {
-			MI_ARB_ON_OFF,
+		uint32_t invalid_cmd[] = {
+			INSTR_INVALID_CLIENT << INSTR_CLIENT_SHIFT,
 			MI_BATCH_BUFFER_END,
 		};
-		uint32_t display_flip[] = {
-			MI_DISPLAY_FLIP,
-			0, 0, 0,
+		uint32_t invalid_set_context[] = {
+			MI_SET_CONTEXT | 32, /* invalid length */
 			MI_BATCH_BUFFER_END,
-			0
 		};
 		exec_batch(fd, handle,
-			   arb_on_off, sizeof(arb_on_off),
+			   invalid_cmd, sizeof(invalid_cmd),
 			   I915_EXEC_RENDER,
 			   -EINVAL);
 		exec_batch(fd, handle,
-			   arb_on_off, sizeof(arb_on_off),
+			   invalid_cmd, sizeof(invalid_cmd),
 			   I915_EXEC_BSD,
 			   -EINVAL);
+		if (gem_has_blt(fd)) {
+			exec_batch(fd, handle,
+				   invalid_cmd, sizeof(invalid_cmd),
+				   I915_EXEC_BLT,
+				   -EINVAL);
+		}
 		if (gem_has_vebox(fd)) {
 			exec_batch(fd, handle,
-				   arb_on_off, sizeof(arb_on_off),
+				   invalid_cmd, sizeof(invalid_cmd),
 				   I915_EXEC_VEBOX,
 				   -EINVAL);
 		}
+
 		exec_batch(fd, handle,
-			   display_flip, sizeof(display_flip),
-			   I915_EXEC_BLT,
+			   invalid_set_context, sizeof(invalid_set_context),
+			   I915_EXEC_RENDER,
 			   -EINVAL);
 	}
 
