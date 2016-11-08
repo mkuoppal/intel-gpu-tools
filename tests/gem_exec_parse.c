@@ -35,6 +35,7 @@
 #endif
 
 #define DERRMR 0x44050
+#define OASTATUS2 0x2368
 #define OACONTROL 0x2360
 #define SO_WRITE_OFFSET_0 0x5280
 
@@ -253,27 +254,35 @@ static void exec_batch_chained(int fd, uint32_t cmd_bo, uint32_t *cmds,
 	gem_close(fd, target_bo);
 }
 
-static void stray_lri(int fd, uint32_t handle)
+/* Be careful to take into account what register bits we can store and read
+ * from...
+ */
+struct test_lri {
+	uint32_t reg, read_mask, init_val, test_val;
+};
+
+static void
+test_lri(int fd, uint32_t handle,
+	 struct test_lri *test, int expected_errno, uint32_t expect)
 {
-	/* Ideally this would test all once whitelisted registers */
 	uint32_t lri[] = {
 		MI_LOAD_REGISTER_IMM,
-		OACONTROL,
-		0x31337000,
+		test->reg,
+		test->test_val,
 		MI_BATCH_BUFFER_END,
 	};
-	int err;
 
-	igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
+	intel_register_write(test->reg, test->init_val);
 
-	err = __exec_batch(fd, handle, lri, sizeof(lri), I915_EXEC_RENDER);
-	if (err == -EINVAL)
-		return;
-
-	igt_assert_eq(err, 0);
+	exec_batch(fd, handle,
+		   lri, sizeof(lri),
+		   I915_EXEC_RENDER,
+		   expected_errno);
 	gem_sync(fd, handle);
 
-	igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
+	igt_assert_eq_u32((intel_register_read(test->reg) &
+			   test->read_mask),
+			  expect);
 }
 
 static void test_allocations(int fd)
@@ -462,48 +471,43 @@ igt_main
 			   -EINVAL);
 	}
 
-	igt_subtest_group {
-		igt_fixture {
-			intel_register_access_init(intel_get_pci_device(), 0);
-
-			intel_register_write(OACONTROL, 0xdeadbeef);
-			igt_assert_eq_u32(intel_register_read(OACONTROL), 0xdeadbeef);
-		}
-
-		igt_subtest("basic-stray-lri")
-			stray_lri(fd, handle);
-
-		igt_fixture {
-			intel_register_write(OACONTROL, 0);
-			intel_register_access_fini();
-		}
-	}
-
 	igt_subtest("basic-allocation") {
 		test_allocations(fd);
 	}
 
-	igt_subtest("registers") {
-		uint32_t lri_bad[] = {
-			MI_LOAD_REGISTER_IMM,
-			0, /* disallowed register address */
-			0x12000000,
-			MI_BATCH_BUFFER_END,
-		};
-		uint32_t lri_ok[] = {
-			MI_LOAD_REGISTER_IMM,
-			0x5280, /* allowed register address (SO_WRITE_OFFSET[0]) */
-			0x1,
-			MI_BATCH_BUFFER_END,
-		};
-		exec_batch(fd, handle,
-			   lri_bad, sizeof(lri_bad),
-			   I915_EXEC_RENDER,
-			   -EINVAL);
-		exec_batch(fd, handle,
-			   lri_ok, sizeof(lri_ok),
-			   I915_EXEC_RENDER,
-			   0);
+	igt_subtest_group {
+		igt_fixture {
+			intel_register_access_init(intel_get_pci_device(), 0);
+		}
+
+		igt_subtest("registers") {
+			struct test_lri bad_lris[] = {
+				/* dummy head pointer */
+				{ OASTATUS2, 0xffffff80, 0xdeadf000, 0xbeeff000 }
+			};
+			struct test_lri ok_lris[] = {
+				/* NB: [1:0] MBZ */
+				{ SO_WRITE_OFFSET_0, 0xfffffffc,
+				  0xabcdabc0, 0xbeefbee0 }
+			};
+			int bad_lri_errno = parser_version >= 8 ? 0 : -EINVAL;
+
+			for (int i = 0; i < ARRAY_SIZE(ok_lris); i++) {
+				test_lri(fd, handle,
+					 ok_lris + i, 0,
+					 ok_lris[i].test_val);
+			}
+
+			for (int i = 0; i < ARRAY_SIZE(bad_lris); i++) {
+				test_lri(fd, handle,
+					 bad_lris + i, bad_lri_errno,
+					 bad_lris[i].init_val);
+			}
+		}
+
+		igt_fixture {
+			intel_register_access_fini();
+		}
 	}
 
 	igt_subtest("bitmasks") {
