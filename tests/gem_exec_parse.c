@@ -504,10 +504,20 @@ igt_main
 			0,
 			MI_BATCH_BUFFER_END,
 		};
-		exec_batch(fd, handle,
-			   pc, sizeof(pc),
-			   I915_EXEC_RENDER,
-			   -EINVAL);
+		if (parser_version >= 8) {
+			/* Expect to read back zero since the command should be
+			 * squashed to a NOOP
+			 */
+			exec_batch_patched(fd, handle,
+					   pc, sizeof(pc),
+					   8, /* patch offset, */
+					   0x0);
+		} else {
+			exec_batch(fd, handle,
+				   pc, sizeof(pc),
+				   I915_EXEC_RENDER,
+				   -EINVAL);
+		}
 	}
 
 	igt_subtest("batch-without-end") {
