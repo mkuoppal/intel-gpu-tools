@@ -531,14 +531,25 @@ igt_main
 	igt_subtest("cmd-crossing-page") {
 		uint32_t lri_ok[] = {
 			MI_LOAD_REGISTER_IMM,
-			0x5280, /* allowed register address (SO_WRITE_OFFSET[0]) */
-			0x1,
+			SO_WRITE_OFFSET_0, /* allowed register address */
+			0xdcbaabc0, /* [1:0] MBZ */
+			MI_BATCH_BUFFER_END,
+		};
+		uint32_t store_reg[] = {
+			MI_STORE_REGISTER_MEM | (3 - 2),
+			SO_WRITE_OFFSET_0,
+			0, /* reloc */
 			MI_BATCH_BUFFER_END,
 		};
 		exec_split_batch(fd,
 				 lri_ok, sizeof(lri_ok),
 				 I915_EXEC_RENDER,
 				 0);
+		exec_batch_patched(fd, handle,
+				   store_reg,
+				   sizeof(store_reg),
+				   2 * sizeof(uint32_t), /* reloc */
+				   0xdcbaabc0);
 	}
 
 	igt_subtest("oacontrol-tracking") {
