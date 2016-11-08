@@ -551,6 +551,9 @@ igt_main
 			0x31337000,
 			MI_BATCH_BUFFER_END,
 		};
+
+		igt_require(parser_version < 9);
+
 		exec_batch(fd, handle,
 			   lri_ok, sizeof(lri_ok),
 			   I915_EXEC_RENDER,
