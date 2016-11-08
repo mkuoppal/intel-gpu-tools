@@ -341,6 +341,7 @@ static void hsw_load_register_reg(void)
 	};
 	int fd;
 	uint32_t handle;
+	int bad_lrr_errno = parser_version >= 8 ? 0 : -EINVAL;
 
 	/* Open again to get a non-master file descriptor */
 	fd = drm_open_driver(DRIVER_INTEL);
@@ -371,10 +372,21 @@ static void hsw_load_register_reg(void)
 	}
 
 	for (int i = 0 ; i < ARRAY_SIZE(disallowed_regs); i++) {
+		exec_batch(fd, handle, init_gpr0, sizeof(init_gpr0),
+			   I915_EXEC_RENDER,
+			   0);
+		exec_batch_patched(fd, handle,
+				   store_gpr0, sizeof(store_gpr0),
+				   2 * sizeof(uint32_t), /* reloc */
+				   0xabcdabc0);
 		do_lrr[1] = disallowed_regs[i];
 		exec_batch(fd, handle, do_lrr, sizeof(do_lrr),
 			   I915_EXEC_RENDER,
-			   -EINVAL);
+			   bad_lrr_errno);
+		exec_batch_patched(fd, handle,
+				   store_gpr0, sizeof(store_gpr0),
+				   2 * sizeof(uint32_t), /* reloc */
+				   0xabcdabc0);
 	}
 
 	close(fd);
