@@ -366,7 +366,10 @@ static void basic_cpu(int fd)
 	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
 	munmap(wc, 4096);
 
-	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	if (reloc.presumed_offset == -1)
+		igt_warn("reloc.presumed_offset == -1\n");
+	else
+		igt_assert_eq_u64(reloc.presumed_offset, offset);
 	igt_assert_eq_u64(obj.offset, offset);
 
 	/* Simulate relocation */
@@ -387,7 +390,10 @@ static void basic_cpu(int fd)
 	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
 	munmap(wc, 4096);
 
-	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	if (reloc.presumed_offset == -1)
+		igt_warn("reloc.presumed_offset == -1\n");
+	else
+		igt_assert_eq_u64(reloc.presumed_offset, offset);
 	igt_assert_eq_u64(obj.offset, offset);
 
 	gem_close(fd, obj.handle);
@@ -430,7 +436,10 @@ static void basic_gtt(int fd)
 	offset = 0;
 	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
 
-	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	if (reloc.presumed_offset == -1)
+		igt_warn("reloc.presumed_offset == -1\n");
+	else
+		igt_assert_eq_u64(reloc.presumed_offset, offset);
 	igt_assert_eq_u64(obj.offset, offset);
 
 	offset = -1;
@@ -447,7 +456,10 @@ static void basic_gtt(int fd)
 	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
 	munmap(wc, 4096);
 
-	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	if (reloc.presumed_offset == -1)
+		igt_warn("reloc.presumed_offset == -1\n");
+	else
+		igt_assert_eq_u64(reloc.presumed_offset, offset);
 	igt_assert_eq_u64(obj.offset, offset);
 
 	gem_close(fd, obj.handle);
@@ -490,7 +502,10 @@ static void basic_noreloc(int fd)
 	offset = 0;
 	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
 
-	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	if (reloc.presumed_offset == -1)
+		igt_warn("reloc.presumed_offset == -1\n");
+	else
+		igt_assert_eq_u64(reloc.presumed_offset, offset);
 	igt_assert_eq_u64(obj.offset, offset);
 
 	/* Simulate relocation */
@@ -504,7 +519,10 @@ static void basic_noreloc(int fd)
 	memcpy(&offset, wc + 4000, has_64bit_reloc(fd) ? 8 : 4);
 	munmap(wc, 4096);
 
-	igt_assert_eq_u64(reloc.presumed_offset, offset);
+	if (reloc.presumed_offset == -1)
+		igt_warn("reloc.presumed_offset == -1\n");
+	else
+		igt_assert_eq_u64(reloc.presumed_offset, offset);
 	igt_assert_eq_u64(obj.offset, offset);
 
 	gem_close(fd, obj.handle);
