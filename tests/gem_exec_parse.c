@@ -485,6 +485,22 @@ igt_main
 				/* dummy head pointer */
 				{ OASTATUS2, 0xffffff80, 0xdeadf000, 0xbeeff000 }
 			};
+			struct test_lri v9_bad_lris[] = {
+				/* It's really important for us to check that
+				 * an LRI to OACONTROL doesn't result in an
+				 * EINVAL error because Mesa attempts writing
+				 * to OACONTROL to determine what extensions to
+				 * expose and will abort() for execbuffer()
+				 * errors.
+				 *
+				 * Mesa can gracefully recognise and handle the
+				 * LRI becoming a NOOP.
+				 *
+				 * The test values represent dummy context IDs
+				 * while leaving the OA unit disabled
+				 */
+				{ OACONTROL, 0xfffff000, 0xfeed0000, 0x31337000 }
+			};
 			struct test_lri ok_lris[] = {
 				/* NB: [1:0] MBZ */
 				{ SO_WRITE_OFFSET_0, 0xfffffffc,
@@ -502,6 +518,15 @@ igt_main
 				test_lri(fd, handle,
 					 bad_lris + i, bad_lri_errno,
 					 bad_lris[i].init_val);
+			}
+
+			if (parser_version >= 9) {
+				for (int i = 0; i < ARRAY_SIZE(v9_bad_lris); i++) {
+					test_lri(fd, handle,
+						 v9_bad_lris + i,
+						 0,
+						 v9_bad_lris[i].init_val);
+				}
 			}
 		}
 
