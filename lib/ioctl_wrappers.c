@@ -158,6 +158,9 @@ int __gem_set_tiling(int fd, uint32_t handle, uint32_t tiling, uint32_t stride)
 
 	igt_require_intel(fd);
 
+	if (tiling == I915_TILING_Yf || tiling == I915_TILING_Ys)
+		tiling = I915_TILING_Y;
+
 	memset(&st, 0, sizeof(st));
 	do {
 		st.handle = handle;
