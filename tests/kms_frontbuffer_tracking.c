@@ -122,7 +122,6 @@ struct test_mode {
 	 * and they exercise slightly different codepaths inside the Kernel. */
 	enum flip_type {
 		FLIP_PAGEFLIP,
-		FLIP_PAGEFLIP_EVENT,
 		FLIP_MODESET,
 		FLIP_PLANES,
 		FLIP_COUNT,
@@ -2322,11 +2321,6 @@ static void page_flip_for_params(struct modeset_params *params,
 	switch (type) {
 	case FLIP_PAGEFLIP:
 		rc = drmModePageFlip(drm.fd, params->crtc_id,
-				     params->fb.fb->fb_id, 0, NULL);
-		igt_assert_eq(rc, 0);
-		break;
-	case FLIP_PAGEFLIP_EVENT:
-		rc = drmModePageFlip(drm.fd, params->crtc_id,
 				     params->fb.fb->fb_id,
 				     DRM_MODE_PAGE_FLIP_EVENT, NULL);
 		igt_assert_eq(rc, 0);
@@ -3366,8 +3360,6 @@ static const char *flip_str(enum flip_type flip)
 	switch (flip) {
 	case FLIP_PAGEFLIP:
 		return "pg";
-	case FLIP_PAGEFLIP_EVENT:
-		return "ev";
 	case FLIP_MODESET:
 		return "ms";
 	case FLIP_PLANES:
