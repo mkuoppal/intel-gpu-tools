@@ -507,12 +507,10 @@ static void copy_wc_page(uint32_t *dst, const uint32_t *src)
 #endif
 
 static void
-test_huge_copy(int fd, int huge, int tiling_a, int tiling_b)
+test_huge_copy(int fd, int huge, int tiling_a, int tiling_b, int ncpus)
 {
-	uint32_t devid = intel_get_drm_devid(fd);
+	const uint32_t devid = intel_get_drm_devid(fd);
 	uint64_t huge_object_size, i;
-	uint32_t bo;
-	char *a, *b;
 
 	switch (huge) {
 	case -2:
@@ -528,78 +526,84 @@ test_huge_copy(int fd, int huge, int tiling_a, int tiling_b)
 		huge_object_size = gem_global_aperture_size(fd) + PAGE_SIZE;
 		break;
 	}
-	intel_require_memory(2, huge_object_size, CHECK_RAM);
+	intel_require_memory(2*ncpus, huge_object_size, CHECK_RAM);
 
-	bo = gem_create(fd, huge_object_size);
-	if (tiling_a)
-		igt_require(__gem_set_tiling(fd, bo, abs(tiling_a), min_tile_width(devid, tiling_a)) == 0);
-	a = __gem_mmap__gtt(fd, bo, huge_object_size, PROT_READ | PROT_WRITE);
-	igt_require(a);
-	gem_close(fd, bo);
+	igt_fork(child, ncpus) {
+		uint32_t bo;
+		char *a, *b;
 
-	for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
-		uint32_t *ptr = (uint32_t *)(a + PAGE_SIZE*i);
-		for (int j = 0; j < PAGE_SIZE/4; j++)
-			ptr[j] = i + j;
-		igt_progress("Writing a ", i, huge_object_size / PAGE_SIZE);
+		bo = gem_create(fd, huge_object_size);
+		if (tiling_a)
+			igt_require(__gem_set_tiling(fd, bo, abs(tiling_a), min_tile_width(devid, tiling_a)) == 0);
+		a = __gem_mmap__gtt(fd, bo, huge_object_size, PROT_READ | PROT_WRITE);
+		igt_require(a);
+		gem_close(fd, bo);
+
+		for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
+			uint32_t *ptr = (uint32_t *)(a + PAGE_SIZE*i);
+			for (int j = 0; j < PAGE_SIZE/4; j++)
+				ptr[j] = i + j;
+			igt_progress("Writing a ", i, huge_object_size / PAGE_SIZE);
+		}
+
+		bo = gem_create(fd, huge_object_size);
+		if (tiling_b)
+			igt_require(__gem_set_tiling(fd, bo, abs(tiling_b), max_tile_width(devid, tiling_b)) == 0);
+		b = __gem_mmap__gtt(fd, bo, huge_object_size, PROT_READ | PROT_WRITE);
+		igt_require(b);
+		gem_close(fd, bo);
+
+		for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
+			uint32_t *ptr = (uint32_t *)(b + PAGE_SIZE*i);
+			for (int j = 0; j < PAGE_SIZE/4; j++)
+				ptr[j] = ~(i + j);
+			igt_progress("Writing b ", i, huge_object_size / PAGE_SIZE);
+		}
+
+		for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
+			uint32_t *A = (uint32_t *)(a + PAGE_SIZE*i);
+			uint32_t *B = (uint32_t *)(b + PAGE_SIZE*i);
+			uint32_t A_tmp[PAGE_SIZE/sizeof(uint32_t)];
+			uint32_t B_tmp[PAGE_SIZE/sizeof(uint32_t)];
+
+			copy_wc_page(A_tmp, A);
+			copy_wc_page(B_tmp, B);
+			for (int j = 0; j < PAGE_SIZE/4; j++)
+				if ((i +  j) & 1)
+					A_tmp[j] = B_tmp[j];
+				else
+					B_tmp[j] = A_tmp[j];
+			memcpy(A, A_tmp, PAGE_SIZE);
+			memcpy(B, B_tmp, PAGE_SIZE);
+
+			igt_progress("Copying a<->b ", i, huge_object_size / PAGE_SIZE);
+		}
+
+		for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
+			uint32_t page[PAGE_SIZE/sizeof(uint32_t)];
+			copy_wc_page(page, a + PAGE_SIZE*i);
+			for (int j = 0; j < PAGE_SIZE/sizeof(uint32_t); j++)
+				if ((i + j) & 1)
+					igt_assert_eq_u32(page[j], ~(i + j));
+				else
+					igt_assert_eq_u32(page[j], i + j);
+			igt_progress("Checking a ", i, huge_object_size / PAGE_SIZE);
+		}
+		munmap(a, huge_object_size);
+
+		for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
+			uint32_t page[PAGE_SIZE/sizeof(uint32_t)];
+			copy_wc_page(page, b + PAGE_SIZE*i);
+			for (int j = 0; j < PAGE_SIZE/sizeof(uint32_t); j++)
+				if ((i + j) & 1)
+					igt_assert_eq_u32(page[j], ~(i + j));
+				else
+					igt_assert_eq_u32(page[j], i + j);
+			igt_progress("Checking b ", i, huge_object_size / PAGE_SIZE);
+		}
+		munmap(b, huge_object_size);
 	}
-
-	bo = gem_create(fd, huge_object_size);
-	if (tiling_b)
-		igt_require(__gem_set_tiling(fd, bo, abs(tiling_b), max_tile_width(devid, tiling_b)) == 0);
-	b = __gem_mmap__gtt(fd, bo, huge_object_size, PROT_READ | PROT_WRITE);
-	igt_require(b);
-	gem_close(fd, bo);
-
-	for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
-		uint32_t *ptr = (uint32_t *)(b + PAGE_SIZE*i);
-		for (int j = 0; j < PAGE_SIZE/4; j++)
-			ptr[j] = ~(i + j);
-		igt_progress("Writing b ", i, huge_object_size / PAGE_SIZE);
-	}
-
-	for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
-		uint32_t *A = (uint32_t *)(a + PAGE_SIZE*i);
-		uint32_t *B = (uint32_t *)(b + PAGE_SIZE*i);
-		uint32_t A_tmp[PAGE_SIZE/sizeof(uint32_t)];
-		uint32_t B_tmp[PAGE_SIZE/sizeof(uint32_t)];
-
-		copy_wc_page(A_tmp, A);
-		copy_wc_page(B_tmp, B);
-		for (int j = 0; j < PAGE_SIZE/4; j++)
-			if ((i +  j) & 1)
-				A_tmp[j] = B_tmp[j];
-			else
-				B_tmp[j] = A_tmp[j];
-		memcpy(A, A_tmp, PAGE_SIZE);
-		memcpy(B, B_tmp, PAGE_SIZE);
-
-		igt_progress("Copying a<->b ", i, huge_object_size / PAGE_SIZE);
-	}
-
-	for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
-		uint32_t page[PAGE_SIZE/sizeof(uint32_t)];
-		copy_wc_page(page, a + PAGE_SIZE*i);
-		for (int j = 0; j < PAGE_SIZE/sizeof(uint32_t); j++)
-			if ((i + j) & 1)
-				igt_assert_eq_u32(page[j], ~(i + j));
-			else
-				igt_assert_eq_u32(page[j], i + j);
-		igt_progress("Checking a ", i, huge_object_size / PAGE_SIZE);
-	}
-	munmap(a, huge_object_size);
-
-	for (i = 0; i < huge_object_size / PAGE_SIZE; i++) {
-		uint32_t page[PAGE_SIZE/sizeof(uint32_t)];
-		copy_wc_page(page, b + PAGE_SIZE*i);
-		for (int j = 0; j < PAGE_SIZE/sizeof(uint32_t); j++)
-			if ((i + j) & 1)
-				igt_assert_eq_u32(page[j], ~(i + j));
-			else
-				igt_assert_eq_u32(page[j], i + j);
-		igt_progress("Checking b ", i, huge_object_size / PAGE_SIZE);
-	}
-	munmap(b, huge_object_size);
+	igt_waitchildren();
 }
 
 static void
@@ -764,30 +768,46 @@ igt_main
 	igt_subtest("huge-bo-tiledY")
 		test_huge_bo(fd, 1, I915_TILING_Y);
 
-	igt_subtest("basic-small-copy")
-		test_huge_copy(fd, -2, I915_TILING_NONE, I915_TILING_NONE);
-	igt_subtest("basic-small-copy-XY")
-		test_huge_copy(fd, -2, I915_TILING_X, I915_TILING_Y);
-	igt_subtest("basic-small-copy-odd")
-		test_huge_copy(fd, -2, -I915_TILING_X, -I915_TILING_Y);
-	igt_subtest("medium-copy")
-		test_huge_copy(fd, -1, I915_TILING_NONE, I915_TILING_NONE);
-	igt_subtest("medium-copy-XY")
-		test_huge_copy(fd, -1, I915_TILING_X, I915_TILING_Y);
-	igt_subtest("medium-copy-odd")
-		test_huge_copy(fd, -1, -I915_TILING_X, -I915_TILING_Y);
-	igt_subtest("big-copy")
-		test_huge_copy(fd, 0, I915_TILING_NONE, I915_TILING_NONE);
-	igt_subtest("big-copy-XY")
-		test_huge_copy(fd, 0, I915_TILING_X, I915_TILING_Y);
-	igt_subtest("big-copy-odd")
-		test_huge_copy(fd, 0, -I915_TILING_X, -I915_TILING_Y);
-	igt_subtest("huge-copy")
-		test_huge_copy(fd, 1, I915_TILING_NONE, I915_TILING_NONE);
-	igt_subtest("huge-copy-XY")
-		test_huge_copy(fd, 1, I915_TILING_X, I915_TILING_Y);
-	igt_subtest("huge-copy-odd")
-		test_huge_copy(fd, 1, -I915_TILING_X, -I915_TILING_Y);
+	igt_subtest_group {
+		const struct copy_size {
+			const char *prefix;
+			int size;
+		} copy_sizes[] = {
+			{ "basic-small", -2 },
+			{ "medium", -1 },
+			{ "big", 0 },
+			{ "huge", 1 },
+			{ }
+		};
+		const struct copy_mode {
+			const char *suffix;
+			int tiling_x, tiling_y;
+		} copy_modes[] = {
+			{ "", I915_TILING_NONE, I915_TILING_NONE},
+			{ "-XY", I915_TILING_X, I915_TILING_Y},
+			{ "-odd", -I915_TILING_X, -I915_TILING_Y},
+			{}
+		};
+		const int ncpus = sysconf(_SC_NPROCESSORS_ONLN);
+
+		for (const struct copy_size *s = copy_sizes; s->prefix; s++)
+			for (const struct copy_mode *m = copy_modes; m->suffix; m++) {
+				igt_subtest_f("%s-copy%s", s->prefix, m->suffix)
+					test_huge_copy(fd,
+							s->size,
+							m->tiling_x,
+							m->tiling_y,
+							1);
+
+				igt_subtest_f("forked-%s-copy%s", s->prefix, m->suffix)
+					test_huge_copy(fd,
+							s->size,
+							m->tiling_x,
+							m->tiling_y,
+							ncpus);
+			}
+	}
+
 
 	igt_fixture
 		close(fd);
