@@ -180,6 +180,32 @@ void igt_calc_fb_size(int fd, int width, int height, int bpp, uint64_t tiling,
 	*size_ret = size;
 }
 
+/**
+ * igt_fb_mod_to_tiling:
+ * @modifier: DRM framebuffer modifier
+ *
+ * This function converts a DRM framebuffer modifier to its corresponding
+ * tiling constant.
+ *
+ * Returns:
+ * A tiling constant
+ */
+uint64_t igt_fb_mod_to_tiling(uint64_t modifier)
+{
+	switch (modifier) {
+	case LOCAL_DRM_FORMAT_MOD_NONE:
+		return I915_TILING_NONE;
+	case LOCAL_I915_FORMAT_MOD_X_TILED:
+		return I915_TILING_X;
+	case LOCAL_I915_FORMAT_MOD_Y_TILED:
+		return I915_TILING_Y;
+	case LOCAL_I915_FORMAT_MOD_Yf_TILED:
+		return I915_TILING_Yf;
+	default:
+		igt_assert(0);
+	}
+}
+
 /* helpers to create nice-looking framebuffers */
 static int create_bo_for_fb(int fd, int width, int height, uint32_t format,
 			    uint64_t tiling, unsigned size, unsigned stride,
@@ -206,7 +232,7 @@ static int create_bo_for_fb(int fd, int width, int height, uint32_t format,
 			uint32_t *ptr;
 
 			bo = gem_create(fd, size);
-			gem_set_tiling(fd, bo, tiling, stride);
+			gem_set_tiling(fd, bo, igt_fb_mod_to_tiling(tiling), stride);
 
 			/* Ensure the framebuffer is preallocated */
 			ptr = gem_mmap__gtt(fd, bo, size, PROT_READ);
@@ -956,27 +982,11 @@ struct fb_blit_upload {
 	} linear;
 };
 
-static unsigned int fb_mod_to_obj_tiling(uint64_t fb_mod)
-{
-	switch (fb_mod) {
-	case LOCAL_DRM_FORMAT_MOD_NONE:
-		return I915_TILING_NONE;
-	case LOCAL_I915_FORMAT_MOD_X_TILED:
-		return I915_TILING_X;
-	case LOCAL_I915_FORMAT_MOD_Y_TILED:
-		return I915_TILING_Y;
-	case LOCAL_I915_FORMAT_MOD_Yf_TILED:
-		return I915_TILING_Yf;
-	default:
-		igt_assert(0);
-	}
-}
-
 static void destroy_cairo_surface__blit(void *arg)
 {
 	struct fb_blit_upload *blit = arg;
 	struct igt_fb *fb = blit->fb;
-	unsigned int obj_tiling = fb_mod_to_obj_tiling(fb->tiling);
+	unsigned int obj_tiling = igt_fb_mod_to_tiling(fb->tiling);
 
 	munmap(blit->linear.map, blit->linear.size);
 	fb->cairo_surface = NULL;
@@ -1005,7 +1015,7 @@ static void create_cairo_surface__blit(int fd, struct igt_fb *fb)
 {
 	struct fb_blit_upload *blit;
 	cairo_format_t cairo_format;
-	unsigned int obj_tiling = fb_mod_to_obj_tiling(fb->tiling);
+	unsigned int obj_tiling = igt_fb_mod_to_tiling(fb->tiling);
 
 	blit = malloc(sizeof(*blit));
 	igt_assert(blit);

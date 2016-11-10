@@ -129,6 +129,8 @@ int igt_create_bo_with_dimensions(int fd, int width, int height, uint32_t format
 				  unsigned *stride_ret, unsigned *size_ret,
 				  bool *is_dumb);
 
+uint64_t igt_fb_mod_to_tiling(uint64_t modifier);
+
 /* cairo-based painting */
 cairo_t *igt_get_cairo_ctx(int fd, struct igt_fb *fb);
 void igt_paint_color(cairo_t *cr, int x, int y, int w, int h,

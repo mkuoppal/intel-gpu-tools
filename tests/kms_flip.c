@@ -370,7 +370,7 @@ static int _emit_dummy_load__rcs(struct test_output *o, int limit, int timeout)
 	sb[2].bo = gem_handle_to_libdrm_bo(bufmgr, drm_fd, "imported", fb_info->gem_handle);
 	igt_assert(sb[2].bo);
 	sb[2].size = sb[2].bo->size;
-	sb[2].tiling = fb_info->tiling;
+	sb[2].tiling = igt_fb_mod_to_tiling(fb_info->tiling);
 	sb[2].data = NULL;
 	sb[2].num_tiles = sb[2].bo->size;
 	sb[2].stride = fb_info->stride;
