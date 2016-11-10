@@ -511,6 +511,7 @@ test_huge_copy(int fd, int huge, int tiling_a, int tiling_b, int ncpus)
 {
 	const uint32_t devid = intel_get_drm_devid(fd);
 	uint64_t huge_object_size, i;
+	unsigned mode = CHECK_RAM;
 
 	switch (huge) {
 	case -2:
@@ -522,11 +523,15 @@ test_huge_copy(int fd, int huge, int tiling_a, int tiling_b, int ncpus)
 	case 0:
 		huge_object_size = gem_mappable_aperture_size() + PAGE_SIZE;
 		break;
-	default:
+	case 1:
 		huge_object_size = gem_global_aperture_size(fd) + PAGE_SIZE;
 		break;
+	default:
+		huge_object_size = (intel_get_total_ram_mb() << 19) + PAGE_SIZE;
+		mode |= CHECK_SWAP;
+		break;
 	}
-	intel_require_memory(2*ncpus, huge_object_size, CHECK_RAM);
+	intel_require_memory(2*ncpus, huge_object_size, mode);
 
 	igt_fork(child, ncpus) {
 		uint32_t bo;
@@ -777,6 +782,7 @@ igt_main
 			{ "medium", -1 },
 			{ "big", 0 },
 			{ "huge", 1 },
+			{ "swap", 2 },
 			{ }
 		};
 		const struct copy_mode {
