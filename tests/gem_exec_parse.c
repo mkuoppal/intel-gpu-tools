@@ -375,11 +375,11 @@ static void hsw_load_register_reg(void)
 	close(fd);
 }
 
-static uint32_t handle;
-static int fd;
-
 igt_main
 {
+	uint32_t handle;
+	int fd;
+
 	igt_fixture {
 		int parser_version = 0;
                 drm_i915_getparam_t gp;
