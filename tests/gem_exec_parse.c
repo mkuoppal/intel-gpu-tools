@@ -51,6 +51,7 @@
 #define   PIPE_CONTROL_QW_WRITE	(1<<14)
 #define   PIPE_CONTROL_LRI_POST_OP (1<<23)
 
+static int parser_version;
 
 static int command_parser_version(int fd)
 {
@@ -341,7 +342,7 @@ static void hsw_load_register_reg(void)
 	fd = drm_open_driver(DRIVER_INTEL);
 
 	igt_require(IS_HASWELL(intel_get_drm_devid(fd)));
-	igt_require(command_parser_version(fd) >= 7);
+	igt_require(parser_version >= 7);
 
 	handle = gem_create(fd, 4096);
 
@@ -381,16 +382,10 @@ igt_main
 	int fd;
 
 	igt_fixture {
-		int parser_version = 0;
-                drm_i915_getparam_t gp;
-		int rc;
-
 		fd = drm_open_driver(DRIVER_INTEL);
 
-		gp.param = I915_PARAM_CMD_PARSER_VERSION;
-		gp.value = &parser_version;
-		rc = drmIoctl(fd, DRM_IOCTL_I915_GETPARAM, &gp);
-		igt_require(!rc && parser_version > 0);
+		parser_version = command_parser_version(fd);
+		igt_require(parser_version != -1);
 
 		igt_require(gem_uses_ppgtt(fd));
 
