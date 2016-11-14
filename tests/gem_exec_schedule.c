@@ -26,7 +26,7 @@
 #include "igt.h"
 #include "igt_vgem.h"
 
-#define LOCAL_PARAM_HAS_SCHEDULER 42
+#define LOCAL_PARAM_HAS_SCHEDULER 41
 #define LOCAL_CONTEXT_PARAM_PRIORITY 5
 
 #define LO 0
