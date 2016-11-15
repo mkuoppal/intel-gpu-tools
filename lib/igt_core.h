@@ -39,6 +39,7 @@
 #include <sys/types.h>
 #include <stdarg.h>
 #include <getopt.h>
+#include <unistd.h>
 
 #ifndef IGT_LOG_DOMAIN
 #define IGT_LOG_DOMAIN (NULL)
