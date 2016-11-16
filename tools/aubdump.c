@@ -58,7 +58,6 @@ static char *filename = NULL;
 static FILE *files[2] = { NULL, NULL };
 static int gen = 0;
 static int verbose = 0;
-static const uint32_t gtt_size = 0x10000;
 static bool device_override;
 static uint32_t device;
 
@@ -168,6 +167,20 @@ data_out(const void *data, size_t size)
 	}
 }
 
+static uint32_t
+gtt_entry_size(void)
+{
+	return gen >= 8 ? 8 : 4;
+}
+
+static uint32_t
+gtt_size(void)
+{
+	/* Enough for 64MB assuming 4kB pages. */
+	const unsigned entries = 0x4000;
+	return entries * gtt_entry_size();
+}
+
 static void
 write_header(void)
 {
@@ -190,11 +203,14 @@ write_header(void)
 		  AUB_TRACE_TYPE_NOTYPE | AUB_TRACE_OP_DATA_WRITE);
 	dword_out(0); /* subtype */
 	dword_out(0); /* offset */
-	dword_out(gtt_size); /* size */
+	dword_out(gtt_size()); /* size */
 	if (gen >= 8)
 		dword_out(0);
-	for (uint32_t i = 0; i < gtt_size; i += 4, entry += 0x1000)
-		dword_out(entry);
+	for (uint32_t i = 0; i * gtt_entry_size() < gtt_size(); i++) {
+		dword_out(entry + 0x1000 * i);
+		if (gen >= 8)
+			dword_out(0);
+	}
 }
 
 /**
@@ -376,7 +392,7 @@ dump_execbuffer2(int fd, struct drm_i915_gem_execbuffer2 *execbuffer2)
 	struct drm_i915_gem_exec_object2 *exec_objects =
 		(struct drm_i915_gem_exec_object2 *) (uintptr_t) execbuffer2->buffers_ptr;
 	uint32_t ring_flag = execbuffer2->flags & I915_EXEC_RING_MASK;
-	uint32_t offset = gtt_size;
+	uint32_t offset = gtt_size();
 	struct drm_i915_gem_exec_object2 *obj;
 	struct bo *bo, *batch_bo;
 	void *data;
