@@ -528,6 +528,38 @@ static void basic_noreloc(int fd)
 	gem_close(fd, obj.handle);
 }
 
+static void basic_softpin(int fd)
+{
+	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_execbuffer2 execbuf;
+	uint64_t offset;
+	uint32_t trash;
+	uint32_t bbe = MI_BATCH_BUFFER_END;
+
+	igt_require(gem_has_softpin(fd));
+
+	memset(&obj, 0, sizeof(obj));
+	obj.handle = gem_create(fd, 4096);
+	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 1;
+	gem_execbuf(fd, &execbuf);
+
+	trash = obj.handle;
+	offset = obj.offset;
+
+	obj.handle = gem_create(fd, 4096);
+	obj.flags = EXEC_OBJECT_PINNED;
+
+	gem_execbuf(fd, &execbuf);
+	igt_assert_eq_u64(obj.offset, offset);
+
+	gem_close(fd, obj.handle);
+	gem_close(fd, trash);
+}
+
 igt_main
 {
 	uint64_t size;
@@ -544,6 +576,9 @@ igt_main
 
 	igt_subtest("basic-noreloc")
 		basic_noreloc(fd);
+
+	igt_subtest("basic-softpin")
+		basic_softpin(fd);
 
 	for (size = 4096; size <= 4ull*1024*1024*1024; size <<= 1) {
 		igt_subtest_f("mmap-%u", find_last_set(size) - 1)
