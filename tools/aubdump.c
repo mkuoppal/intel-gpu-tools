@@ -273,6 +273,32 @@ aub_dump_ringbuffer(uint64_t batch_offset, uint64_t offset, int ring_flag)
 	data_out(ringbuffer, ring_count * 4);
 }
 
+static void
+write_reloc(void *p, uint64_t v)
+{
+	if (gen >= 8) {
+		/* From the Broadwell PRM Vol. 2a,
+		 * MI_LOAD_REGISTER_MEM::MemoryAddress:
+		 *
+		 *	"This field specifies the address of the memory
+		 *	location where the register value specified in the
+		 *	DWord above will read from.  The address specifies
+		 *	the DWord location of the data. Range =
+		 *	GraphicsVirtualAddress[63:2] for a DWord register
+		 *	GraphicsAddress [63:48] are ignored by the HW and
+		 *	assumed to be in correct canonical form [63:48] ==
+		 *	[47]."
+		 *
+		 * In practice, this will always mean the top bits are zero
+		 * because of the GTT size limitation of the aubdump tool.
+		 */
+		const int shift = 63 - 47;
+		*(uint64_t *)p = (((int64_t)v) << shift) >> shift;
+	} else {
+		*(uint32_t *)p = v;
+	}
+}
+
 static void *
 relocate_bo(struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
 	    const struct drm_i915_gem_exec_object2 *obj)
@@ -282,7 +308,6 @@ relocate_bo(struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
 	const struct drm_i915_gem_relocation_entry *relocs =
 		(const struct drm_i915_gem_relocation_entry *) (uintptr_t) obj->relocs_ptr;
 	void *relocated;
-	uint32_t *dw;
 	int handle;
 
 	relocated = malloc(bo->size);
@@ -296,8 +321,8 @@ relocate_bo(struct bo *bo, const struct drm_i915_gem_execbuffer2 *execbuffer2,
 		else
 			handle = relocs[i].target_handle;
 
-		dw = (uint32_t*)(((char *) relocated) + relocs[i].offset);
-		*dw = get_bo(handle)->offset + relocs[i].delta;
+		write_reloc(((char *)relocated) + relocs[i].offset,
+			    get_bo(handle)->offset + relocs[i].delta);
 	}
 
 	return relocated;
