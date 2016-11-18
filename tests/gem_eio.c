@@ -191,7 +191,7 @@ static void unplug(struct cork *c)
 static void test_inflight(int fd)
 {
 	struct drm_i915_gem_execbuffer2 execbuf;
-	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_exec_object2 obj[2];
 	uint32_t bbe = MI_BATCH_BUFFER_END;
 	igt_hang_t hang;
 	struct cork cork;
@@ -201,19 +201,20 @@ static void test_inflight(int fd)
 
 	plug(fd, &cork);
 
-	memset(&obj, 0, sizeof(obj));
-	obj.handle = gem_create(fd, 4096);
-	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+	memset(obj, 0, sizeof(obj));
+	obj[0].handle = cork.handle;
+	obj[1].handle = gem_create(fd, 4096);
+	gem_write(fd, obj[1].handle, 0, &bbe, sizeof(bbe));
 
 	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffers_ptr = (uintptr_t)obj;
 	execbuf.buffer_count = 2;
 
 	gem_execbuf(fd, &execbuf);
 
 	igt_post_hang_ring(fd, hang);
 	unplug(&cork); /* only now submit our batches */
-	igt_assert_eq(__gem_wait(fd, obj.handle, -1), 0);
+	igt_assert_eq(__gem_wait(fd, obj[1].handle, -1), 0);
 
 	igt_require(i915_reset_control(true));
 	trigger_reset(fd);
