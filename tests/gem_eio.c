@@ -39,6 +39,7 @@
 
 #include <drm.h>
 
+#include "igt_vgem.h"
 
 IGT_TEST_DESCRIPTION("Test that specific ioctls report a wedged GPU (EIO).");
 
@@ -157,6 +158,67 @@ static void test_wait(int fd)
 	trigger_reset(fd);
 }
 
+struct cork {
+	int device;
+	uint32_t handle;
+	uint32_t fence;
+};
+
+static void plug(int fd, struct cork *c)
+{
+	struct vgem_bo bo;
+	int dmabuf;
+
+	c->device = __drm_open_driver(DRIVER_VGEM);
+	igt_require(c->device != -1);
+
+	bo.width = bo.height = 1;
+	bo.bpp = 4;
+	vgem_create(c->device, &bo);
+	c->fence = vgem_fence_attach(c->device, &bo, VGEM_FENCE_WRITE);
+
+	dmabuf = prime_handle_to_fd(c->device, bo.handle);
+	c->handle = prime_fd_to_handle(fd, dmabuf);
+	close(dmabuf);
+}
+
+static void unplug(struct cork *c)
+{
+	vgem_fence_signal(c->device, c->fence);
+	close(c->device);
+}
+
+static void test_inflight(int fd)
+{
+	struct drm_i915_gem_execbuffer2 execbuf;
+	struct drm_i915_gem_exec_object2 obj;
+	uint32_t bbe = MI_BATCH_BUFFER_END;
+	igt_hang_t hang;
+	struct cork cork;
+
+	igt_require(i915_reset_control(false));
+	hang = igt_hang_ring(fd, I915_EXEC_DEFAULT);
+
+	plug(fd, &cork);
+
+	memset(&obj, 0, sizeof(obj));
+	obj.handle = gem_create(fd, 4096);
+	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+
+	memset(&execbuf, 0, sizeof(execbuf));
+	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffer_count = 2;
+
+	gem_execbuf(fd, &execbuf);
+
+	igt_post_hang_ring(fd, hang);
+	unplug(&cork); /* only now submit our batches */
+	igt_assert_eq(__gem_wait(fd, obj.handle, -1), 0);
+
+	igt_require(i915_reset_control(true));
+	trigger_reset(fd);
+}
+
 igt_main
 {
 	int fd = -1;
@@ -176,6 +238,9 @@ igt_main
 
 	igt_subtest("wait")
 		test_wait(fd);
+
+	igt_subtest("in-flight")
+		test_inflight(fd);
 
 	igt_fixture
 		close(fd);
