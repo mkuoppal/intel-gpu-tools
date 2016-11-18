@@ -530,34 +530,36 @@ static void basic_noreloc(int fd)
 
 static void basic_softpin(int fd)
 {
-	struct drm_i915_gem_exec_object2 obj;
+	struct drm_i915_gem_exec_object2 obj[2];
 	struct drm_i915_gem_execbuffer2 execbuf;
 	uint64_t offset;
-	uint32_t trash;
 	uint32_t bbe = MI_BATCH_BUFFER_END;
 
 	igt_require(gem_has_softpin(fd));
 
-	memset(&obj, 0, sizeof(obj));
-	obj.handle = gem_create(fd, 4096);
-	gem_write(fd, obj.handle, 0, &bbe, sizeof(bbe));
+	memset(obj, 0, sizeof(obj));
+	obj[1].handle = gem_create(fd, 4096);
+	gem_write(fd, obj[1].handle, 0, &bbe, sizeof(bbe));
 
 	memset(&execbuf, 0, sizeof(execbuf));
-	execbuf.buffers_ptr = (uintptr_t)&obj;
+	execbuf.buffers_ptr = (uintptr_t)&obj[1];
 	execbuf.buffer_count = 1;
 	gem_execbuf(fd, &execbuf);
 
-	trash = obj.handle;
-	offset = obj.offset;
+	offset = obj[1].offset;
 
-	obj.handle = gem_create(fd, 4096);
-	obj.flags = EXEC_OBJECT_PINNED;
+	obj[0].handle = gem_create(fd, 4096);
+	obj[0].offset = obj[1].offset;
+	obj[0].flags = EXEC_OBJECT_PINNED;
+
+	execbuf.buffers_ptr = (uintptr_t)&obj[0];
+	execbuf.buffer_count = 2;
 
 	gem_execbuf(fd, &execbuf);
-	igt_assert_eq_u64(obj.offset, offset);
+	igt_assert_eq_u64(obj[0].offset, offset);
 
-	gem_close(fd, obj.handle);
-	gem_close(fd, trash);
+	gem_close(fd, obj[0].handle);
+	gem_close(fd, obj[1].handle);
 }
 
 igt_main
