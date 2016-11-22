@@ -176,8 +176,8 @@ gtt_entry_size(void)
 static uint32_t
 gtt_size(void)
 {
-	/* Enough for 64MB assuming 4kB pages. */
-	const unsigned entries = 0x4000;
+	/* Enough for 256MB assuming 4kB pages. */
+	const unsigned entries = 0x10000;
 	return entries * gtt_entry_size();
 }
 
