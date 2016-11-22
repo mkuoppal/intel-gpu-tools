@@ -500,7 +500,7 @@ static void copy_wc_page(void *dst, const void *src)
 #pragma GCC pop_options
 
 #else
-static void copy_wc_page(uint32_t *dst, const uint32_t *src)
+static void copy_wc_page(void *dst, const void *src)
 {
 	memcpy(dst, src, PAGE_SIZE);
 }
