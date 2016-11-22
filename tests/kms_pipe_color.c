@@ -654,8 +654,6 @@ static void test_pipe_legacy_gamma_reset(data_t *data,
 
 static bool crc_equal(igt_crc_t *a, igt_crc_t *b)
 {
-  int i;
-
   return memcmp(a->crc, b->crc, sizeof(a->crc[0]) * a->n_words) == 0;
 }
 
