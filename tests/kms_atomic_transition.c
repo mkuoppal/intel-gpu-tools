@@ -111,6 +111,151 @@ enum transition_type {
 	TRANSITION_MODESET_DISABLE,
 };
 
+static void set_sprite_wh(igt_display_t *display, enum pipe pipe,
+			  struct plane_parms *parms, struct igt_fb *sprite_fb,
+			  bool alpha, unsigned w, unsigned h)
+{
+	igt_plane_t *plane;
+
+	for_each_plane_on_pipe(display, pipe, plane) {
+		int i = plane->index;
+
+		if (plane->is_primary || plane->is_cursor)
+			continue;
+
+		parms[i].width = w;
+		parms[i].height = h;
+	}
+
+	igt_remove_fb(display->drm_fd, sprite_fb);
+	igt_create_fb(display->drm_fd, w, h,
+		      alpha ? DRM_FORMAT_ARGB8888 : DRM_FORMAT_XRGB8888,
+		      LOCAL_DRM_FORMAT_MOD_NONE, sprite_fb);
+}
+
+static void setup_parms(igt_display_t *display, enum pipe pipe,
+			const drmModeModeInfo *mode,
+			struct igt_fb *argb_fb,
+			struct igt_fb *sprite_fb,
+			struct plane_parms *parms)
+{
+	uint64_t cursor_width, cursor_height;
+	unsigned sprite_width, sprite_height, prev_w, prev_h;
+	bool max_sprite_width, max_sprite_height, alpha = true;
+	uint32_t n_planes = display->pipes[pipe].n_planes;
+	igt_plane_t *plane;
+
+	do_or_die(drmGetCap(display->drm_fd, DRM_CAP_CURSOR_WIDTH, &cursor_width));
+	if (cursor_width >= mode->hdisplay)
+		cursor_width = mode->hdisplay;
+
+	do_or_die(drmGetCap(display->drm_fd, DRM_CAP_CURSOR_HEIGHT, &cursor_height));
+	if (cursor_height >= mode->vdisplay)
+		cursor_height = mode->vdisplay;
+
+	for_each_plane_on_pipe(display, pipe, plane) {
+		int i = plane->index;
+
+		if (plane->is_primary)
+			parms[i].fb = plane->fb;
+		else if (plane->is_cursor)
+			parms[i].fb = argb_fb;
+		else
+			parms[i].fb = sprite_fb;
+
+		if (plane->is_primary) {
+			parms[i].width = mode->hdisplay;
+			parms[i].height = mode->vdisplay;
+		} else if (plane->is_cursor) {
+			parms[i].width = cursor_width;
+			parms[i].height = cursor_height;
+		}
+	}
+
+	igt_create_fb(display->drm_fd, cursor_width, cursor_height,
+		      DRM_FORMAT_ARGB8888, LOCAL_DRM_FORMAT_MOD_NONE, argb_fb);
+
+	igt_create_fb(display->drm_fd, cursor_width, cursor_height,
+		      DRM_FORMAT_ARGB8888, LOCAL_DRM_FORMAT_MOD_NONE, sprite_fb);
+
+	if (n_planes < 3)
+		return;
+
+	/*
+	 * Pre gen9 not all sizes are supported, find the biggest possible
+	 * size that can be enabled on all sprite planes.
+	 */
+retry:
+	prev_w = sprite_width = cursor_width;
+	prev_h = sprite_height = cursor_height;
+
+	max_sprite_width = (sprite_width == mode->hdisplay);
+	max_sprite_height = (sprite_height == mode->vdisplay);
+
+	while (1) {
+		int ret;
+
+		set_sprite_wh(display, pipe, parms, sprite_fb,
+			      alpha, sprite_width, sprite_height);
+
+		wm_setup_plane(display, pipe, (1 << n_planes) - 1, parms);
+		ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
+
+		if (ret == -EINVAL) {
+			if (cursor_width == sprite_width &&
+			    cursor_height == sprite_height) {
+				igt_assert_f(alpha,
+					      "Cannot configure the test with all sprite planes enabled\n");
+
+				/* retry once with XRGB format. */
+				alpha = false;
+				goto retry;
+			}
+
+			sprite_width = prev_w;
+			sprite_height = prev_h;
+
+			if (max_sprite_width && max_sprite_height) {
+				set_sprite_wh(display, pipe, parms, sprite_fb,
+					      alpha, sprite_width, sprite_height);
+				break;
+			}
+
+			if (!max_sprite_width)
+				max_sprite_width = true;
+			else
+				max_sprite_height = true;
+		} else {
+			prev_w = sprite_width;
+			prev_h = sprite_height;
+		}
+
+		if (!max_sprite_width) {
+			sprite_width *= 2;
+
+			if (sprite_width >= mode->hdisplay) {
+				max_sprite_width = true;
+
+				sprite_width = mode->hdisplay;
+			}
+		} else if (!max_sprite_height) {
+			sprite_height *= 2;
+
+			if (sprite_height >= mode->vdisplay) {
+				max_sprite_height = true;
+
+				sprite_height = mode->vdisplay;
+			}
+		} else
+			/* Max sized sprites for all! */
+			break;
+	}
+
+	igt_info("Running test on pipe %s with resolution %dx%d and sprite size %dx%d alpha %i\n",
+		 kmstest_pipe_name(pipe), mode->hdisplay, mode->vdisplay,
+		 sprite_width, sprite_height, alpha);
+}
+
 /*
  * 1. Set primary plane to a known fb.
  * 2. Make sure getcrtc returns the correct fb id.
@@ -121,14 +266,13 @@ enum transition_type {
  * so test this and make sure it works.
  */
 static void
-run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output, enum transition_type type, bool nonblocking)
+run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output,
+		    enum transition_type type, bool nonblocking)
 {
-	struct igt_fb fb, argb_fb;
+	struct igt_fb fb, argb_fb, sprite_fb;
 	drmModeModeInfo *mode, override_mode;
 	igt_plane_t *plane;
-	uint64_t cursor_width, cursor_height;
-	uint32_t n_planes = display->pipes[pipe].n_planes;
-	uint32_t iter_max = 1 << n_planes, i;
+	uint32_t iter_max = 1 << display->pipes[pipe].n_planes, i;
 	struct plane_parms parms[IGT_MAX_PLANES];
 	bool skip_test = false;
 	unsigned flags = DRM_MODE_PAGE_FLIP_EVENT;
@@ -146,17 +290,6 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 	igt_create_fb(display->drm_fd, mode->hdisplay, mode->vdisplay,
 		      DRM_FORMAT_XRGB8888, LOCAL_DRM_FORMAT_MOD_NONE, &fb);
 
-	igt_create_fb(display->drm_fd, mode->hdisplay, mode->vdisplay,
-		      DRM_FORMAT_ARGB8888, LOCAL_DRM_FORMAT_MOD_NONE, &argb_fb);
-
-	do_or_die(drmGetCap(display->drm_fd, DRM_CAP_CURSOR_WIDTH, &cursor_width));
-	if (cursor_width > mode->hdisplay)
-		cursor_width = mode->hdisplay;
-
-	do_or_die(drmGetCap(display->drm_fd, DRM_CAP_CURSOR_HEIGHT, &cursor_height));
-	if (cursor_height > mode->vdisplay)
-		cursor_height = mode->vdisplay;
-
 	igt_output_set_pipe(output, pipe);
 
 	wm_setup_plane(display, pipe, 0, NULL);
@@ -173,58 +306,9 @@ run_transition_test(igt_display_t *display, enum pipe pipe, igt_output_t *output
 		igt_output_set_pipe(output, pipe);
 	}
 
-	for_each_plane_on_pipe(display, pipe, plane) {
-		i = plane->index;
-
-		if (plane->is_primary)
-			parms[i].fb = &fb;
-		else
-			parms[i].fb = &argb_fb;
-
-		if (plane->is_cursor) {
-			parms[i].width = cursor_width;
-			parms[i].height = cursor_height;
-		} else {
-			parms[i].width = mode->hdisplay;
-			parms[i].height = mode->vdisplay;
-		}
-	}
-
 	igt_display_commit2(display, COMMIT_ATOMIC);
 
-	/*
-	 * In some configurations the tests may not run to completion with all
-	 * sprite planes lit up at 4k resolution, try decreasing width/size of secondary
-	 * planes to fix this
-	 */
-	while (1) {
-		int ret;
-
-		wm_setup_plane(display, pipe, iter_max - 1, parms);
-		ret = igt_display_try_commit_atomic(display, DRM_MODE_ATOMIC_TEST_ONLY | DRM_MODE_ATOMIC_ALLOW_MODESET, NULL);
-
-		if (ret != -EINVAL || n_planes < 3)
-			break;
-
-		ret = 0;
-		for_each_plane_on_pipe(display, pipe, plane) {
-			i = plane->index;
-
-			if (plane->is_primary || plane->is_cursor)
-				continue;
-
-			if (parms[i].width <= 512)
-				continue;
-
-			parms[i].width /= 2;
-			ret = 1;
-			igt_info("Reducing sprite %i to %ux%u\n", i - 1, parms[i].width, parms[i].height);
-			break;
-		}
-
-		if (!ret)
-			igt_skip("Cannot run tests without proper size sprite planes\n");
-	}
+	setup_parms(display, pipe, mode, &argb_fb, &sprite_fb, parms);
 
 	for (i = 0; i < iter_max; i++) {
 		igt_output_set_pipe(output, pipe);
@@ -275,6 +359,7 @@ cleanup:
 
 	igt_remove_fb(display->drm_fd, &fb);
 	igt_remove_fb(display->drm_fd, &argb_fb);
+	igt_remove_fb(display->drm_fd, &sprite_fb);
 	if (skip_test)
 		igt_skip("Atomic nonblocking modesets are not supported.\n");
 }
