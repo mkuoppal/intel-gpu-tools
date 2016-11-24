@@ -301,7 +301,6 @@ static int __read_seqno(uint32_t *seqno)
 	}
 
 	*seqno = tmp;
-
 	igt_debug("next_seqno: 0x%x\n", *seqno);
 
 	return 0;
@@ -324,40 +323,27 @@ static int read_seqno(void)
 	return wrap;
 }
 
-static int write_seqno(uint32_t seqno)
+static void write_seqno(uint32_t seqno)
 {
-	int fh;
-	char buf[32];
-	int r;
 	uint32_t rb = -1;
+	char buf[32];
+	int len, fd;
 
 	if (options.dontwrap)
-		return 0;
+		return;
 
-	fh = igt_debugfs_open("i915_next_seqno", O_RDWR);
-	igt_assert(snprintf(buf, sizeof(buf), "0x%x", seqno) > 0);
-
-	r = write(fh, buf, strnlen(buf, sizeof(buf)));
-	close(fh);
-	if (r < 0)
-		return r;
-
-	igt_assert(r == strnlen(buf, sizeof(buf)));
-
-	last_seqno = seqno;
+	fd = igt_debugfs_open("i915_next_seqno", O_RDWR);
+	len = snprintf(buf, sizeof(buf), "0x%x", seqno);
+	igt_assert(write(fd, buf, len) == len);
+	close(fd);
 
 	igt_debug("next_seqno set to: 0x%x\n", seqno);
+	last_seqno = seqno;
 
-	r = __read_seqno(&rb);
-	if (r < 0)
-		return r;
-
-	if (rb != seqno) {
-		igt_info("seqno readback differs rb:0x%x vs w:0x%x\n", rb, seqno);
-		return -1;
-	}
-
-	return 0;
+	igt_assert_eq(__read_seqno(&rb), 0);
+	igt_assert_f(rb == seqno,
+		     "seqno readback differs, read 0x%x, expected 0x%x\n",
+		     rb, seqno);
 }
 
 static uint32_t calc_prewrap_val(void)
@@ -380,16 +366,16 @@ static void run_test(void)
 
 static void preset_run_once(void)
 {
-	igt_assert_eq(write_seqno(1), 0);
+	write_seqno(1);
 	run_test();
 
-	igt_assert_eq(write_seqno(0x7fffffff), 0);
+	write_seqno(0x7fffffff);
 	run_test();
 
-	igt_assert_eq(write_seqno(0xffffffff), 0);
+	write_seqno(0xffffffff);
 	run_test();
 
-	igt_assert_eq(write_seqno(0xfffffff0), 0);
+	write_seqno(0xfffffff0);
 	run_test();
 }
 
@@ -403,7 +389,7 @@ static void random_run_once(void)
 			val += random();
 	} while (val == 0);
 
-	igt_assert_eq(write_seqno(val), 0);
+	write_seqno(val);
 	run_test();
 }
 
@@ -411,9 +397,8 @@ static void wrap_run_once(void)
 {
 	const uint32_t pw_val = calc_prewrap_val();
 
-	igt_assert_eq(write_seqno(UINT32_MAX - pw_val), 0);
-
-	while(!read_seqno())
+	write_seqno(UINT32_MAX - pw_val);
+	while (!read_seqno())
 		run_test();
 }
 
@@ -421,9 +406,8 @@ static void background_run_once(void)
 {
 	const uint32_t pw_val = calc_prewrap_val();
 
-	igt_assert_eq(write_seqno(UINT32_MAX - pw_val), 0);
-
-	while(!read_seqno())
+	write_seqno(UINT32_MAX - pw_val);
+	while (!read_seqno())
 		sleep(3);
 }
 
