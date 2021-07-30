@@ -11,6 +11,7 @@ AM_CPPFLAGS = 			\
 AM_CFLAGS = 			\
 	$(DRM_CFLAGS) 		\
 	$(PCIACCESS_CFLAGS) 	\
-	$(CWARNFLAGS)
+	$(CWARNFLAGS)	\
+	$(CAIRO_CFLAGS)
 
 LDADD = $(top_builddir)/lib/libintel_tools.la $(DRM_LIBS) $(PCIACCESS_LIBS) $(CAIRO_LIBS)
